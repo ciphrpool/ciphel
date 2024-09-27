@@ -18,9 +18,8 @@ use crate::{
         allocator::align,
         asm::{
             branch::{Goto, Label},
-            Asm, Program,
+            Asm,
         },
-        vm::{CodeGenerationError, RuntimeError},
     },
 };
 

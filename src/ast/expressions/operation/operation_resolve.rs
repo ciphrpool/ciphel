@@ -16,13 +16,12 @@ use crate::semantic::{
     CompatibleWith, Desugar, EType, Resolve, ResolveCore, ResolveNumber, SemanticError, TypeOf,
 };
 use crate::semantic::{Info, ResolveFromStruct, SizeOf};
-use crate::vm::vm::DynamicFnResolver;
 
 impl Resolve for UnaryOperation {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -38,7 +37,7 @@ impl Resolve for UnaryOperation {
                     value.resolve_number(NumberType::I64)?;
                 }
 
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = value.resolve::<E>(scope_manager, scope_id, context, &mut None)?;
 
                 let value_type = value.type_of(&scope_manager, scope_id)?;
 
@@ -68,7 +67,7 @@ impl Resolve for UnaryOperation {
                 Ok(())
             }
             UnaryOperation::Not { value, metadata } => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = value.resolve::<E>(scope_manager, scope_id, context, &mut None)?;
                 let value_type = value.type_of(&scope_manager, scope_id)?;
                 let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) = value_type else {
                     return Err(SemanticError::IncompatibleTypes);
@@ -86,20 +85,20 @@ impl Resolve for UnaryOperation {
 }
 
 impl Desugar<Atomic> for UnaryOperation {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
         match self {
             UnaryOperation::Minus { value, .. } => {
-                let Some(output) = value.desugar::<G>(scope_manager, scope_id)? else {
+                let Some(output) = value.desugar::<E>(scope_manager, scope_id)? else {
                     return Ok(None);
                 };
                 *value = output.into();
             }
             UnaryOperation::Not { value, .. } => {
-                let Some(output) = value.desugar::<G>(scope_manager, scope_id)? else {
+                let Some(output) = value.desugar::<E>(scope_manager, scope_id)? else {
                     return Ok(None);
                 };
                 *value = output.into();
@@ -133,7 +132,7 @@ impl Resolve for TupleAccess {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -145,7 +144,7 @@ impl Resolve for TupleAccess {
     {
         let _ = self
             .var
-            .resolve::<G>(scope_manager, scope_id, context, extra)?;
+            .resolve::<E>(scope_manager, scope_id, context, extra)?;
 
         let var_type = self.var.type_of(&scope_manager, scope_id)?;
 
@@ -178,7 +177,7 @@ impl Resolve for TupleAccess {
 }
 
 impl ResolveFromStruct for TupleAccess {
-    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+    fn resolve_from_struct<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -186,7 +185,7 @@ impl ResolveFromStruct for TupleAccess {
     ) -> Result<(), SemanticError> {
         let _ = self
             .var
-            .resolve_from_struct::<G>(scope_manager, scope_id, struct_id)?;
+            .resolve_from_struct::<E>(scope_manager, scope_id, struct_id)?;
         let var_type = self.var.type_of(&scope_manager, scope_id)?;
 
         let EType::Static(StaticType::Tuple(TupleType(fields))) = var_type.clone() else {
@@ -218,12 +217,12 @@ impl ResolveFromStruct for TupleAccess {
 }
 
 impl Desugar<Expression> for TupleAccess {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
-        if let Some(output) = self.var.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.var.desugar::<E>(scope_manager, scope_id)? {
             self.var = output.into();
         }
         Ok(None)
@@ -234,7 +233,7 @@ impl Resolve for ListAccess {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -246,11 +245,11 @@ impl Resolve for ListAccess {
     {
         let _ = self
             .var
-            .resolve::<G>(scope_manager, scope_id, context, extra)?;
+            .resolve::<E>(scope_manager, scope_id, context, extra)?;
         let var_type = self.var.type_of(&scope_manager, scope_id)?;
         let _ = self
             .index
-            .resolve::<G>(scope_manager, scope_id, &Some(p_num!(U64)), extra)?;
+            .resolve::<E>(scope_manager, scope_id, &Some(p_num!(U64)), extra)?;
         match &var_type {
             EType::Static(StaticType::Slice(SliceType { size, item_type })) => {
                 self.metadata.info = Info::Resolved {
@@ -272,7 +271,7 @@ impl Resolve for ListAccess {
 }
 
 impl ResolveFromStruct for ListAccess {
-    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+    fn resolve_from_struct<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -280,11 +279,11 @@ impl ResolveFromStruct for ListAccess {
     ) -> Result<(), SemanticError> {
         let _ = self
             .var
-            .resolve_from_struct::<G>(scope_manager, scope_id, struct_id)?;
+            .resolve_from_struct::<E>(scope_manager, scope_id, struct_id)?;
         let var_type = self.var.type_of(&scope_manager, scope_id)?;
         let _ = self
             .index
-            .resolve::<G>(scope_manager, scope_id, &Some(p_num!(U64)), &mut None)?;
+            .resolve::<E>(scope_manager, scope_id, &Some(p_num!(U64)), &mut None)?;
         match &var_type {
             EType::Static(StaticType::Slice(SliceType { size, item_type })) => {
                 self.metadata.info = Info::Resolved {
@@ -306,12 +305,12 @@ impl ResolveFromStruct for ListAccess {
 }
 
 impl Desugar<Expression> for ListAccess {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
-        if let Some(output) = self.var.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.var.desugar::<E>(scope_manager, scope_id)? {
             self.var = output.into();
         }
         Ok(None)
@@ -322,7 +321,7 @@ impl Resolve for FieldAccess {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -334,7 +333,7 @@ impl Resolve for FieldAccess {
     {
         let _ = self
             .var
-            .resolve::<G>(scope_manager, scope_id, context, extra)?;
+            .resolve::<E>(scope_manager, scope_id, context, extra)?;
 
         let EType::User { id, .. } = self.var.type_of(&scope_manager, scope_id)? else {
             return Err(SemanticError::ExpectedStruct);
@@ -344,7 +343,7 @@ impl Resolve for FieldAccess {
         };
 
         self.field
-            .resolve_from_struct::<G>(scope_manager, scope_id, id)?;
+            .resolve_from_struct::<E>(scope_manager, scope_id, id)?;
 
         self.metadata.info = Info::Resolved {
             context: context.clone(),
@@ -356,7 +355,7 @@ impl Resolve for FieldAccess {
 }
 
 impl ResolveFromStruct for FieldAccess {
-    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+    fn resolve_from_struct<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -364,7 +363,7 @@ impl ResolveFromStruct for FieldAccess {
     ) -> Result<(), SemanticError> {
         let _ = self
             .var
-            .resolve_from_struct::<G>(scope_manager, scope_id, struct_id)?;
+            .resolve_from_struct::<E>(scope_manager, scope_id, struct_id)?;
 
         let EType::User { id, size } = self.var.type_of(&scope_manager, scope_id)? else {
             return Err(SemanticError::ExpectedStruct);
@@ -374,7 +373,7 @@ impl ResolveFromStruct for FieldAccess {
         };
 
         self.field
-            .resolve_from_struct::<G>(scope_manager, scope_id, id)?;
+            .resolve_from_struct::<E>(scope_manager, scope_id, id)?;
 
         self.metadata.info = Info::Resolved {
             context: Some(EType::User { id, size }),
@@ -385,12 +384,12 @@ impl ResolveFromStruct for FieldAccess {
 }
 
 impl Desugar<Expression> for FieldAccess {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
-        if let Some(output) = self.var.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.var.desugar::<E>(scope_manager, scope_id)? {
             self.var = output.into();
         }
         Ok(None)
@@ -401,7 +400,7 @@ impl Resolve for ExprCall {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -413,7 +412,7 @@ impl Resolve for ExprCall {
     {
         let _ = self
             .var
-            .resolve::<G>(scope_manager, scope_id, &None, extra)?;
+            .resolve::<E>(scope_manager, scope_id, &None, extra)?;
 
         let var_type = self.var.type_of(scope_manager, scope_id)?;
         let (params, return_type) = match &var_type {
@@ -429,7 +428,7 @@ impl Resolve for ExprCall {
 
         let mut params_size = 0;
         for (arg, param) in self.args.args.iter_mut().zip(params) {
-            let _ = arg.resolve::<G>(scope_manager, scope_id, &Some(param.clone()), &mut None)?;
+            let _ = arg.resolve::<E>(scope_manager, scope_id, &Some(param.clone()), &mut None)?;
             params_size += param.size_of();
         }
         let _ = self.args.size.insert(params_size);
@@ -446,7 +445,7 @@ impl Resolve for ExprCall {
 }
 
 impl ResolveFromStruct for ExprCall {
-    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+    fn resolve_from_struct<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -457,12 +456,12 @@ impl ResolveFromStruct for ExprCall {
 }
 
 impl Desugar<Expression> for ExprCall {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
-        if let Some(output) = self.var.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.var.desugar::<E>(scope_manager, scope_id)? {
             self.var = output.into();
         }
         Ok(None)
@@ -473,7 +472,7 @@ impl Desugar<Expression> for ExprCall {
 //     type Output = ();
 //     type Context = Option<EType>;
 //     type Extra = Option<EType>;
-//     fn resolve<G: crate::GameEngineStaticFn>(
+//     fn resolve<E: crate::vm::external::Engine>(
 //         &mut self,
 //         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
 //         scope_id: Option<u128>,
@@ -488,10 +487,10 @@ impl Desugar<Expression> for ExprCall {
 //             Expression::Atomic(Atomic::Data(Data::Variable(Variable { ref name, .. }))) => {
 //                 let found = scope_manager.find_var_by_name(name, scope_id);
 //                 if found.is_err() || self.lib.is_some() {
-//                     if let Some(mut dynamic_fn) = G::is_dynamic_fn(&self.lib, name) {
+//                     if let Some(mut dynamic_fn) = E::is_dynamic_fn(&self.lib, name) {
 //                         self.is_dynamic_fn = Some(name.as_str().to_string());
 //                         let return_type =
-//                             dynamic_fn.resolve::<G>(scope_manager, scope_id, &mut self.params)?;
+//                             dynamic_fn.resolve::<E>(scope_manager, scope_id, &mut self.params)?;
 //                         self.metadata.info = crate::semantic::Info::Resolved {
 //                             context: context.clone(),
 //                             signature: Some(return_type),
@@ -499,7 +498,7 @@ impl Desugar<Expression> for ExprCall {
 //                         return Ok(());
 //                     }
 //                     if let Some(mut api) = Lib::from(&self.lib, name) {
-//                         let return_type = api.resolve::<G>(
+//                         let return_type = api.resolve::<E>(
 //                             scope_manager,
 //                             scope_id,
 //                             context.as_ref(),
@@ -521,7 +520,7 @@ impl Desugar<Expression> for ExprCall {
 
 //         let _ = self
 //             .fn_var
-//             .resolve::<G>(scope_manager, scope_id, context, extra)?;
+//             .resolve::<E>(scope_manager, scope_id, context, extra)?;
 
 //         let fn_var_type = self.fn_var.type_of(&scope_manager, scope_id)?;
 
@@ -535,7 +534,7 @@ impl Desugar<Expression> for ExprCall {
 //             return Err(SemanticError::IncorrectArguments);
 //         }
 //         for (expr, param_type) in self.params.iter_mut().zip(params_type) {
-//             let _ = expr.resolve::<G>(
+//             let _ = expr.resolve::<E>(
 //                 scope_manager,
 //                 scope_id,
 //                 &Some(param_type.clone()),
@@ -557,7 +556,7 @@ impl Desugar<Expression> for ExprCall {
 // }
 
 // impl ResolveFromStruct for FnCall {
-//     fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+//     fn resolve_from_struct<E: crate::vm::external::Engine>(
 //         &mut self,
 //         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
 //         scope_id: Option<u128>,
@@ -565,7 +564,7 @@ impl Desugar<Expression> for ExprCall {
 //     ) -> Result<(), SemanticError> {
 //         let _ = self
 //             .fn_var
-//             .resolve_from_struct::<G>(scope_manager, scope_id, struct_id)?;
+//             .resolve_from_struct::<E>(scope_manager, scope_id, struct_id)?;
 
 //         todo!();
 //         Ok(())
@@ -576,7 +575,7 @@ impl Resolve for Range {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -601,9 +600,9 @@ impl Resolve for Range {
 
         match (self.lower.as_mut(), self.upper.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = value.resolve::<E>(scope_manager, scope_id, context, &mut None)?;
                 let upper_type = self.upper.type_of(&scope_manager, scope_id)?;
-                let _ = self.lower.resolve::<G>(
+                let _ = self.lower.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(upper_type),
@@ -611,9 +610,9 @@ impl Resolve for Range {
                 )?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = value.resolve::<E>(scope_manager, scope_id, context, &mut None)?;
                 let lower_type = self.lower.type_of(&scope_manager, scope_id)?;
-                let _ = self.upper.resolve::<G>(
+                let _ = self.upper.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(lower_type),
@@ -623,10 +622,10 @@ impl Resolve for Range {
             _ => {
                 let _ = self
                     .lower
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                    .resolve::<E>(scope_manager, scope_id, context, &mut None)?;
                 let _ = self
                     .upper
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                    .resolve::<E>(scope_manager, scope_id, context, &mut None)?;
             }
         }
 
@@ -639,7 +638,7 @@ impl Resolve for Range {
 }
 
 impl Desugar<Expression> for Range {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -655,7 +654,7 @@ fn is_number(ctype: &EType) -> bool {
     }
 }
 
-fn resolve_logical_binary_operation<G: crate::GameEngineStaticFn>(
+fn resolve_logical_binary_operation<E: crate::vm::external::Engine>(
     left: &mut Expression,
     right: &mut Expression,
     scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
@@ -667,33 +666,33 @@ fn resolve_logical_binary_operation<G: crate::GameEngineStaticFn>(
     if left_is_unresolved && right_is_unresolved {
         left.resolve_number(NumberType::I64);
         right.resolve_number(NumberType::I64);
-        let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
-        let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+        let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+        let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
     } else if left_is_unresolved && !right_is_unresolved {
-        let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+        let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
         let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
             right.type_of(scope_manager, scope_id)?
         else {
             return Err(SemanticError::IncompatibleOperands);
         };
         left.resolve_number(number_type);
-        let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+        let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
     } else if right_is_unresolved && !left_is_unresolved {
-        let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+        let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
         let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
             left.type_of(scope_manager, scope_id)?
         else {
             return Err(SemanticError::IncompatibleOperands);
         };
         right.resolve_number(number_type);
-        let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+        let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
     } else {
-        let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
-        let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+        let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+        let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
     }
     Ok(())
 }
-fn resolve_binary_numerical_operation<G: crate::GameEngineStaticFn>(
+fn resolve_binary_numerical_operation<E: crate::vm::external::Engine>(
     left: &mut Expression,
     right: &mut Expression,
     scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
@@ -710,8 +709,8 @@ fn resolve_binary_numerical_operation<G: crate::GameEngineStaticFn>(
             left.resolve_number(number_type.clone());
             right.resolve_number(number_type.clone());
 
-            let _ = right.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-            let _ = left.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+            let _ = right.resolve::<E>(scope_manager, scope_id, context, &mut None)?;
+            let _ = left.resolve::<E>(scope_manager, scope_id, context, &mut None)?;
         }
         None => {
             let left_is_unresolved = left.is_unresolved_number();
@@ -720,29 +719,29 @@ fn resolve_binary_numerical_operation<G: crate::GameEngineStaticFn>(
             if left_is_unresolved && right_is_unresolved {
                 left.resolve_number(NumberType::I64);
                 right.resolve_number(NumberType::I64);
-                let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
-                let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
             } else if left_is_unresolved && !right_is_unresolved {
-                let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
                     right.type_of(scope_manager, scope_id)?
                 else {
                     return Err(SemanticError::IncompatibleOperands);
                 };
                 left.resolve_number(number_type);
-                let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
             } else if right_is_unresolved && !left_is_unresolved {
-                let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
                     left.type_of(scope_manager, scope_id)?
                 else {
                     return Err(SemanticError::IncompatibleOperands);
                 };
                 right.resolve_number(number_type);
-                let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
             } else {
-                let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
-                let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
             }
         }
     }
@@ -818,7 +817,7 @@ impl Resolve for Product {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -847,7 +846,7 @@ impl Resolve for Product {
         };
 
         let operation_type =
-            resolve_binary_numerical_operation::<G>(left, right, scope_manager, scope_id, context)?;
+            resolve_binary_numerical_operation::<E>(left, right, scope_manager, scope_id, context)?;
         metadata.info = Info::Resolved {
             context: context.clone(),
             signature: Some(operation_type),
@@ -858,33 +857,33 @@ impl Resolve for Product {
 }
 
 impl Desugar<Expression> for Product {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
         match self {
             Product::Mult { left, right, .. } => {
-                if let Some(output) = left.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = left.desugar::<E>(scope_manager, scope_id)? {
                     *left = output.into()
                 }
-                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
                     *right = output.into()
                 }
             }
             Product::Div { left, right, .. } => {
-                if let Some(output) = left.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = left.desugar::<E>(scope_manager, scope_id)? {
                     *left = output.into()
                 }
-                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
                     *right = output.into()
                 }
             }
             Product::Mod { left, right, .. } => {
-                if let Some(output) = left.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = left.desugar::<E>(scope_manager, scope_id)? {
                     *left = output.into()
                 }
-                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
                     *right = output.into()
                 }
             }
@@ -911,7 +910,7 @@ impl Resolve for Addition {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -921,7 +920,7 @@ impl Resolve for Addition {
     where
         Self: Sized,
     {
-        let operation_type = resolve_binary_numerical_operation::<G>(
+        let operation_type = resolve_binary_numerical_operation::<E>(
             &mut self.left,
             &mut self.right,
             scope_manager,
@@ -938,15 +937,15 @@ impl Resolve for Addition {
 }
 
 impl Desugar<Expression> for Addition {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
-        if let Some(output) = self.left.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.left.desugar::<E>(scope_manager, scope_id)? {
             *self.left = output.into()
         }
-        if let Some(output) = self.right.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.right.desugar::<E>(scope_manager, scope_id)? {
             *self.right = output.into()
         }
         Ok(None)
@@ -971,7 +970,7 @@ impl Resolve for Substraction {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -981,7 +980,7 @@ impl Resolve for Substraction {
     where
         Self: Sized,
     {
-        let operation_type = resolve_binary_numerical_operation::<G>(
+        let operation_type = resolve_binary_numerical_operation::<E>(
             &mut self.left,
             &mut self.right,
             scope_manager,
@@ -997,15 +996,15 @@ impl Resolve for Substraction {
 }
 
 impl Desugar<Expression> for Substraction {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
-        if let Some(output) = self.left.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.left.desugar::<E>(scope_manager, scope_id)? {
             *self.left = output.into()
         }
-        if let Some(output) = self.right.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.right.desugar::<E>(scope_manager, scope_id)? {
             *self.right = output.into()
         }
         Ok(None)
@@ -1058,7 +1057,7 @@ impl Resolve for Shift {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1082,7 +1081,7 @@ impl Resolve for Shift {
         };
 
         let operation_type =
-            resolve_binary_numerical_operation::<G>(left, right, scope_manager, scope_id, context)?;
+            resolve_binary_numerical_operation::<E>(left, right, scope_manager, scope_id, context)?;
         metadata.info = Info::Resolved {
             context: context.clone(),
             signature: Some(operation_type),
@@ -1092,25 +1091,25 @@ impl Resolve for Shift {
 }
 
 impl Desugar<Expression> for Shift {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
         match self {
             Shift::Left { left, right, .. } => {
-                if let Some(output) = left.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = left.desugar::<E>(scope_manager, scope_id)? {
                     *left = output.into()
                 }
-                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
                     *right = output.into()
                 }
             }
             Shift::Right { left, right, .. } => {
-                if let Some(output) = left.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = left.desugar::<E>(scope_manager, scope_id)? {
                     *left = output.into()
                 }
-                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
                     *right = output.into()
                 }
             }
@@ -1137,7 +1136,7 @@ impl Resolve for BitwiseAnd {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1147,7 +1146,7 @@ impl Resolve for BitwiseAnd {
     where
         Self: Sized,
     {
-        let operation_type = resolve_binary_numerical_operation::<G>(
+        let operation_type = resolve_binary_numerical_operation::<E>(
             &mut self.left,
             &mut self.right,
             scope_manager,
@@ -1163,15 +1162,15 @@ impl Resolve for BitwiseAnd {
 }
 
 impl Desugar<Expression> for BitwiseAnd {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
-        if let Some(output) = self.left.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.left.desugar::<E>(scope_manager, scope_id)? {
             *self.left = output.into()
         }
-        if let Some(output) = self.right.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.right.desugar::<E>(scope_manager, scope_id)? {
             *self.right = output.into()
         }
         Ok(None)
@@ -1193,15 +1192,15 @@ impl ResolveNumber for BitwiseXOR {
 }
 
 impl Desugar<Expression> for BitwiseXOR {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
-        if let Some(output) = self.left.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.left.desugar::<E>(scope_manager, scope_id)? {
             *self.left = output.into()
         }
-        if let Some(output) = self.right.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.right.desugar::<E>(scope_manager, scope_id)? {
             *self.right = output.into()
         }
         Ok(None)
@@ -1211,7 +1210,7 @@ impl Resolve for BitwiseXOR {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1221,7 +1220,7 @@ impl Resolve for BitwiseXOR {
     where
         Self: Sized,
     {
-        let operation_type = resolve_binary_numerical_operation::<G>(
+        let operation_type = resolve_binary_numerical_operation::<E>(
             &mut self.left,
             &mut self.right,
             scope_manager,
@@ -1254,7 +1253,7 @@ impl Resolve for BitwiseOR {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1264,7 +1263,7 @@ impl Resolve for BitwiseOR {
     where
         Self: Sized,
     {
-        let operation_type = resolve_binary_numerical_operation::<G>(
+        let operation_type = resolve_binary_numerical_operation::<E>(
             &mut self.left,
             &mut self.right,
             scope_manager,
@@ -1280,15 +1279,15 @@ impl Resolve for BitwiseOR {
 }
 
 impl Desugar<Expression> for BitwiseOR {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
-        if let Some(output) = self.left.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.left.desugar::<E>(scope_manager, scope_id)? {
             *self.left = output.into()
         }
-        if let Some(output) = self.right.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.right.desugar::<E>(scope_manager, scope_id)? {
             *self.right = output.into()
         }
         Ok(None)
@@ -1312,7 +1311,7 @@ impl Resolve for Cast {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1324,10 +1323,10 @@ impl Resolve for Cast {
     {
         let _ = self
             .left
-            .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+            .resolve::<E>(scope_manager, scope_id, context, &mut None)?;
         let _ = self
             .right
-            .resolve::<G>(scope_manager, scope_id, &(), &mut ())?;
+            .resolve::<E>(scope_manager, scope_id, &(), &mut ())?;
 
         if let Some(l_metadata) = self.left.metadata_mut() {
             let signature = l_metadata.signature();
@@ -1347,12 +1346,12 @@ impl Resolve for Cast {
 }
 
 impl Desugar<Expression> for Cast {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
-        if let Some(output) = self.left.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.left.desugar::<E>(scope_manager, scope_id)? {
             *self.left = output.into()
         }
         Ok(None)
@@ -1434,7 +1433,7 @@ impl Resolve for Comparaison {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1467,7 +1466,7 @@ impl Resolve for Comparaison {
             } => (left, right, metadata),
         };
 
-        resolve_logical_binary_operation::<G>(left, right, scope_manager, scope_id)?;
+        resolve_logical_binary_operation::<E>(left, right, scope_manager, scope_id)?;
         let left_type = left.type_of(&scope_manager, scope_id)?;
         let right_type = right.type_of(&scope_manager, scope_id)?;
 
@@ -1484,41 +1483,41 @@ impl Resolve for Comparaison {
 }
 
 impl Desugar<Expression> for Comparaison {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
         match self {
             Comparaison::Greater { left, right, .. } => {
-                if let Some(output) = left.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = left.desugar::<E>(scope_manager, scope_id)? {
                     *left = output.into()
                 }
-                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
                     *right = output.into()
                 }
             }
             Comparaison::GreaterEqual { left, right, .. } => {
-                if let Some(output) = left.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = left.desugar::<E>(scope_manager, scope_id)? {
                     *left = output.into()
                 }
-                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
                     *right = output.into()
                 }
             }
             Comparaison::Less { left, right, .. } => {
-                if let Some(output) = left.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = left.desugar::<E>(scope_manager, scope_id)? {
                     *left = output.into()
                 }
-                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
                     *right = output.into()
                 }
             }
             Comparaison::LessEqual { left, right, .. } => {
-                if let Some(output) = left.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = left.desugar::<E>(scope_manager, scope_id)? {
                     *left = output.into()
                 }
-                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
                     *right = output.into()
                 }
             }
@@ -1573,7 +1572,7 @@ impl Resolve for Equation {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1595,7 +1594,7 @@ impl Resolve for Equation {
                 metadata,
             } => (left, right, metadata),
         };
-        resolve_logical_binary_operation::<G>(left, right, scope_manager, scope_id)?;
+        resolve_logical_binary_operation::<E>(left, right, scope_manager, scope_id)?;
         let left_type = left.type_of(&scope_manager, scope_id)?;
         let right_type = right.type_of(&scope_manager, scope_id)?;
 
@@ -1612,25 +1611,25 @@ impl Resolve for Equation {
 }
 
 impl Desugar<Expression> for Equation {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
         match self {
             Equation::Equal { left, right, .. } => {
-                if let Some(output) = left.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = left.desugar::<E>(scope_manager, scope_id)? {
                     *left = output.into()
                 }
-                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
                     *right = output.into()
                 }
             }
             Equation::NotEqual { left, right, .. } => {
-                if let Some(output) = left.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = left.desugar::<E>(scope_manager, scope_id)? {
                     *left = output.into()
                 }
-                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
                     *right = output.into()
                 }
             }
@@ -1657,7 +1656,7 @@ impl Resolve for LogicalAnd {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1667,7 +1666,7 @@ impl Resolve for LogicalAnd {
     where
         Self: Sized,
     {
-        resolve_logical_binary_operation::<G>(
+        resolve_logical_binary_operation::<E>(
             &mut self.left,
             &mut self.right,
             scope_manager,
@@ -1693,15 +1692,15 @@ impl Resolve for LogicalAnd {
 }
 
 impl Desugar<Expression> for LogicalAnd {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
-        if let Some(output) = self.left.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.left.desugar::<E>(scope_manager, scope_id)? {
             *self.left = output.into()
         }
-        if let Some(output) = self.right.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.right.desugar::<E>(scope_manager, scope_id)? {
             *self.right = output.into()
         }
         Ok(None)
@@ -1725,7 +1724,7 @@ impl Resolve for LogicalOr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1735,7 +1734,7 @@ impl Resolve for LogicalOr {
     where
         Self: Sized,
     {
-        resolve_logical_binary_operation::<G>(
+        resolve_logical_binary_operation::<E>(
             &mut self.left,
             &mut self.right,
             scope_manager,
@@ -1760,15 +1759,15 @@ impl Resolve for LogicalOr {
     }
 }
 impl Desugar<Expression> for LogicalOr {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
-        if let Some(output) = self.left.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.left.desugar::<E>(scope_manager, scope_id)? {
             *self.left = output.into()
         }
-        if let Some(output) = self.right.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.right.desugar::<E>(scope_manager, scope_id)? {
             *self.right = output.into()
         }
         Ok(None)
@@ -1792,7 +1791,7 @@ mod tests {
     fn valid_high_ord_math() {
         let mut expr = Product::parse("10 * 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1802,7 +1801,7 @@ mod tests {
 
         let mut expr = Product::parse("10.0 * 10.0".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1812,7 +1811,7 @@ mod tests {
 
         let mut expr = Product::parse("10 * (10+10)".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1822,7 +1821,7 @@ mod tests {
 
         let mut expr = Product::parse("(10+10) * 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1833,7 +1832,7 @@ mod tests {
         let mut expr = Product::parse("10 * x".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1846,7 +1845,7 @@ mod tests {
     fn robustness_high_ord_math() {
         let mut expr = Product::parse("10 * 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1856,7 +1855,7 @@ mod tests {
 
         let mut expr = Product::parse("'a' * 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1866,7 +1865,7 @@ mod tests {
 
         let mut expr = Product::parse("10 * x".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1879,7 +1878,7 @@ mod tests {
     fn valid_low_ord_math() {
         let mut expr = Addition::parse("10 + 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1889,7 +1888,7 @@ mod tests {
 
         let mut expr = Addition::parse("10 - 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1899,7 +1898,7 @@ mod tests {
 
         let mut expr = Addition::parse("10 + (10*10)".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1909,7 +1908,7 @@ mod tests {
 
         let mut expr = Addition::parse("10 + 10*10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1919,7 +1918,7 @@ mod tests {
 
         let mut expr = Addition::parse("(10 * 10) + 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1929,7 +1928,7 @@ mod tests {
 
         let mut expr = Addition::parse("10 * 10 + 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1939,7 +1938,7 @@ mod tests {
 
         let mut expr = Product::parse("10 * 10 + 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1949,7 +1948,7 @@ mod tests {
 
         let mut expr = Product::parse("10 * 10 + 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1960,7 +1959,7 @@ mod tests {
         let mut expr = Addition::parse("10 + x".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1973,7 +1972,7 @@ mod tests {
     fn robustness_low_ord_math() {
         let mut expr = Addition::parse("10 + 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1983,7 +1982,7 @@ mod tests {
 
         let mut expr = Addition::parse("'a' + 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1993,7 +1992,7 @@ mod tests {
 
         let mut expr = Addition::parse("10 + x".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2003,7 +2002,7 @@ mod tests {
 
         let mut expr = Addition::parse("10.0 + 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2016,7 +2015,7 @@ mod tests {
     fn valid_shift() {
         let mut expr = Shift::parse("10 >> 1".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2026,7 +2025,7 @@ mod tests {
 
         let mut expr = Shift::parse("10 << 1".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2039,7 +2038,7 @@ mod tests {
     fn robustness_shift() {
         let mut expr = Shift::parse("10 >> 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2049,7 +2048,7 @@ mod tests {
 
         let mut expr = Shift::parse("'a' >> 1".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2062,7 +2061,7 @@ mod tests {
     fn valid_bitwise() {
         let mut expr = BitwiseAnd::parse("10 & 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2072,7 +2071,7 @@ mod tests {
 
         let mut expr = BitwiseOR::parse("10 | 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2082,7 +2081,7 @@ mod tests {
 
         let mut expr = BitwiseXOR::parse("10 ^ 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2095,7 +2094,7 @@ mod tests {
     fn robustness_bitwise() {
         let mut expr = BitwiseAnd::parse("10 & 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2105,7 +2104,7 @@ mod tests {
 
         let mut expr = BitwiseOR::parse("'a' | 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2115,7 +2114,7 @@ mod tests {
 
         let mut expr = BitwiseXOR::parse("10 ^ 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2128,7 +2127,7 @@ mod tests {
     fn valid_cast() {
         let mut expr = Cast::parse("10 as f64".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2140,7 +2139,7 @@ mod tests {
 
         let mut expr = Cast::parse("'a' as u64".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2155,7 +2154,7 @@ mod tests {
     fn valid_comparaison() {
         let mut expr = Expression::parse("10 < 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2165,7 +2164,7 @@ mod tests {
 
         let mut expr = Expression::parse("'a' > 'b'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2178,7 +2177,7 @@ mod tests {
     fn robustness_comparaison() {
         let mut expr = Expression::parse("10 > 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2191,7 +2190,7 @@ mod tests {
     fn valid_equation() {
         let mut expr = Expression::parse("10 == 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2201,7 +2200,7 @@ mod tests {
 
         let mut expr = Expression::parse("'a' != 'b'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2214,7 +2213,7 @@ mod tests {
     fn robustness_equation() {
         let mut expr = Expression::parse("10 == 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2227,7 +2226,7 @@ mod tests {
     fn valid_and_or() {
         let mut expr = Expression::parse("true and false".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2237,7 +2236,7 @@ mod tests {
 
         let mut expr = Expression::parse("true or false".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2247,7 +2246,7 @@ mod tests {
 
         let mut expr = Expression::parse("true and 2 > 3".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2259,7 +2258,7 @@ mod tests {
             .unwrap()
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2272,7 +2271,7 @@ mod tests {
     fn robustness_and_or() {
         let mut expr = Expression::parse("true and 2".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2282,7 +2281,7 @@ mod tests {
 
         let mut expr = Expression::parse("1 or true".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2295,34 +2294,54 @@ mod tests {
     fn valid_unary() {
         let mut expr = UnaryOperation::parse("!true".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = UnaryOperation::parse("! ( true and false )".into())
             .unwrap()
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = UnaryOperation::parse("-1".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = UnaryOperation::parse("-1.0".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = UnaryOperation::parse("- ( 10 + 10 )".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -2330,14 +2349,22 @@ mod tests {
     fn robustness_unary() {
         let mut expr = UnaryOperation::parse("!10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_err());
 
         let mut expr = UnaryOperation::parse("- true".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_err());
     }
 
@@ -2362,7 +2389,7 @@ mod tests {
     //             None,
     //         )
     //         .unwrap();
-    //     let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+    //     let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
     //         &mut scope_manager,
     //         None,
     //         &None,
@@ -2382,7 +2409,7 @@ mod tests {
 
     //     let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
     //     let _ = scope_manager.register_var("f", p_num!(I64), None).unwrap();
-    //     let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+    //     let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
     //         &mut scope_manager,
     //         None,
     //         &None,
@@ -2402,7 +2429,7 @@ mod tests {
     //         .register_var("print", p_num!(I64), None)
     //         .unwrap();
     //     let _ = expr
-    //         .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
+    //         .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
     //         .expect("Resolution should have succeeded");
     // }
 
@@ -2417,7 +2444,7 @@ mod tests {
     //         .register_var("print", p_num!(I64), None)
     //         .unwrap();
     //     let _ = expr
-    //         .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
+    //         .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
     //         .expect_err("Resolution should have failed");
     // }
 }

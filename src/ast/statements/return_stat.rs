@@ -4,6 +4,7 @@ use crate::semantic::scope::scope::{ScopeManager, ScopeState};
 use crate::semantic::{Desugar, Info};
 
 use crate::vm::asm::branch::Goto;
+use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
     ast::{
         expressions::Expression,
@@ -18,10 +19,7 @@ use crate::{
         scope::static_types::StaticType, CompatibleWith, EType, Metadata, Resolve, SemanticError,
         SizeOf, TypeOf,
     },
-    vm::{
-        asm::{Asm, Program},
-        vm::{CodeGenerationError, GenerateCode},
-    },
+    vm::asm::Asm,
 };
 use nom::branch::alt;
 use nom::combinator::cut;
@@ -91,7 +89,7 @@ impl TryParse for Return {
 }
 
 impl Desugar<Statement> for Return {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -99,12 +97,12 @@ impl Desugar<Statement> for Return {
         match self {
             Return::Unit => {}
             Return::Expr { expr, metadata } => {
-                if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = expr.desugar::<E>(scope_manager, scope_id)? {
                     *expr = output.into();
                 }
             }
             Return::Inline { expr, metadata } => {
-                if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = expr.desugar::<E>(scope_manager, scope_id)? {
                     *expr = output.into();
                 }
             }
@@ -119,7 +117,7 @@ impl Resolve for Return {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -155,7 +153,7 @@ impl Resolve for Return {
                 Ok(())
             }
             Return::Expr { expr, metadata } => {
-                let _ = expr.resolve::<G>(scope_manager, Some(scope_id), &context, &mut None)?;
+                let _ = expr.resolve::<E>(scope_manager, Some(scope_id), &context, &mut None)?;
                 let return_type = expr.type_of(&scope_manager, Some(scope_id))?;
                 if let Some(context) = context {
                     let _ =
@@ -187,7 +185,7 @@ impl Resolve for Return {
                 Ok(())
             }
             Return::Inline { expr, metadata } => {
-                let _ = expr.resolve::<G>(scope_manager, Some(scope_id), &context, &mut None)?;
+                let _ = expr.resolve::<E>(scope_manager, Some(scope_id), &context, &mut None)?;
                 let return_type = expr.type_of(&scope_manager, Some(scope_id))?;
                 if let Some(context) = context {
                     let _ =
@@ -259,13 +257,13 @@ impl TypeOf for Return {
 }
 
 impl GenerateCode for Return {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             Return::Unit => {
                 let Some(return_label) = context.return_label else {
@@ -277,7 +275,7 @@ impl GenerateCode for Return {
                 Ok(())
             }
             Return::Expr { expr, metadata } => {
-                let _ = expr.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = expr.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 let Some(return_label) = context.return_label else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -288,7 +286,7 @@ impl GenerateCode for Return {
                 Ok(())
             }
             Return::Inline { expr, metadata } => {
-                let _ = expr.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = expr.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 let Some(return_label) = context.return_label else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -379,7 +377,7 @@ mod tests {
         .1;
         let mut scope_manager = scope::ScopeManager::default();
 
-        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = return_statement.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -395,7 +393,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = return_statement.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -421,7 +419,7 @@ mod tests {
         scope_manager
             .scope_states
             .insert(inner_scope, ScopeState::Loop);
-        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = return_statement.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             Some(inner_scope),
             &None,
@@ -441,7 +439,7 @@ mod tests {
         .unwrap()
         .1;
 
-        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = return_statement.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             Some(inner_scope),
             &None,
@@ -464,7 +462,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = return_statement.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(

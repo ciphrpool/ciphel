@@ -47,8 +47,8 @@ struct Frame {
     return_pointer: u64,
 }
 
-impl Stack {
-    pub fn new() -> Self {
+impl Default for Stack {
+    fn default() -> Self {
         Self {
             stack: [0; STACK_SIZE],
             global: [0; GLOBAL_SIZE],
@@ -57,6 +57,18 @@ impl Stack {
             return_pointer: 0,
         }
     }
+}
+
+impl Stack {
+    // pub fn default() -> Self {
+    //     Self {
+    //         stack: [0; STACK_SIZE],
+    //         global: [0; GLOBAL_SIZE],
+    //         stack_pointer: 0,
+    //         frame_pointer: 0,
+    //         return_pointer: 0,
+    //     }
+    // }
 
     pub fn top(&self) -> usize {
         self.stack_pointer
@@ -285,14 +297,14 @@ mod tests {
 
     #[test]
     fn valid_push() {
-        let mut stack = Stack::new();
+        let mut stack = Stack::default();
         let _ = stack.push(8).expect("Push should have succeeded");
         assert_eq!(stack.top(), 8);
     }
 
     #[test]
     fn robustness_push() {
-        let mut stack = Stack::new();
+        let mut stack = Stack::default();
         let _ = stack
             .push(STACK_SIZE + 1)
             .expect_err("Push should have failed");
@@ -300,7 +312,7 @@ mod tests {
 
     #[test]
     fn valid_pop() {
-        let mut stack = Stack::new();
+        let mut stack = Stack::default();
         let _ = stack.push(64).expect("Push should have succeeded");
         let _ = stack.pop(32).expect("Pop should have succeeded");
 
@@ -309,13 +321,13 @@ mod tests {
 
     #[test]
     fn robustness_pop() {
-        let mut stack = Stack::new();
+        let mut stack = Stack::default();
         let _ = stack.pop(32).expect_err("Pop should have failed");
     }
 
     #[test]
     fn valid_read() {
-        let mut stack = Stack::new();
+        let mut stack = Stack::default();
         let _ = stack.push(8).expect("Push should have succeeded");
 
         stack.stack[0..8].copy_from_slice(&[1u8; 8]);
@@ -328,7 +340,7 @@ mod tests {
 
     #[test]
     fn robustness_read() {
-        let stack = Stack::new();
+        let stack = Stack::default();
         let _ = stack
             .read(MemoryAddress::Stack { offset: 0 }, 8)
             .expect_err("Read should have failed");
@@ -336,7 +348,7 @@ mod tests {
 
     #[test]
     fn valid_write() {
-        let mut stack = Stack::new();
+        let mut stack = Stack::default();
         let _ = stack.push(8).expect("Push should have succeeded");
 
         let _ = stack
@@ -348,7 +360,7 @@ mod tests {
 
     #[test]
     fn robustness_write() {
-        let mut stack = Stack::new();
+        let mut stack = Stack::default();
         let _ = stack
             .write(MemoryAddress::Stack { offset: 0 }, &vec![1; 8])
             .expect_err("Read should have failed");
@@ -356,7 +368,7 @@ mod tests {
 
     #[test]
     fn valid_frame() {
-        let mut stack = Stack::new();
+        let mut stack = Stack::default();
         let _ = stack.push(8).expect("Push should have succeeded"); /* initial blob */
         let _ = stack.push(8).expect("Push should have succeeded"); /* parameter */
 
@@ -375,7 +387,7 @@ mod tests {
 
     #[test]
     fn valid_frame_clean() {
-        let mut stack = Stack::new();
+        let mut stack = Stack::default();
         let _ = stack.push(8).expect("Push should have succeeded"); /* initial blob */
         let _ = stack.push(8).expect("Push should have succeeded"); /* parameter */
 

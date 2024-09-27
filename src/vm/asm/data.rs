@@ -4,11 +4,13 @@ use ulid::Ulid;
 
 use crate::vm::{
     allocator::{heap::Heap, stack::Stack},
+    program::Program,
+    runtime::RuntimeError,
+    scheduler_v2::Executable,
     stdio::StdIO,
-    vm::{CasmMetadata, Executable, RuntimeError},
 };
 
-use super::{alloc::ALLOC_SIZE_THRESHOLD, Program};
+use super::alloc::ALLOC_SIZE_THRESHOLD;
 pub struct HexSlice<'a>(pub &'a [u8]);
 
 impl<'a> fmt::Display for HexSlice<'a> {
@@ -28,8 +30,8 @@ pub enum Data {
     // Get { label: Ulid, idx: Option<usize> },
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Data {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Data {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
             Data::Serialized { data } => {
                 stdio.push_asm(engine, &format!("dmp 0x{}", HexSlice(data.as_ref())))
@@ -55,37 +57,40 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Data {
             }
         }
     }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
+}
+impl crate::vm::AsmWeight for Data {
+    fn weight(&self) -> crate::vm::Weight {
         match self {
             Data::Serialized { data } => {
                 if data.len() > ALLOC_SIZE_THRESHOLD {
-                    crate::vm::vm::CasmWeight::EXTREME
+                    crate::vm::Weight::EXTREME
                 } else {
-                    crate::vm::vm::CasmWeight::LOW
+                    crate::vm::Weight::LOW
                 }
             }
-            Data::Dump { data } => crate::vm::vm::CasmWeight::ZERO,
-            Data::Table { data } => crate::vm::vm::CasmWeight::ZERO,
+            Data::Dump { data } => crate::vm::Weight::ZERO,
+            Data::Table { data } => crate::vm::Weight::ZERO,
         }
     }
 }
-impl<G: crate::GameEngineStaticFn> Executable<G> for Data {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Data {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match self {
             Data::Serialized { data } => {
                 let _ = stack.push_with(&data)?;
-                program.incr();
+                scheduler.next();
             }
-            Data::Dump { data } => program.incr(),
-            Data::Table { data } => program.incr(),
+            Data::Dump { data } => scheduler.next(),
+            Data::Table { data } => scheduler.next(),
         }
         Ok(())
     }

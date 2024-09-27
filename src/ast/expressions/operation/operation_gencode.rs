@@ -7,42 +7,39 @@ use crate::vm::asm::branch::Call;
 use crate::vm::asm::data;
 use crate::vm::asm::locate::{Locate, LocateIndex, LocateOffset};
 use crate::vm::asm::mem::Mem;
+use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
     semantic::{
         scope::static_types::{NumberType, RangeType, StaticType},
         EType, SizeOf, TypeOf,
     },
-    vm::{
-        asm::{
-            data::Data,
-            operation::{
-                Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Division, Equal, Greater,
-                GreaterEqual, Less, LessEqual, LogicalAnd, LogicalOr, Minus, Mod, Mult, Not,
-                NotEqual, OpPrimitive, Operation, OperationKind, ShiftLeft, ShiftRight,
-                Substraction,
-            },
-            Asm, Program,
+    vm::asm::{
+        data::Data,
+        operation::{
+            Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Division, Equal, Greater,
+            GreaterEqual, Less, LessEqual, LogicalAnd, LogicalOr, Minus, Mod, Mult, Not, NotEqual,
+            OpPrimitive, Operation, OperationKind, ShiftLeft, ShiftRight, Substraction,
         },
-        vm::{CodeGenerationError, GenerateCode},
+        Asm,
     },
 };
 
 use super::{ExprCall, FieldAccess, ListAccess, Range, TupleAccess};
 
 impl GenerateCode for super::UnaryOperation {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             super::UnaryOperation::Minus { value, metadata: _ } => {
                 let Some(value_type) = value.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = value.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = value.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Minus(Minus {
@@ -52,7 +49,7 @@ impl GenerateCode for super::UnaryOperation {
                 Ok(())
             }
             super::UnaryOperation::Not { value, metadata: _ } => {
-                let _ = value.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = value.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Not(Not()),
@@ -64,13 +61,13 @@ impl GenerateCode for super::UnaryOperation {
 }
 
 impl GenerateCode for TupleAccess {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
             return Err(CodeGenerationError::Unlocatable);
         };
@@ -100,13 +97,13 @@ impl GenerateCode for TupleAccess {
 }
 
 impl GenerateCode for ListAccess {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -126,7 +123,7 @@ impl GenerateCode for ListAccess {
                 // the address is static
                 let _ = self
                     .index
-                    .gencode(scope_manager, scope_id, instructions, context)?;
+                    .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
@@ -144,7 +141,7 @@ impl GenerateCode for ListAccess {
 
                 let _ = self
                     .index
-                    .gencode(scope_manager, scope_id, instructions, context)?;
+                    .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
@@ -159,13 +156,13 @@ impl GenerateCode for ListAccess {
 }
 
 impl GenerateCode for FieldAccess {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self.var.locate(scope_manager, scope_id, instructions)? {
             Some(address) => {
                 // the address is static
@@ -183,18 +180,18 @@ impl GenerateCode for FieldAccess {
 }
 
 impl GenerateCode for ExprCall {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         for arg in self.args.args.iter() {
-            arg.gencode(scope_manager, scope_id, instructions, context)?;
+            arg.gencode::<E>(scope_manager, scope_id, instructions, context)?;
         }
         self.var
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         let Some(param_size) = self.args.size else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -223,13 +220,13 @@ impl GenerateCode for ExprCall {
 }
 
 impl GenerateCode for Range {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -259,23 +256,23 @@ impl GenerateCode for Range {
 
         let _ = self
             .lower
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
         let _ = self
             .upper
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
         instructions.push(Asm::Data(Data::Serialized { data: incr_data }));
         Ok(())
     }
 }
 
 impl GenerateCode for super::Product {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             super::Product::Mult {
                 left,
@@ -288,8 +285,8 @@ impl GenerateCode for super::Product {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
-                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Mult(Mult {
@@ -311,8 +308,8 @@ impl GenerateCode for super::Product {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
-                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Div(Division {
@@ -334,8 +331,8 @@ impl GenerateCode for super::Product {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
-                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Mod(Mod {
@@ -351,13 +348,13 @@ impl GenerateCode for super::Product {
 }
 
 impl GenerateCode for super::Addition {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -366,10 +363,10 @@ impl GenerateCode for super::Addition {
         };
         let _ = self
             .left
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
         let _ = self
             .right
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Asm::Operation(Operation {
             kind: OperationKind::Addition(Addition {
@@ -383,13 +380,13 @@ impl GenerateCode for super::Addition {
 }
 
 impl GenerateCode for super::Substraction {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -398,10 +395,10 @@ impl GenerateCode for super::Substraction {
         };
         let _ = self
             .left
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
         let _ = self
             .right
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Asm::Operation(Operation {
             kind: OperationKind::Substraction(Substraction {
@@ -415,13 +412,13 @@ impl GenerateCode for super::Substraction {
 }
 
 impl GenerateCode for super::Shift {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             super::Shift::Left {
                 left,
@@ -434,8 +431,8 @@ impl GenerateCode for super::Shift {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
-                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::ShiftLeft(ShiftLeft {
@@ -457,8 +454,8 @@ impl GenerateCode for super::Shift {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
-                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::ShiftRight(ShiftRight {
@@ -474,13 +471,13 @@ impl GenerateCode for super::Shift {
 }
 
 impl GenerateCode for super::BitwiseAnd {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -489,10 +486,10 @@ impl GenerateCode for super::BitwiseAnd {
         };
         let _ = self
             .left
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
         let _ = self
             .right
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Asm::Operation(Operation {
             kind: OperationKind::BitwiseAnd(BitwiseAnd {
@@ -506,13 +503,13 @@ impl GenerateCode for super::BitwiseAnd {
 }
 
 impl GenerateCode for super::BitwiseXOR {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -521,10 +518,10 @@ impl GenerateCode for super::BitwiseXOR {
         };
         let _ = self
             .left
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
         let _ = self
             .right
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Asm::Operation(Operation {
             kind: OperationKind::BitwiseXOR(BitwiseXOR {
@@ -538,13 +535,13 @@ impl GenerateCode for super::BitwiseXOR {
 }
 
 impl GenerateCode for super::BitwiseOR {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -553,10 +550,10 @@ impl GenerateCode for super::BitwiseOR {
         };
         let _ = self
             .left
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
         let _ = self
             .right
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Asm::Operation(Operation {
             kind: OperationKind::BitwiseOR(BitwiseOR {
@@ -570,13 +567,13 @@ impl GenerateCode for super::BitwiseOR {
 }
 
 impl GenerateCode for super::Cast {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -585,7 +582,7 @@ impl GenerateCode for super::Cast {
         };
         let _ = self
             .left
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         let op_left_type: Result<OpPrimitive, CodeGenerationError> = left_type.try_into();
         let op_right_type: Result<OpPrimitive, CodeGenerationError> = right_type.try_into();
@@ -605,13 +602,13 @@ impl GenerateCode for super::Cast {
 }
 
 impl GenerateCode for super::Comparaison {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             super::Comparaison::Less {
                 left,
@@ -624,8 +621,8 @@ impl GenerateCode for super::Comparaison {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
-                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Less(Less {
@@ -647,8 +644,8 @@ impl GenerateCode for super::Comparaison {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
-                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::LessEqual(LessEqual {
@@ -670,8 +667,8 @@ impl GenerateCode for super::Comparaison {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
-                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Greater(Greater {
@@ -693,8 +690,8 @@ impl GenerateCode for super::Comparaison {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
-                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::GreaterEqual(GreaterEqual {
@@ -710,13 +707,13 @@ impl GenerateCode for super::Comparaison {
 }
 
 impl GenerateCode for super::Equation {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             super::Equation::Equal {
                 left,
@@ -729,8 +726,8 @@ impl GenerateCode for super::Equation {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
-                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Equal(Equal {
@@ -752,8 +749,8 @@ impl GenerateCode for super::Equation {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
-                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::NotEqual(NotEqual {
@@ -769,19 +766,19 @@ impl GenerateCode for super::Equation {
 }
 
 impl GenerateCode for super::LogicalAnd {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let _ = self
             .left
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
         let _ = self
             .right
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Asm::Operation(Operation {
             kind: OperationKind::LogicalAnd(LogicalAnd()),
@@ -792,19 +789,19 @@ impl GenerateCode for super::LogicalAnd {
 }
 
 impl GenerateCode for super::LogicalOr {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let _ = self
             .left
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
         let _ = self
             .right
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Asm::Operation(Operation {
             kind: OperationKind::LogicalOr(LogicalOr()),
@@ -834,19 +831,18 @@ mod tests {
             Resolve,
         },
         test_extract_variable, test_statements, v_num,
-        vm::vm::Runtime,
     };
 
     use super::*;
 
     #[test]
     fn valid_addition() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -903,12 +899,12 @@ mod tests {
 
     #[test]
     fn valid_substraction() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -965,12 +961,12 @@ mod tests {
 
     #[test]
     fn valid_multiplaction() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -1027,12 +1023,12 @@ mod tests {
 
     #[test]
     fn valid_division() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -1089,12 +1085,12 @@ mod tests {
 
     #[test]
     fn valid_shift() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -1151,12 +1147,12 @@ mod tests {
 
     #[test]
     fn valid_band_bor_bxor() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -1213,12 +1209,12 @@ mod tests {
 
     #[test]
     fn valid_cmp() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<u8>("var_u128", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -1309,12 +1305,12 @@ mod tests {
 
     #[test]
     fn valid_neg() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -1366,12 +1362,12 @@ mod tests {
 
     #[test]
     fn valid_tuple_access() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -1400,12 +1396,12 @@ mod tests {
 
     #[test]
     fn valid_field_access() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -1440,12 +1436,12 @@ mod tests {
 
     #[test]
     fn valid_slice_access() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -1475,12 +1471,12 @@ mod tests {
 
     #[test]
     fn valid_vec_access() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -1510,12 +1506,12 @@ mod tests {
 
     #[test]
     fn valid_complex_access() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");

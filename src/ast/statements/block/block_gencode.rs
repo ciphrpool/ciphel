@@ -3,44 +3,41 @@ use crate::semantic::scope::scope::{
 };
 use crate::semantic::scope::static_types::POINTER_SIZE;
 use crate::vm::asm::branch::{BranchTry, Return};
-use crate::vm::vm::CodeGenerationContext;
+use crate::vm::{CodeGenerationContext, CodeGenerationError, GenerateCode};
 use crate::{
     semantic::SizeOf,
-    vm::{
-        asm::{
-            alloc::Alloc,
-            branch::{Call, Goto, Label},
-            Asm, Program,
-        },
-        vm::{CodeGenerationError, GenerateCode},
+    vm::asm::{
+        alloc::Alloc,
+        branch::{Call, Goto, Label},
+        Asm,
     },
 };
 
 use super::{Block, ClosureBlock, ExprBlock, FunctionBlock, LambdaBlock};
 
 impl GenerateCode for Block {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         for statement in &self.statements {
-            let _ = statement.gencode(scope_manager, self.scope, instructions, context)?;
+            let _ = statement.gencode::<E>(scope_manager, self.scope, instructions, context)?;
         }
         Ok(())
     }
 }
 
 impl GenerateCode for FunctionBlock {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(inner_scope) = self.scope else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -76,7 +73,7 @@ impl GenerateCode for FunctionBlock {
 
         // generate code for all statements
         for statement in &self.statements {
-            let _ = statement.gencode(
+            let _ = statement.gencode::<E>(
                 scope_manager,
                 self.scope,
                 instructions,
@@ -89,7 +86,7 @@ impl GenerateCode for FunctionBlock {
         }
 
         // Function epilog
-        instructions.push_label_id(epilog_label, "epilog_Function".to_string());
+        instructions.push_label_by_id(epilog_label, "epilog_Function".to_string());
         instructions.push(Asm::Return(Return { size: return_size }));
 
         Ok(())
@@ -97,13 +94,13 @@ impl GenerateCode for FunctionBlock {
 }
 
 impl GenerateCode for ClosureBlock {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(inner_scope) = self.scope else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -139,7 +136,7 @@ impl GenerateCode for ClosureBlock {
 
         // generate code for all statements
         for statement in &self.statements {
-            let _ = statement.gencode(
+            let _ = statement.gencode::<E>(
                 scope_manager,
                 self.scope,
                 instructions,
@@ -152,7 +149,7 @@ impl GenerateCode for ClosureBlock {
         }
 
         // Function epilog
-        instructions.push_label_id(epilog_label, "epilog_Function".to_string());
+        instructions.push_label_by_id(epilog_label, "epilog_Function".to_string());
         instructions.push(Asm::Return(Return { size: return_size }));
 
         Ok(())
@@ -160,13 +157,13 @@ impl GenerateCode for ClosureBlock {
 }
 
 impl GenerateCode for LambdaBlock {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(inner_scope) = self.scope else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -202,7 +199,7 @@ impl GenerateCode for LambdaBlock {
 
         // generate code for all statements
         for statement in &self.statements {
-            let _ = statement.gencode(
+            let _ = statement.gencode::<E>(
                 scope_manager,
                 self.scope,
                 instructions,
@@ -215,7 +212,7 @@ impl GenerateCode for LambdaBlock {
         }
 
         // lambda epilog
-        instructions.push_label_id(epilog_label, "epilog_lambda".to_string());
+        instructions.push_label_by_id(epilog_label, "epilog_lambda".to_string());
         instructions.push(Asm::Return(Return { size: return_size }));
 
         Ok(())
@@ -223,13 +220,13 @@ impl GenerateCode for LambdaBlock {
 }
 
 impl GenerateCode for ExprBlock {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(inner_scope) = self.scope else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -254,7 +251,7 @@ impl GenerateCode for ExprBlock {
             instructions.push(Asm::Goto(Goto {
                 label: Some(call_label),
             }));
-            instructions.push_label_id(start_iife, "start_IIFE".to_string());
+            instructions.push_label_by_id(start_iife, "start_IIFE".to_string());
         }
         let mut param_size = None;
         if ScopeState::IIFE == scope_state {
@@ -295,7 +292,7 @@ impl GenerateCode for ExprBlock {
 
         // generate code for all statements
         for statement in &self.statements {
-            let _ = statement.gencode(
+            let _ = statement.gencode::<E>(
                 scope_manager,
                 self.scope,
                 instructions,
@@ -309,19 +306,19 @@ impl GenerateCode for ExprBlock {
 
         if ScopeState::IIFE == scope_state {
             // IIFE epilog
-            instructions.push_label_id(epilog_label, "epilog_IIFE".to_string());
+            instructions.push_label_by_id(epilog_label, "epilog_IIFE".to_string());
             instructions.push(Asm::Return(Return { size: return_size }));
             instructions.push(Asm::Goto(Goto {
                 label: Some(end_iife),
             }));
-            instructions.push_label_id(call_label, "call_IIFE".to_string());
+            instructions.push_label_by_id(call_label, "call_IIFE".to_string());
             instructions.push(Asm::Call(Call::From {
                 label: start_iife,
                 param_size: param_size.unwrap_or(0),
             }));
-            instructions.push_label_id(end_iife, "end_IIFE".to_string());
+            instructions.push_label_by_id(end_iife, "end_IIFE".to_string());
         } else {
-            instructions.push_label_id(epilog_label, "epilog_block".to_string());
+            instructions.push_label_by_id(epilog_label, "epilog_block".to_string());
         }
         Ok(())
     }

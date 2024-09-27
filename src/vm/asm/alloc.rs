@@ -10,11 +10,13 @@ use crate::vm::{
         MemoryAddress,
     },
     asm::operation::OpPrimitive,
+    program::Program,
+    runtime::RuntimeError,
+    scheduler_v2::Executable,
     stdio::StdIO,
-    vm::{CasmMetadata, Executable, RuntimeError},
 };
 
-use super::{data::HexSlice, operation::PopNum, Program};
+use super::{data::HexSlice, operation::PopNum};
 
 pub const ALLOC_SIZE_THRESHOLD: usize = STACK_SIZE / 10;
 
@@ -36,8 +38,8 @@ pub enum Alloc {
     },
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Alloc {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Alloc {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
             Alloc::Heap { size } => stdio.push_asm(engine, &format!("halloc {size}")),
             Alloc::Stack { size } => stdio.push_asm(engine, &format!("salloc {size}")),
@@ -49,49 +51,53 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Alloc {
             }
         }
     }
+}
 
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
+impl crate::vm::AsmWeight for Alloc {
+    fn weight(&self) -> crate::vm::Weight {
         match self {
             Alloc::Heap { size } => {
                 if *size > ALLOC_SIZE_THRESHOLD {
-                    crate::vm::vm::CasmWeight::EXTREME
+                    crate::vm::Weight::EXTREME
                 } else {
-                    crate::vm::vm::CasmWeight::MEDIUM
+                    crate::vm::Weight::MEDIUM
                 }
             }
             Alloc::Stack { size } => {
                 if *size > ALLOC_SIZE_THRESHOLD {
-                    crate::vm::vm::CasmWeight::EXTREME
+                    crate::vm::Weight::EXTREME
                 } else {
-                    crate::vm::vm::CasmWeight::MEDIUM
+                    crate::vm::Weight::MEDIUM
                 }
             }
             Alloc::Global { data, .. } => {
                 if data.len() > ALLOC_SIZE_THRESHOLD {
-                    crate::vm::vm::CasmWeight::EXTREME
+                    crate::vm::Weight::EXTREME
                 } else {
-                    crate::vm::vm::CasmWeight::MEDIUM
+                    crate::vm::Weight::MEDIUM
                 }
             }
             Alloc::GlobalFromStack { address, size } => {
                 if *size > ALLOC_SIZE_THRESHOLD {
-                    crate::vm::vm::CasmWeight::EXTREME
+                    crate::vm::Weight::EXTREME
                 } else {
-                    crate::vm::vm::CasmWeight::MEDIUM
+                    crate::vm::Weight::MEDIUM
                 }
             }
         }
     }
 }
-impl<G: crate::GameEngineStaticFn> Executable<G> for Alloc {
-    fn execute(
+
+impl<E: crate::vm::external::Engine> Executable<E> for Alloc {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match self {
             Alloc::Heap { size } => {
@@ -99,12 +105,12 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Alloc {
                 let address: u64 = address.into(stack);
 
                 let _ = stack.push_with(&address.to_le_bytes())?;
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
             Alloc::Stack { size } => {
                 let _ = stack.push(*size)?;
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
             Alloc::Global { data, address } => {
@@ -112,7 +118,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Alloc {
 
                 let address: u64 = (*address).into(stack);
                 let _ = stack.push_with(&address.to_le_bytes())?;
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
             Alloc::GlobalFromStack { address, size } => {
@@ -121,7 +127,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Alloc {
 
                 let address: u64 = (*address).into(stack);
                 let _ = stack.push_with(&address.to_le_bytes())?;
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
         }
@@ -132,31 +138,33 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Alloc {
 pub struct Realloc {
     pub size: Option<usize>,
 }
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Realloc {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Realloc {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self.size {
             Some(n) => stdio.push_asm(engine, &format!("realloc {n}")),
             None => stdio.push_asm(engine, "realloc"),
         }
     }
-
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
+}
+impl crate::vm::AsmWeight for Realloc {
+    fn weight(&self) -> crate::vm::Weight {
         if self.size.unwrap_or(0) > ALLOC_SIZE_THRESHOLD {
-            crate::vm::vm::CasmWeight::EXTREME
+            crate::vm::Weight::EXTREME
         } else {
-            crate::vm::vm::CasmWeight::MEDIUM
+            crate::vm::Weight::MEDIUM
         }
     }
 }
-impl<G: crate::GameEngineStaticFn> Executable<G> for Realloc {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Realloc {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let size = match self.size {
             Some(size) => size,
@@ -171,31 +179,34 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Realloc {
         let address: u64 = address.into(stack);
 
         let _ = stack.push_with(&address.to_le_bytes())?;
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Free();
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Free {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Free {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         stdio.push_asm(engine, "free");
     }
 }
-impl<G: crate::GameEngineStaticFn> Executable<G> for Free {
-    fn execute(
+impl crate::vm::AsmWeight for Free {}
+
+impl<E: crate::vm::external::Engine> Executable<E> for Free {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
         heap.free(address)?;
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }
@@ -206,8 +217,8 @@ pub enum Access {
     Runtime { size: Option<usize> },
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Access {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Access {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
             Access::Static { address, size } => {
                 stdio.push_asm(engine, &format!("load {} {size}", address.name()))
@@ -218,24 +229,26 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Access {
             },
         }
     }
-
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
+}
+impl crate::vm::AsmWeight for Access {
+    fn weight(&self) -> crate::vm::Weight {
         match self {
-            Access::Static { address, size } => crate::vm::vm::CasmWeight::LOW,
-            Access::Runtime { size } => crate::vm::vm::CasmWeight::LOW,
+            Access::Static { address, size } => crate::vm::Weight::LOW,
+            Access::Runtime { size } => crate::vm::Weight::LOW,
         }
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Access {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let (address, size) = match self {
             Access::Static { address, size } => (*address, *size),
@@ -256,7 +269,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
                 let data = heap.read(address, size)?;
 
                 let _ = stack.push_with(&data)?;
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
             MemoryAddress::Stack { .. } => {
@@ -265,7 +278,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
 
                 // Copy data onto stack;
                 let _ = stack.push_with(&data)?;
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
             MemoryAddress::Frame { .. } => {
@@ -274,7 +287,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
 
                 // Copy data onto stack;
                 let _ = stack.push_with(&data)?;
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
             MemoryAddress::Global { .. } => {
@@ -282,7 +295,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
 
                 // Copy data onto stack;
                 let _ = stack.push_with(&data)?;
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
         }
@@ -296,23 +309,23 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
 //     pub len: Option<usize>,
 // }
 
-// impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CheckIndex {
-//     fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+// impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for CheckIndex {
+//     fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
 //         stdio.push_asm(engine, "chidx");
 //     }
-//     fn weight(&self) -> crate::vm::vm::CasmWeight {
-//         crate::vm::vm::CasmWeight::ZERO
+//     fn weight(&self) -> crate::vm::Weight {
+//         crate::vm::Weight::ZERO
 //     }
 // }
 
-// impl<G: crate::GameEngineStaticFn> Executable<G> for CheckIndex {
-//     fn execute(
+// impl<E: crate::vm::external::Engine> Executable<E> for CheckIndex {
+//     fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
 //         &self,
-//         program: &mut Program,
+//         program: &mut crate::vm::program::Program,
 //         stack: &mut Stack,
 //         heap: &mut Heap,
 //         stdio: &mut StdIO,
-//         engine: &mut G,
+//         engine: &mut E,
 //         tid: usize,
 //     ) -> Result<(), RuntimeError> {
 //         let index = OpPrimitive::pop_num::<u64>(stack)?;
@@ -340,7 +353,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
 //             let _ = stack.push_with(&item_addr.to_le_bytes())?;
 //         }
 
-//         program.incr();
+//         scheduler.next();
 //         Ok(())
 //     }
 // }

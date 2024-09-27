@@ -1,13 +1,12 @@
-use super::{
-    operation::{OpPrimitive, PopNum},
-    Program,
-};
+use super::operation::{OpPrimitive, PopNum};
 
 use crate::vm::{
     allocator::{heap::Heap, stack::Stack},
     asm::operation::GetNumFrom,
+    program::Program,
+    runtime::RuntimeError,
+    scheduler_v2::Executable,
     stdio::StdIO,
-    vm::{CasmMetadata, Executable, RuntimeError},
 };
 
 use num_traits::ToBytes;
@@ -25,26 +24,29 @@ impl Label {
     }
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Label {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Label {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         stdio.push_asm_label(engine, &self.name);
     }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        crate::vm::vm::CasmWeight::ZERO
+}
+impl crate::vm::AsmWeight for Label {
+    fn weight(&self) -> crate::vm::Weight {
+        crate::vm::Weight::ZERO
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Label {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Label {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }
@@ -57,8 +59,8 @@ pub enum Call {
     Closure { param_size: usize },
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Call {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Call {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
             Call::From { label, param_size } => {
                 let label = program
@@ -71,24 +73,27 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Call {
             Call::Closure { param_size } => stdio.push_asm(engine, "call"),
         }
     }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        crate::vm::vm::CasmWeight::ZERO
+}
+impl crate::vm::AsmWeight for Call {
+    fn weight(&self) -> crate::vm::Weight {
+        crate::vm::Weight::ZERO
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Call {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Call {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let (caller_data, param_size, function_offset) = match *self {
             Call::From { label, param_size } => {
-                let Some(function_offset) = program.get(&label) else {
+                let Some(function_offset) = program.get_cursor_from_label(&label) else {
                     return Err(RuntimeError::CodeSegmentation);
                 };
                 (None, param_size, function_offset)
@@ -105,9 +110,9 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Call {
             }
         };
 
-        let _ = stack.open_frame(param_size, program.cursor + 1, caller_data)?;
+        let _ = stack.open_frame(param_size, scheduler.cursor.get() + 1, caller_data)?;
 
-        program.cursor_set(function_offset);
+        scheduler.jump(function_offset);
         Ok(())
     }
 }
@@ -117,8 +122,8 @@ pub struct Goto {
     pub label: Option<Ulid>,
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Goto {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Goto {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self.label {
             Some(label) => {
                 let label = program
@@ -130,31 +135,34 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Goto {
             None => stdio.push_asm(engine, "goto"),
         }
     }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        crate::vm::vm::CasmWeight::ZERO
+}
+impl crate::vm::AsmWeight for Goto {
+    fn weight(&self) -> crate::vm::Weight {
+        crate::vm::Weight::ZERO
     }
 }
-impl<G: crate::GameEngineStaticFn> Executable<G> for Goto {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Goto {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match self.label {
             Some(label) => {
-                let Some(idx) = program.get(&label) else {
+                let Some(idx) = program.get_cursor_from_label(&label) else {
                     return Err(RuntimeError::CodeSegmentation);
                 };
-                program.cursor_set(idx);
+                scheduler.jump(idx);
                 Ok(())
             }
             None => {
                 let idx = OpPrimitive::pop_num::<u64>(stack)? as usize;
-                program.cursor_set(idx);
+                scheduler.jump(idx);
                 Ok(())
             }
         }
@@ -166,35 +174,40 @@ pub struct BranchIf {
     pub else_label: Ulid,
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchIf {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for BranchIf {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         let label = program
             .get_label_name(&self.else_label)
             .unwrap_or("".to_string().into())
             .to_string();
         stdio.push_asm(engine, &format!("else_goto {label}"));
     }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        crate::vm::vm::CasmWeight::ZERO
+}
+
+impl crate::vm::AsmWeight for BranchIf {
+    fn weight(&self) -> crate::vm::Weight {
+        crate::vm::Weight::ZERO
     }
 }
-impl<G: crate::GameEngineStaticFn> Executable<G> for BranchIf {
-    fn execute(
+
+impl<E: crate::vm::external::Engine> Executable<E> for BranchIf {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let condition = OpPrimitive::pop_bool(stack)?;
 
-        let Some(else_label) = program.get(&self.else_label) else {
+        let Some(else_label) = program.get_cursor_from_label(&self.else_label) else {
             return Err(RuntimeError::CodeSegmentation);
         };
-        program.cursor_set(if condition {
-            program.cursor + 1
+        scheduler.jump(if condition {
+            scheduler.cursor.get() + 1
         } else {
             else_label
         });
@@ -202,204 +215,14 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for BranchIf {
     }
 }
 
-// #[derive(Debug, Clone)]
-// pub enum BranchTable {
-//     Swith {
-//         size: Option<usize>,
-//         data_label: Option<Ulid>,
-//         else_label: Option<Ulid>,
-//     },
-//     Table {
-//         table_label: Option<Ulid>,
-//         else_label: Option<Ulid>,
-//     },
-// }
-
-// impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchTable {
-//     fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
-//         match self {
-//             BranchTable::Swith {
-//                 size,
-//                 data_label,
-//                 else_label,
-//             } => {
-//                 let data_label = match data_label {
-//                     Some(label) => program
-//                         .get_label_name(label)
-//                         .unwrap_or("".to_string().into())
-//                         .to_string(),
-//                     None => "".to_string().into(),
-//                 };
-//                 let else_label = match else_label {
-//                     Some(label) => program
-//                         .get_label_name(label)
-//                         .unwrap_or("".to_string().into())
-//                         .to_string(),
-//                     None => "".to_string().into(),
-//                 };
-//                 let size = match size {
-//                     Some(size) => format!("{size}"),
-//                     None => "".to_string().into(),
-//                 };
-//                 stdio.push_asm(engine, &format!("table {data_label} {else_label} {size}"));
-//             }
-//             BranchTable::Table {
-//                 table_label,
-//                 else_label,
-//             } => {
-//                 let table_label = match table_label {
-//                     Some(label) => program
-//                         .get_label_name(label)
-//                         .unwrap_or("".to_string().into())
-//                         .to_string(),
-//                     None => "".to_string().into(),
-//                 };
-//                 let else_label = match else_label {
-//                     Some(label) => program
-//                         .get_label_name(label)
-//                         .unwrap_or("".to_string().into())
-//                         .to_string(),
-//                     None => "".to_string().into(),
-//                 };
-//                 stdio.push_asm(engine, &format!("table {table_label} {else_label}"));
-//             }
-//         }
-//     }
-//     fn weight(&self) -> crate::vm::vm::CasmWeight {
-//         crate::vm::vm::CasmWeight::ZERO
-//     }
-// }
-
-// impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTable {
-//     fn execute(
-//         &self,
-//         program: &mut Program,
-//         stack: &mut Stack,
-//         heap: &mut Heap,
-//         stdio: &mut StdIO,
-//         engine: &mut G,
-//         tid: usize,
-//     ) -> Result<(), RuntimeError> {
-//         match self {
-//             BranchTable::Swith {
-//                 data_label,
-//                 size,
-//                 else_label,
-//             } => {
-//                 let data_offset = match data_label {
-//                     Some(label) => {
-//                         let Some(data_offset) = program.get(&label) else {
-//                             return Err(RuntimeError::CodeSegmentation);
-//                         };
-//                         data_offset
-//                     }
-//                     None => {
-//                         let data_offset = OpPrimitive::pop_num::<u64>(stack)? as usize;
-//                         data_offset
-//                     }
-//                 };
-//                 let data = match size {
-//                     Some(size) => stack.pop(*size)?.to_vec(),
-//                     None => {
-//                         let heap_address = OpPrimitive::pop_num::<u64>(stack)?;
-//                         let data = heap
-//                             .read(heap_address as usize, 16)
-//                             .expect("Heap Read should have succeeded");
-//                         let (length, rest) = extract_u64(&data)?;
-//                         let (_capacity, _rest) = extract_u64(rest)?;
-//                         let data = heap
-//                             .read(heap_address as usize + 16, length as usize)
-//                             .expect("Heap Read should have succeeded");
-//                         data
-//                     }
-//                 };
-//                 let data = data.into();
-//                 let mut found_idx = None;
-//                 for (idx, datum) in program.data_at_offset(data_offset)?.iter().enumerate() {
-//                     if datum == &data {
-//                         found_idx = Some(idx);
-//                         break;
-//                     }
-//                 }
-
-//                 match found_idx {
-//                     Some(idx) => {
-//                         let _ = stack.push_with(&(idx as u64).to_le_bytes())?;
-//                         program.incr();
-//                     }
-//                     None => {
-//                         if let Some(else_label) = else_label {
-//                             let Some(idx) = program.get(&else_label) else {
-//                                 return Err(RuntimeError::CodeSegmentation);
-//                             };
-//                             program.cursor_set(idx);
-//                         } else {
-//                             return Err(RuntimeError::IncorrectVariant);
-//                         }
-//                     }
-//                 }
-
-//                 Ok(())
-//             }
-//             BranchTable::Table {
-//                 table_label,
-//                 else_label,
-//             } => {
-//                 let table_offset = match table_label {
-//                     Some(label) => {
-//                         let Some(table_offset) = program.get(&label) else {
-//                             return Err(RuntimeError::CodeSegmentation);
-//                         };
-//                         table_offset
-//                     }
-//                     None => {
-//                         let table_offset = OpPrimitive::pop_num::<u64>(stack)? as usize;
-//                         table_offset
-//                     }
-//                 };
-
-//                 let variant = OpPrimitive::pop_num::<u64>(stack)?;
-
-//                 let mut found_offset = None;
-//                 for (idx, label) in program.table_at_offset(table_offset)?.iter().enumerate() {
-//                     let Some(instr_offset) = program.get(label) else {
-//                         return Err(RuntimeError::CodeSegmentation);
-//                     };
-//                     if variant == idx as u64 {
-//                         found_offset = Some(instr_offset);
-//                         break;
-//                     }
-//                 }
-
-//                 match found_offset {
-//                     Some(idx) => {
-//                         program.cursor_set(idx);
-//                     }
-//                     None => {
-//                         if let Some(else_label) = else_label {
-//                             let Some(idx) = program.get(&else_label) else {
-//                                 return Err(RuntimeError::CodeSegmentation);
-//                             };
-//                             program.cursor_set(idx);
-//                         } else {
-//                             return Err(RuntimeError::IncorrectVariant);
-//                         }
-//                     }
-//                 }
-//                 Ok(())
-//             }
-//         }
-//     }
-// }
-
 #[derive(Debug, Clone)]
 pub enum BranchTry {
     StartTry { else_label: Ulid },
     EndTry,
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchTry {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for BranchTry {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
             BranchTry::StartTry { else_label } => {
                 let label = program
@@ -411,29 +234,32 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchTry {
             BranchTry::EndTry => stdio.push_asm(engine, &format!("try_end")),
         }
     }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        crate::vm::vm::CasmWeight::ZERO
+}
+impl crate::vm::AsmWeight for BranchTry {
+    fn weight(&self) -> crate::vm::Weight {
+        crate::vm::Weight::ZERO
     }
 }
-impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTry {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for BranchTry {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match self {
             BranchTry::StartTry { else_label } => {
-                program.push_catch(else_label);
+                scheduler.push_catch(else_label);
             }
             BranchTry::EndTry => {
-                program.pop_catch();
+                scheduler.pop_catch();
             }
         }
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }
@@ -441,24 +267,28 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTry {
 #[derive(Debug, Clone)]
 pub struct Break;
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Break {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Break {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         stdio.push_asm(engine, "break")
     }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        crate::vm::vm::CasmWeight::ZERO
+}
+impl crate::vm::AsmWeight for Break {
+    fn weight(&self) -> crate::vm::Weight {
+        crate::vm::Weight::ZERO
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Continue;
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Continue {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Continue {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         stdio.push_asm(engine, "continue")
     }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        crate::vm::vm::CasmWeight::ZERO
+}
+impl crate::vm::AsmWeight for Continue {
+    fn weight(&self) -> crate::vm::Weight {
+        crate::vm::Weight::ZERO
     }
 }
 
@@ -467,79 +297,87 @@ pub struct Return {
     pub size: usize,
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Return {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Return {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         stdio.push_asm(engine, &format!("return {0}", self.size))
     }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        crate::vm::vm::CasmWeight::MEDIUM
+}
+impl crate::vm::AsmWeight for Return {
+    fn weight(&self) -> crate::vm::Weight {
+        crate::vm::Weight::MEDIUM
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct CloseFrame;
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CloseFrame {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for CloseFrame {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         stdio.push_asm(engine, "return")
     }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        crate::vm::vm::CasmWeight::ZERO
+}
+impl crate::vm::AsmWeight for CloseFrame {
+    fn weight(&self) -> crate::vm::Weight {
+        crate::vm::Weight::ZERO
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Break {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Break {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         todo!()
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Continue {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Continue {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         todo!()
     }
 }
-impl<G: crate::GameEngineStaticFn> Executable<G> for Return {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Return {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let return_pointer = stack.return_pointer;
         let _ = stack.close_frame(self.size)?;
-        program.cursor_set(return_pointer);
+        scheduler.jump(return_pointer);
         Ok(())
     }
 }
-impl<G: crate::GameEngineStaticFn> Executable<G> for CloseFrame {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for CloseFrame {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         todo!()
     }

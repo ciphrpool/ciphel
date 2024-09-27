@@ -13,7 +13,7 @@ impl Resolve for Block {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -29,7 +29,7 @@ impl Resolve for Block {
         }
 
         for instruction in &mut self.statements {
-            let _ = instruction.resolve::<G>(scope_manager, self.scope, context, &mut ())?;
+            let _ = instruction.resolve::<E>(scope_manager, self.scope, context, &mut ())?;
         }
 
         // let return_type = self.type_of(&scope_manager, scope_id)?;
@@ -65,13 +65,13 @@ impl Resolve for Block {
 }
 
 impl Desugar<Statement> for Block {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Statement>, SemanticError> {
         for statement in self.statements.iter_mut() {
-            if let Some(output) = statement.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = statement.desugar::<E>(scope_manager, scope_id)? {
                 *statement = output;
             }
         }
@@ -80,13 +80,13 @@ impl Desugar<Statement> for Block {
 }
 
 impl Desugar<Block> for Block {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Block>, SemanticError> {
         for statement in self.statements.iter_mut() {
-            if let Some(output) = statement.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = statement.desugar::<E>(scope_manager, scope_id)? {
                 *statement = output;
             }
         }
@@ -98,7 +98,7 @@ impl Resolve for FunctionBlock {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -114,7 +114,7 @@ impl Resolve for FunctionBlock {
         }
 
         for instruction in &mut self.statements {
-            let _ = instruction.resolve::<G>(scope_manager, self.scope, context, &mut ())?;
+            let _ = instruction.resolve::<E>(scope_manager, self.scope, context, &mut ())?;
         }
 
         // let return_type = self.type_of(&scope_manager, scope_id)?;
@@ -150,13 +150,13 @@ impl Resolve for FunctionBlock {
 }
 
 impl Desugar<FunctionBlock> for FunctionBlock {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<FunctionBlock>, SemanticError> {
         for statement in self.statements.iter_mut() {
-            if let Some(output) = statement.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = statement.desugar::<E>(scope_manager, scope_id)? {
                 *statement = output;
             }
         }
@@ -168,7 +168,7 @@ impl Resolve for ClosureBlock {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -188,7 +188,7 @@ impl Resolve for ClosureBlock {
             .insert(self.scope.unwrap(), ScopeState::Closure);
 
         for instruction in &mut self.statements {
-            let _ = instruction.resolve::<G>(scope_manager, self.scope, context, &mut ())?;
+            let _ = instruction.resolve::<E>(scope_manager, self.scope, context, &mut ())?;
         }
 
         // let return_type = self.type_of(&scope_manager, scope_id)?;
@@ -224,13 +224,13 @@ impl Resolve for ClosureBlock {
 }
 
 impl Desugar<ClosureBlock> for ClosureBlock {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<ClosureBlock>, SemanticError> {
         for statement in self.statements.iter_mut() {
-            if let Some(output) = statement.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = statement.desugar::<E>(scope_manager, scope_id)? {
                 *statement = output;
             }
         }
@@ -242,7 +242,7 @@ impl Resolve for LambdaBlock {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -262,7 +262,7 @@ impl Resolve for LambdaBlock {
             .insert(self.scope.unwrap(), ScopeState::Lambda);
 
         for instruction in &mut self.statements {
-            let _ = instruction.resolve::<G>(scope_manager, self.scope, context, &mut ())?;
+            let _ = instruction.resolve::<E>(scope_manager, self.scope, context, &mut ())?;
         }
 
         // let return_type = self.type_of(&scope_manager, scope_id)?;
@@ -298,13 +298,13 @@ impl Resolve for LambdaBlock {
 }
 
 impl Desugar<LambdaBlock> for LambdaBlock {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<LambdaBlock>, SemanticError> {
         for statement in self.statements.iter_mut() {
-            if let Some(output) = statement.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = statement.desugar::<E>(scope_manager, scope_id)? {
                 *statement = output;
             }
         }
@@ -316,7 +316,7 @@ impl Resolve for ExprBlock {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -341,7 +341,7 @@ impl Resolve for ExprBlock {
         }
 
         for instruction in &mut self.statements {
-            let _ = instruction.resolve::<G>(scope_manager, self.scope, context, &mut ())?;
+            let _ = instruction.resolve::<E>(scope_manager, self.scope, context, &mut ())?;
         }
 
         if let Some(mapping) = scope_manager.allocating_scope.get(&self.scope.unwrap()) {
@@ -384,13 +384,13 @@ impl Resolve for ExprBlock {
 }
 
 impl Desugar<ExprBlock> for ExprBlock {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<ExprBlock>, SemanticError> {
         for statement in self.statements.iter_mut() {
-            if let Some(output) = statement.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = statement.desugar::<E>(scope_manager, scope_id)? {
                 *statement = output;
             }
         }
@@ -422,7 +422,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_scope.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -467,7 +467,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_scope.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -516,7 +516,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_scope.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -562,7 +562,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_scope.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -607,7 +607,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_scope.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -648,7 +648,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_scope.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,

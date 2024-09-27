@@ -125,20 +125,20 @@ macro_rules! assert_number {
 //             .expect("Parsing should have succeeded")
 //             .1;
 
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 //         // Create a new block.
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         // Perform semantic check.
-//         expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//         expr.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Semantic resolution should have succeeded");
 
 //         // Code generation.
 //         let mut instructions = Program::default();
-//         expr.gencode(
+//         expr.gencode::<E>(
 //             &mut scope_manager,
 //             None,
 //             &mut instructions,
-//             &crate::vm::vm::CodeGenerationContext::default(),
+//             &crate::vm::CodeGenerationContext::default(),
 //         )
 //         .expect("Code generation should have succeeded");
 //         assert!(instructions.len() > 0);
@@ -166,7 +166,7 @@ macro_rules! assert_number {
 // #[macro_export]
 // macro_rules! compile_expression_with_type {
 //     ($expr_type:ident,$expr_str:expr,$user_type_str:expr,$user_type:ident) => {{
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 //         // Parse the expression.
 //         let mut expr = $expr_type::parse($expr_str.into())
 //             .expect("Parsing should have succeeded")
@@ -182,16 +182,16 @@ macro_rules! assert_number {
 //             )
 //             .expect("Type registering should have succeeded");
 //         // Perform semantic check.
-//         expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//         expr.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Semantic resolution should have succeeded");
 
 //         // Code generation.
 //         let mut instructions = Program::default();
-//         expr.gencode(
+//         expr.gencode::<E>(
 //             &mut scope_manager,
 //             None,
 //             &mut instructions,
-//             &crate::vm::vm::CodeGenerationContext::default(),
+//             &crate::vm::CodeGenerationContext::default(),
 //         )
 //         .expect("Code generation should have succeeded");
 //         assert!(instructions.len() > 0);
@@ -228,11 +228,11 @@ macro_rules! assert_number {
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         $statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 //         assert!(instructions.len() > 0);
@@ -269,11 +269,11 @@ macro_rules! assert_number {
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         $statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -298,20 +298,20 @@ macro_rules! assert_number {
 // #[macro_export]
 // macro_rules! compile_statement_for_string {
 //     ($statement:ident) => {{
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = $statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Semantic resolution should have succeeded");
 
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         $statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -366,7 +366,7 @@ macro_rules! assert_number {
 // #[macro_export]
 // macro_rules! eval_and_compare {
 //     ($expr:expr, $expected:expr,$size:ident) => {{
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         let mut expr = Expression::parse($expr.into())
 //             .expect("Parsing should have succeeded")
@@ -374,16 +374,16 @@ macro_rules! assert_number {
 
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = expr
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
 //             .expect("Semantic resolution should have succeeded");
 
 //         // Code generation.
 //         let mut instructions = Program::default();
-//         expr.gencode(
+//         expr.gencode::<E>(
 //             &mut scope_manager,
 //             None,
 //             &mut instructions,
-//             &crate::vm::vm::CodeGenerationContext::default(),
+//             &crate::vm::CodeGenerationContext::default(),
 //         )
 //         .expect("Code generation should have succeeded");
 
@@ -421,7 +421,7 @@ macro_rules! assert_number {
 // #[macro_export]
 // macro_rules! eval_and_compare_bool {
 //     ($expr:expr, $expected:expr) => {{
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         let mut expr = Expression::parse($expr.into())
 //             .expect("Parsing should have succeeded")
@@ -429,16 +429,16 @@ macro_rules! assert_number {
 
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = expr
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
 //             .expect("Semantic resolution should have succeeded");
 
 //         // Code generation.
 //         let mut instructions = Program::default();
-//         expr.gencode(
+//         expr.gencode::<E>(
 //             &mut scope_manager,
 //             None,
 //             &mut instructions,
-//             &crate::vm::vm::CodeGenerationContext::default(),
+//             &crate::vm::CodeGenerationContext::default(),
 //         )
 //         .expect("Code generation should have succeeded");
 

@@ -2,7 +2,7 @@ use crate::{
     semantic::scope::scope::ScopeManager,
     vm::{
         asm::{branch::BranchTry, data::Data, mem::Mem},
-        vm::CodeGenerationContext,
+        CodeGenerationContext, CodeGenerationError, GenerateCode,
     },
 };
 use ulid::Ulid;
@@ -22,46 +22,43 @@ use crate::{
         },
         EType, SizeOf,
     },
-    vm::{
-        asm::{
-            branch::{BranchIf, Goto, Label},
-            Asm, Program,
-        },
-        vm::{CodeGenerationError, GenerateCode},
+    vm::asm::{
+        branch::{BranchIf, Goto, Label},
+        Asm,
     },
 };
 
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 
 impl GenerateCode for Flow {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
-            Flow::If(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Flow::Match(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Flow::Try(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Flow::Printf(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Flow::Call(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Flow::If(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
+            Flow::Match(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
+            Flow::Try(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
+            Flow::Printf(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
+            Flow::Call(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
         }
     }
 }
 
 impl GenerateCode for CallStat {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let _ = self
             .call
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
         let Some(return_type) = self.call.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -75,74 +72,74 @@ impl GenerateCode for CallStat {
 }
 
 impl GenerateCode for IfStat {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let mut else_label = Label::gen();
         let mut end_label = Label::gen();
 
         let _ = self
             .condition
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Asm::If(BranchIf { else_label }));
         let _ = self
             .then_branch
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
         instructions.push(Asm::Goto(Goto {
             label: Some(end_label),
         }));
 
         for (condition, block) in &self.else_if_branches {
-            instructions.push_label_id(else_label, "else_if".to_string().into());
+            instructions.push_label_by_id(else_label, "else_if".to_string().into());
 
             else_label = Label::gen();
 
-            let _ = condition.gencode(scope_manager, scope_id, instructions, context)?;
+            let _ = condition.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
             instructions.push(Asm::If(BranchIf { else_label }));
 
-            let _ = block.gencode(scope_manager, scope_id, instructions, context)?;
+            let _ = block.gencode::<E>(scope_manager, scope_id, instructions, context)?;
             instructions.push(Asm::Goto(Goto {
                 label: Some(end_label),
             }));
         }
 
-        instructions.push_label_id(else_label, "else".to_string().into());
+        instructions.push_label_by_id(else_label, "else".to_string().into());
         if let Some(block) = &self.else_branch {
-            let _ = block.gencode(scope_manager, scope_id, instructions, context)?;
+            let _ = block.gencode::<E>(scope_manager, scope_id, instructions, context)?;
             instructions.push(Asm::Goto(Goto {
                 label: Some(end_label),
             }));
         }
 
-        instructions.push_label_id(end_label, "end_if".to_string().into());
+        instructions.push_label_by_id(end_label, "end_if".to_string().into());
         Ok(())
     }
 }
 
 impl GenerateCode for MatchStat {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let break_label = Label::gen();
         instructions.push_label("start_match".to_string());
         let _ = self
             .expr
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         match &self.cases {
             crate::ast::expressions::flows::Cases::Primitive { cases } => {
                 for case in cases {
-                    case.gencode(
+                    case.gencode::<E>(
                         scope_manager,
                         scope_id,
                         instructions,
@@ -156,7 +153,7 @@ impl GenerateCode for MatchStat {
             }
             crate::ast::expressions::flows::Cases::String { cases } => {
                 for case in cases {
-                    case.gencode(
+                    case.gencode::<E>(
                         scope_manager,
                         scope_id,
                         instructions,
@@ -170,7 +167,7 @@ impl GenerateCode for MatchStat {
             }
             crate::ast::expressions::flows::Cases::Enum { cases } => {
                 for case in cases {
-                    case.gencode(
+                    case.gencode::<E>(
                         scope_manager,
                         scope_id,
                         instructions,
@@ -184,7 +181,7 @@ impl GenerateCode for MatchStat {
             }
             crate::ast::expressions::flows::Cases::Union { cases } => {
                 for case in cases {
-                    case.gencode(
+                    case.gencode::<E>(
                         scope_manager,
                         scope_id,
                         instructions,
@@ -199,23 +196,23 @@ impl GenerateCode for MatchStat {
         }
 
         if let Some(block) = &self.else_branch {
-            block.gencode(scope_manager, scope_id, instructions, context)?;
+            block.gencode::<E>(scope_manager, scope_id, instructions, context)?;
         }
 
-        instructions.push_label_id(break_label, "end_match".to_string());
+        instructions.push_label_by_id(break_label, "end_match".to_string());
 
         Ok(())
     }
 }
 
 impl GenerateCode for TryStat {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let else_label = Label::gen();
         let end_try_label = Label::gen();
         let recover_else_label = Label::gen();
@@ -226,22 +223,22 @@ impl GenerateCode for TryStat {
 
         let _ = self
             .try_branch
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Asm::Goto(Goto {
             label: Some(end_try_label),
         }));
 
-        instructions.push_label_id(recover_else_label, "recover_else".to_string().into());
+        instructions.push_label_by_id(recover_else_label, "recover_else".to_string().into());
 
-        instructions.push_label_id(else_label, "else".to_string().into());
+        instructions.push_label_by_id(else_label, "else".to_string().into());
         instructions.push(Asm::Try(BranchTry::EndTry));
 
         if let Some(block) = &self.else_branch {
-            block.gencode(scope_manager, scope_id, instructions, context)?;
+            block.gencode::<E>(scope_manager, scope_id, instructions, context)?;
         }
 
-        instructions.push_label_id(end_try_label, "end_try".to_string().into());
+        instructions.push_label_by_id(end_try_label, "end_try".to_string().into());
         Ok(())
     }
 }
@@ -259,12 +256,12 @@ mod tests {
 
     #[test]
     fn valid_if() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -313,12 +310,12 @@ mod tests {
 
     #[test]
     fn valid_if_with_inner_vars() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -344,12 +341,12 @@ mod tests {
 
     #[test]
     fn valid_match() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");

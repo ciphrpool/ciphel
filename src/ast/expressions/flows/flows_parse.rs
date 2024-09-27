@@ -22,7 +22,7 @@ use crate::{
         TryParse,
     },
     semantic::{Metadata, Resolve},
-    vm::{self, core, vm::GenerateCode},
+    vm::GenerateCode,
 };
 use std::fmt::Debug;
 
@@ -45,7 +45,7 @@ impl TryParse for ExprFlow {
             map(TryExpr::parse, |value| ExprFlow::Try(value)),
             map(
                 preceded(
-                    wst(vm::core::lexem::SIZEOF),
+                    wst(crate::vm::core::lexem::SIZEOF),
                     delimited(wst(lexem::PAR_O), Type::parse, wst(lexem::PAR_C)),
                 ),
                 |value| ExprFlow::SizeOf(value, Metadata::default()),

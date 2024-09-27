@@ -7,8 +7,6 @@ use self::{
     stack::Stack,
 };
 
-use super::vm::RuntimeError;
-
 pub mod heap;
 pub mod stack;
 pub mod vtable;
@@ -69,7 +67,7 @@ impl MemoryAddress {
 }
 
 impl TryInto<MemoryAddress> for u64 {
-    type Error = RuntimeError;
+    type Error = super::runtime::RuntimeError;
     fn try_into(self) -> Result<MemoryAddress, Self::Error> {
         match self as usize {
             RANGE_GLOBAL_SIZE_START..=RANGE_GLOBAL_SIZE_END => Ok(MemoryAddress::Global {
@@ -81,7 +79,7 @@ impl TryInto<MemoryAddress> for u64 {
             RANGE_HEAP_SIZE_START..=RANGE_HEAP_SIZE_END => Ok(MemoryAddress::Heap {
                 offset: self as usize - (GLOBAL_SIZE + STACK_SIZE),
             }),
-            _ => Err(RuntimeError::MemoryViolation),
+            _ => Err(super::runtime::RuntimeError::MemoryViolation),
         }
     }
 }

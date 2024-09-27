@@ -8,13 +8,14 @@ use crate::{
         allocator::{heap::Heap, stack::Stack, MemoryAddress},
         asm::{
             operation::{GetNumFrom, OpPrimitive, PopNum},
-            Asm, Program,
+            Asm,
         },
-        core::{
-            lexem, CoreCasm, {ERROR_SLICE, OK_SLICE},
-        },
+        core::{lexem, CoreAsm, ERROR_SLICE, OK_SLICE},
+        program::Program,
+        runtime::RuntimeError,
+        scheduler_v2::Executable,
         stdio::StdIO,
-        vm::{CasmMetadata, CodeGenerationError, Executable, GenerateCode, RuntimeError},
+        CodeGenerationError, GenerateCode,
     },
 };
 
@@ -118,19 +119,19 @@ impl PathFinder for MapFn {
 }
 
 impl ResolveCore for MapFn {
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
         context: Option<&EType>,
         parameters: &mut Vec<Expression>,
     ) -> Result<EType, SemanticError> {
-        fn map_param<G: crate::GameEngineStaticFn>(
+        fn map_param<E: crate::vm::external::Engine>(
             param: &mut Expression,
             scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
             scope_id: Option<u128>,
         ) -> Result<MapType, SemanticError> {
-            let _ = param.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+            let _ = param.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
             let EType::Static(StaticType::Map(map_type)) =
                 param.type_of(scope_manager, scope_id)?
             else {
@@ -160,7 +161,7 @@ impl ResolveCore for MapFn {
                 }
 
                 for param in parameters.iter_mut() {
-                    let _ = param.resolve::<G>(
+                    let _ = param.resolve::<E>(
                         scope_manager,
                         scope_id,
                         &Some(crate::p_num!(U64)),
@@ -192,9 +193,9 @@ impl ResolveCore for MapFn {
                 let key = &mut first_part[0];
                 let item = &mut second_part[1];
 
-                let map_type = map_param::<G>(map, scope_manager, scope_id)?;
+                let map_type = map_param::<E>(map, scope_manager, scope_id)?;
 
-                let _ = item.resolve::<G>(
+                let _ = item.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(map_type.values_type.as_ref().clone()),
@@ -207,7 +208,7 @@ impl ResolveCore for MapFn {
                     scope_id,
                 )?;
 
-                let _ = key.resolve::<G>(
+                let _ = key.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(map_type.values_type.as_ref().clone()),
@@ -252,9 +253,9 @@ impl ResolveCore for MapFn {
                 let map = &mut first_part[0];
                 let key = &mut second_part[1];
 
-                let map_type = map_param::<G>(map, scope_manager, scope_id)?;
+                let map_type = map_param::<E>(map, scope_manager, scope_id)?;
 
-                let _ = key.resolve::<G>(
+                let _ = key.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(map_type.values_type.as_ref().clone()),
@@ -283,7 +284,7 @@ impl ResolveCore for MapFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let map = &mut parameters[0];
-                let map_type = map_param::<G>(map, scope_manager, scope_id)?;
+                let map_type = map_param::<E>(map, scope_manager, scope_id)?;
 
                 Ok(EType::Static(StaticType::Map(map_type)))
             }
@@ -292,7 +293,7 @@ impl ResolveCore for MapFn {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum MapCasm {
+pub enum MapAsm {
     Map {
         item_size: usize,
         key_size: usize,
@@ -322,38 +323,40 @@ pub enum MapCasm {
     },
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for MapCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for MapAsm {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
-            MapCasm::Map { .. } => stdio.push_asm_lib(engine, "map"),
-            MapCasm::MapWithCapacity { .. } => stdio.push_asm_lib(engine, "map"),
-            MapCasm::Insert { .. } => stdio.push_asm_lib(engine, "insert"),
-            MapCasm::DelKey { .. } => stdio.push_asm_lib(engine, "del_key"),
-            MapCasm::Get { .. } => stdio.push_asm_lib(engine, "get"),
-            MapCasm::Clear { .. } => stdio.push_asm_lib(engine, "clear_map"),
+            MapAsm::Map { .. } => stdio.push_asm_lib(engine, "map"),
+            MapAsm::MapWithCapacity { .. } => stdio.push_asm_lib(engine, "map"),
+            MapAsm::Insert { .. } => stdio.push_asm_lib(engine, "insert"),
+            MapAsm::DelKey { .. } => stdio.push_asm_lib(engine, "del_key"),
+            MapAsm::Get { .. } => stdio.push_asm_lib(engine, "get"),
+            MapAsm::Clear { .. } => stdio.push_asm_lib(engine, "clear_map"),
         }
     }
+}
 
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
+impl crate::vm::AsmWeight for MapAsm {
+    fn weight(&self) -> crate::vm::Weight {
         match self {
-            MapCasm::Map { .. } => crate::vm::vm::CasmWeight::MEDIUM,
-            MapCasm::MapWithCapacity { .. } => crate::vm::vm::CasmWeight::MEDIUM,
-            MapCasm::Insert { .. } => crate::vm::vm::CasmWeight::HIGH,
-            MapCasm::DelKey { .. } => crate::vm::vm::CasmWeight::HIGH,
-            MapCasm::Get { .. } => crate::vm::vm::CasmWeight::MEDIUM,
-            MapCasm::Clear { .. } => crate::vm::vm::CasmWeight::MEDIUM,
+            MapAsm::Map { .. } => crate::vm::Weight::MEDIUM,
+            MapAsm::MapWithCapacity { .. } => crate::vm::Weight::MEDIUM,
+            MapAsm::Insert { .. } => crate::vm::Weight::HIGH,
+            MapAsm::DelKey { .. } => crate::vm::Weight::HIGH,
+            MapAsm::Get { .. } => crate::vm::Weight::MEDIUM,
+            MapAsm::Clear { .. } => crate::vm::Weight::MEDIUM,
         }
     }
 }
 
 impl GenerateCode for MapFn {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match *self {
             MapFn::Map {
                 with_capacity,
@@ -361,12 +364,12 @@ impl GenerateCode for MapFn {
                 key_size,
             } => {
                 if with_capacity {
-                    instructions.push(Asm::Core(CoreCasm::Map(MapCasm::MapWithCapacity {
+                    instructions.push(Asm::Core(CoreAsm::Map(MapAsm::MapWithCapacity {
                         item_size,
                         key_size,
                     })));
                 } else {
-                    instructions.push(Asm::Core(CoreCasm::Map(MapCasm::Map {
+                    instructions.push(Asm::Core(CoreAsm::Map(MapAsm::Map {
                         item_size,
                         key_size,
                     })));
@@ -377,7 +380,7 @@ impl GenerateCode for MapFn {
                 item_size,
                 ref_access,
             } => {
-                instructions.push(Asm::Core(CoreCasm::Map(MapCasm::Insert {
+                instructions.push(Asm::Core(CoreAsm::Map(MapAsm::Insert {
                     item_size,
                     key_size,
                     ref_access,
@@ -388,7 +391,7 @@ impl GenerateCode for MapFn {
                 item_size,
                 ref_access,
             } => {
-                instructions.push(Asm::Core(CoreCasm::Map(MapCasm::Get {
+                instructions.push(Asm::Core(CoreAsm::Map(MapAsm::Get {
                     item_size,
                     key_size,
                     ref_access,
@@ -399,7 +402,7 @@ impl GenerateCode for MapFn {
                 item_size,
                 ref_access,
             } => {
-                instructions.push(Asm::Core(CoreCasm::Map(MapCasm::DelKey {
+                instructions.push(Asm::Core(CoreAsm::Map(MapAsm::DelKey {
                     item_size,
                     key_size,
                     ref_access,
@@ -410,7 +413,7 @@ impl GenerateCode for MapFn {
                 item_size,
                 ref_access,
             } => {
-                instructions.push(Asm::Core(CoreCasm::Map(MapCasm::Clear {
+                instructions.push(Asm::Core(CoreAsm::Map(MapAsm::Clear {
                     item_size,
                     key_size,
                 })));
@@ -1198,18 +1201,19 @@ fn retrieve_key(
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for MapCasm {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for MapAsm {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match *self {
-            MapCasm::Map {
+            MapAsm::Map {
                 item_size,
                 key_size,
             } => {
@@ -1220,7 +1224,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for MapCasm {
                 let address: u64 = address.into(stack);
                 stack.push_with(&address.to_le_bytes())?;
             }
-            MapCasm::MapWithCapacity {
+            MapAsm::MapWithCapacity {
                 item_size,
                 key_size,
             } => {
@@ -1242,7 +1246,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for MapCasm {
                 let address: u64 = address.into(stack);
                 stack.push_with(&address.to_le_bytes())?;
             }
-            MapCasm::Insert {
+            MapAsm::Insert {
                 item_size,
                 key_size,
                 ref_access,
@@ -1318,7 +1322,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for MapCasm {
                     let _ = stack.push_with(&map_address.to_le_bytes())?;
                 }
             }
-            MapCasm::DelKey {
+            MapAsm::DelKey {
                 item_size,
                 key_size,
                 ref_access,
@@ -1358,7 +1362,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for MapCasm {
                     }
                 }
             }
-            MapCasm::Get {
+            MapAsm::Get {
                 item_size,
                 key_size,
                 ref_access,
@@ -1393,7 +1397,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for MapCasm {
                     }
                 }
             }
-            MapCasm::Clear {
+            MapAsm::Clear {
                 item_size,
                 key_size,
             } => {
@@ -1404,7 +1408,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for MapCasm {
                 let _ = heap.write(map_address.add(8), &(0u64).to_le_bytes().to_vec())?;
             }
         }
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }

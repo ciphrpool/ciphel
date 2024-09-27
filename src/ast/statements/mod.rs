@@ -10,7 +10,7 @@ use nom_supreme::error::{BaseErrorKind, ErrorTree, Expectation, GenericErrorTree
 use self::return_stat::Return;
 use crate::{
     semantic::{scope::scope::ScopeManager, Desugar, Metadata},
-    vm::vm::CodeGenerationContext,
+    vm::GenerateCode,
     CompilationError,
 };
 
@@ -22,16 +22,12 @@ use super::{
     },
     TryParse,
 };
-use crate::vm::vm::GenerateCode;
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{scope::static_types::StaticType, EType, Resolve, SemanticError, TypeOf},
-    vm::{
-        asm::{
-            branch::{Call, Goto, Label},
-            Asm, Program,
-        },
-        vm::CodeGenerationError,
+    vm::asm::{
+        branch::{Call, Goto, Label},
+        Asm,
     },
 };
 
@@ -54,7 +50,7 @@ impl<T: Resolve> Resolve for WithLine<T> {
     type Context = T::Context;
     type Extra = T::Extra;
 
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -65,30 +61,30 @@ impl<T: Resolve> Resolve for WithLine<T> {
         Self: Sized,
     {
         self.inner
-            .resolve::<G>(scope_manager, scope_id, context, extra)
+            .resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 
 impl<T: Desugar<()>> Desugar<()> for WithLine<T> {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<()>, SemanticError> {
-        self.inner.desugar::<G>(scope_manager, scope_id)
+        self.inner.desugar::<E>(scope_manager, scope_id)
     }
 }
 
 impl<T: GenerateCode> GenerateCode for WithLine<T> {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         self.inner
-            .gencode(scope_manager, scope_id, instructions, context)
+            .gencode::<E>(scope_manager, scope_id, instructions, context)
     }
 }
 
@@ -164,7 +160,7 @@ impl Resolve for Statement {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -174,50 +170,50 @@ impl Resolve for Statement {
     where
         Self: Sized,
     {
-        if let Some(output) = self.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.desugar::<E>(scope_manager, scope_id)? {
             *self = output;
         }
 
         match self {
             Statement::Scope(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
-            Statement::Flow(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Statement::Flow(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Statement::Assignation(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, extra)
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
             }
             Statement::Declaration(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, extra)
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
             }
             Statement::Definition(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, extra)
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
             }
-            Statement::Loops(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            Statement::Return(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Statement::Loops(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Statement::Return(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
         }
     }
 }
 
 impl Desugar<Statement> for Statement {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Statement>, SemanticError> {
         let output = match self {
-            Statement::Scope(block) => block.desugar::<G>(scope_manager, scope_id)?,
-            Statement::Flow(flow) => flow.desugar::<G>(scope_manager, scope_id)?,
+            Statement::Scope(block) => block.desugar::<E>(scope_manager, scope_id)?,
+            Statement::Flow(flow) => flow.desugar::<E>(scope_manager, scope_id)?,
             Statement::Assignation(assignation) => {
-                assignation.desugar::<G>(scope_manager, scope_id)?
+                assignation.desugar::<E>(scope_manager, scope_id)?
             }
             Statement::Declaration(declaration) => {
-                declaration.desugar::<G>(scope_manager, scope_id)?
+                declaration.desugar::<E>(scope_manager, scope_id)?
             }
             Statement::Definition(definition) => {
-                definition.desugar::<G>(scope_manager, scope_id)?
+                definition.desugar::<E>(scope_manager, scope_id)?
             }
-            Statement::Loops(loops) => loops.desugar::<G>(scope_manager, scope_id)?,
-            Statement::Return(returns) => returns.desugar::<G>(scope_manager, scope_id)?,
+            Statement::Loops(loops) => loops.desugar::<E>(scope_manager, scope_id)?,
+            Statement::Return(returns) => returns.desugar::<E>(scope_manager, scope_id)?,
         };
 
         if let Some(output) = output {
@@ -250,33 +246,33 @@ impl TypeOf for Statement {
 }
 
 impl GenerateCode for Statement {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             Statement::Scope(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)?;
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)?;
                 Ok(())
             }
-            Statement::Flow(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Statement::Flow(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
             Statement::Assignation(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Statement::Declaration(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Statement::Definition(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Statement::Loops(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Statement::Return(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
         }
     }

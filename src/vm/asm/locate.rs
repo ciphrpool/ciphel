@@ -5,41 +5,42 @@ use crate::vm::{
         MemoryAddress,
     },
     asm::operation::OpPrimitive,
+    program::Program,
+    runtime::RuntimeError,
+    scheduler_v2::Executable,
     stdio::StdIO,
-    vm::{CasmMetadata, Executable, RuntimeError},
 };
 use num_traits::ToBytes;
 
-use super::{
-    operation::{GetNumFrom, PopNum},
-    Program,
-};
+use super::operation::{GetNumFrom, PopNum};
 
 #[derive(Debug, Clone)]
 pub struct Locate {
     pub address: MemoryAddress,
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Locate {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Locate {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         stdio.push_asm(engine, &format!("addr {}", self.address.name()));
     }
 }
+impl crate::vm::AsmWeight for Locate {}
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Locate {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Locate {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let address: u64 = self.address.into(stack);
 
         let _ = stack.push_with(&address.to_le_bytes())?;
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }
@@ -49,21 +50,22 @@ pub struct LocateOffsetFromStackPointer {
     pub offset: usize,
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LocateOffsetFromStackPointer {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for LocateOffsetFromStackPointer {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         stdio.push_asm(engine, &format!("addr SP[-{}]", self.offset));
     }
 }
-
-impl<G: crate::GameEngineStaticFn> Executable<G> for LocateOffsetFromStackPointer {
-    fn execute(
+impl crate::vm::AsmWeight for LocateOffsetFromStackPointer {}
+impl<E: crate::vm::external::Engine> Executable<E> for LocateOffsetFromStackPointer {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let address =
             (stack.top().checked_sub(self.offset)).ok_or(RuntimeError::MemoryViolation)?;
@@ -73,7 +75,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LocateOffsetFromStackPointe
         let address: u64 = address.into(stack);
 
         let _ = stack.push_with(&address.to_le_bytes())?;
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }
@@ -83,28 +85,30 @@ pub struct LocateOffset {
     pub offset: usize,
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LocateOffset {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for LocateOffset {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         stdio.push_asm(engine, &format!("offset {}", self.offset));
     }
 }
+impl crate::vm::AsmWeight for LocateOffset {}
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for LocateOffset {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for LocateOffset {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
         let new_address = address.add(self.offset);
         let new_address: u64 = new_address.into(stack);
 
         let _ = stack.push_with(&new_address.to_le_bytes())?;
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }
@@ -116,8 +120,8 @@ pub struct LocateIndex {
     pub offset: Option<usize>,
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LocateIndex {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for LocateIndex {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self.base_address {
             Some(addr) => stdio.push_asm(
                 engine,
@@ -127,16 +131,18 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LocateIndex {
         }
     }
 }
+impl crate::vm::AsmWeight for LocateIndex {}
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for LocateIndex {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for LocateIndex {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let (mut address, index) = match self.base_address {
             Some(address) => {
@@ -160,7 +166,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LocateIndex {
         let new_address: u64 = new_address.into(stack);
 
         let _ = stack.push_with(&new_address.to_le_bytes())?;
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }

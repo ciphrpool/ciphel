@@ -9,11 +9,7 @@ use ulid::Ulid;
 
 use crate::{
     semantic::{EType, SemanticError, SizeOf},
-    vm::{
-        allocator::MemoryAddress,
-        asm::mem::Mem,
-        vm::{CodeGenerationContext, CodeGenerationError},
-    },
+    vm::{allocator::MemoryAddress, asm::mem::Mem, CodeGenerationError},
     CompilationError,
 };
 
@@ -493,7 +489,7 @@ impl ScopeManager {
         id: u64,
         address: MemoryAddress,
         offset: usize,
-    ) -> Result<(), CodeGenerationError> {
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(VariableInfo {
             marked_as_closed_var,
             ..

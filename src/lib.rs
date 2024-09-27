@@ -1,14 +1,5 @@
-use ast::statements::{self, Statement, WithLine};
-use semantic::SemanticError;
-use vm::{
-    allocator::heap::Heap,
-    asm::TransactionState,
-    scheduler::Scheduler,
-    stdio::StdIO,
-    vm::{CodeGenerationError, GameEngineStaticFn, Runtime, RuntimeError},
-};
-
-use crate::{ast::statements::parse_statements, semantic::Resolve, vm::vm::GenerateCode};
+use ast::statements::{self, parse_statements, Statement, WithLine};
+use semantic::{Resolve, SemanticError};
 
 pub mod ast;
 pub mod semantic;
@@ -17,6 +8,9 @@ pub mod vm;
 pub type CiphelResult<T> = Option<T>;
 
 use thiserror::Error;
+use vm::{
+    allocator::heap::Heap, runtime::Runtime, stdio::StdIO, CodeGenerationError, GenerateCode,
+};
 
 #[derive(Debug, Clone, Error)]
 pub enum CompilationError {
@@ -35,220 +29,220 @@ pub enum CompilationError {
     TransactionError(&'static str),
 }
 
-#[derive(Debug, Clone)]
-pub struct Ciphel {
-    runtime: Runtime,
-    heap: Heap,
-    stdio: StdIO,
-    scheduler: Scheduler,
-}
+// #[derive(Debug, Clone)]
+// pub struct Ciphel {
+//     runtime: Runtime,
+//     heap: Heap,
+//     stdio: StdIO,
+//     scheduler: Scheduler,
+// }
 
-impl Ciphel {
-    pub fn new() -> Self {
-        let (runtime, heap, stdio) = Runtime::new();
-        Self {
-            runtime,
-            heap,
-            stdio,
-            scheduler: Scheduler::new(),
-        }
-    }
+// impl Ciphel {
+//     pub fn new() -> Self {
+//         let (runtime, heap, stdio) = Runtime::new();
+//         Self {
+//             runtime,
+//             heap,
+//             stdio,
+//             scheduler: Scheduler::new(),
+//         }
+//     }
 
-    pub fn start_arena<G: crate::GameEngineStaticFn>(
-        &mut self,
-        engine: &mut G,
-    ) -> Result<usize, RuntimeError> {
-        let main_tid = self.runtime.spawn(vm::vm::Player::P1, engine)?;
-        Ok(main_tid)
-    }
+//     pub fn start_arena<E: crate::vm::external::Engine>(
+//         &mut self,
+//         engine: &mut E,
+//     ) -> Result<usize, RuntimeError> {
+//         let main_tid = self.runtime.spawn(vm::vm::Player::P1, engine)?;
+//         Ok(main_tid)
+//     }
 
-    pub fn available_tids(&self, player: crate::vm::vm::Player) -> Vec<usize> {
-        match player {
-            vm::vm::Player::P1 => self
-                .runtime
-                .p1_manager
-                .alive()
-                .iter()
-                .enumerate()
-                .filter(|(_, alive)| !**alive)
-                .map(|(i, _)| i)
-                .collect(),
-            vm::vm::Player::P2 => self
-                .runtime
-                .p2_manager
-                .alive()
-                .iter()
-                .enumerate()
-                .filter(|(_, alive)| !**alive)
-                .map(|(i, _)| i)
-                .collect(),
-        }
-    }
+//     pub fn available_tids(&self, player: crate::vm::vm::Player) -> Vec<usize> {
+//         match player {
+//             vm::vm::Player::P1 => self
+//                 .runtime
+//                 .p1_manager
+//                 .alive()
+//                 .iter()
+//                 .enumerate()
+//                 .filter(|(_, alive)| !**alive)
+//                 .map(|(i, _)| i)
+//                 .collect(),
+//             vm::vm::Player::P2 => self
+//                 .runtime
+//                 .p2_manager
+//                 .alive()
+//                 .iter()
+//                 .enumerate()
+//                 .filter(|(_, alive)| !**alive)
+//                 .map(|(i, _)| i)
+//                 .collect(),
+//         }
+//     }
 
-    pub fn compile_with_transaction<G: crate::GameEngineStaticFn>(
-        &mut self,
-        player: crate::vm::vm::Player,
-        tid: usize,
-        src_code: &str,
-        line_offset: usize,
-    ) -> Result<(), CompilationError> {
-        let (scope_manager, stack, program) = self
-            .runtime
-            .get_mut(player, tid)
-            .map_err(|_| CompilationError::InvalidTID(tid))?;
-        {
-            let _ = scope_manager.open_transaction()?;
-        }
-        program.in_transaction = TransactionState::OPEN;
+//     pub fn compile_with_transaction<E: crate::vm::external::Engine>(
+//         &mut self,
+//         player: crate::vm::vm::Player,
+//         tid: usize,
+//         src_code: &str,
+//         line_offset: usize,
+//     ) -> Result<(), CompilationError> {
+//         let (scope_manager, stack, program) = self
+//             .runtime
+//             .get_mut(player, tid)
+//             .map_err(|_| CompilationError::InvalidTID(tid))?;
+//         {
+//             let _ = scope_manager.open_transaction()?;
+//         }
+//         program.in_transaction = TransactionState::OPEN;
 
-        let mut statements = parse_statements(src_code.into(), line_offset)?;
-        for statement in &mut statements {
-            let _ = statement
-                .resolve::<G>(scope_manager, None, &None, &mut ())
-                .map_err(|e| CompilationError::SemanticError(statement.line, e))?;
-        }
-        program.statements_buffer.extend(statements);
-        Ok(())
-    }
+//         let mut statements = parse_statements(src_code.into(), line_offset)?;
+//         for statement in &mut statements {
+//             let _ = statement
+//                 .resolve::<E>(scope_manager, None, &None, &mut ())
+//                 .map_err(|e| CompilationError::SemanticError(statement.line, e))?;
+//         }
+//         program.statements_buffer.extend(statements);
+//         Ok(())
+//     }
 
-    pub fn commit_transaction(
-        &mut self,
-        player: crate::vm::vm::Player,
-        tid: usize,
-    ) -> Result<(), CompilationError> {
-        let (scope_manager, stack, program) = self
-            .runtime
-            .get_mut(player, tid)
-            .map_err(|_| CompilationError::InvalidTID(tid))?;
+//     pub fn commit_transaction(
+//         &mut self,
+//         player: crate::vm::vm::Player,
+//         tid: usize,
+//     ) -> Result<(), CompilationError> {
+//         let (scope_manager, stack, program) = self
+//             .runtime
+//             .get_mut(player, tid)
+//             .map_err(|_| CompilationError::InvalidTID(tid))?;
 
-        if program.in_transaction == TransactionState::CLOSE {
-            return Err(CompilationError::TransactionError(
-                "Cannot commit in a closed transaction",
-            ));
-        }
-        {
-            let _ = scope_manager.commit_transaction()?;
-        }
+//         if program.in_transaction == TransactionState::CLOSE {
+//             return Err(CompilationError::TransactionError(
+//                 "Cannot commit in a closed transaction",
+//             ));
+//         }
+//         {
+//             let _ = scope_manager.commit_transaction()?;
+//         }
 
-        program.in_transaction = TransactionState::COMMITED;
-        Ok(())
-    }
+//         program.in_transaction = TransactionState::COMMITED;
+//         Ok(())
+//     }
 
-    pub fn reject_transaction(
-        &mut self,
-        player: crate::vm::vm::Player,
-        tid: usize,
-    ) -> Result<(), CompilationError> {
-        let (scope_manager, stack, program) = self
-            .runtime
-            .get_mut(player, tid)
-            .map_err(|_| CompilationError::InvalidTID(tid))?;
+//     pub fn reject_transaction(
+//         &mut self,
+//         player: crate::vm::vm::Player,
+//         tid: usize,
+//     ) -> Result<(), CompilationError> {
+//         let (scope_manager, stack, program) = self
+//             .runtime
+//             .get_mut(player, tid)
+//             .map_err(|_| CompilationError::InvalidTID(tid))?;
 
-        if program.in_transaction == TransactionState::CLOSE {
-            return Err(CompilationError::TransactionError(
-                "Cannot reject in closed transaction",
-            ));
-        }
-        {
-            let _ = scope_manager.reject_transaction()?;
-            // let _ = scope_manager.close_transaction()?;
-        }
-        program.statements_buffer.clear();
-        program.in_transaction = TransactionState::CLOSE;
-        Ok(())
-    }
+//         if program.in_transaction == TransactionState::CLOSE {
+//             return Err(CompilationError::TransactionError(
+//                 "Cannot reject in closed transaction",
+//             ));
+//         }
+//         {
+//             let _ = scope_manager.reject_transaction()?;
+//             // let _ = scope_manager.close_transaction()?;
+//         }
+//         program.statements_buffer.clear();
+//         program.in_transaction = TransactionState::CLOSE;
+//         Ok(())
+//     }
 
-    pub fn push_compilation(
-        &mut self,
-        player: crate::vm::vm::Player,
-        tid: usize,
-    ) -> Result<(), CompilationError> {
-        let (scope_manager, stack, program) = self
-            .runtime
-            .get_mut(player, tid)
-            .map_err(|_| CompilationError::InvalidTID(tid))?;
+//     pub fn push_compilation(
+//         &mut self,
+//         player: crate::vm::vm::Player,
+//         tid: usize,
+//     ) -> Result<(), CompilationError> {
+//         let (scope_manager, stack, program) = self
+//             .runtime
+//             .get_mut(player, tid)
+//             .map_err(|_| CompilationError::InvalidTID(tid))?;
 
-        if program.in_transaction != TransactionState::COMMITED {
-            return Err(CompilationError::TransactionError(
-                "Cannot push without a commit",
-            ));
-        }
+//         if program.in_transaction != TransactionState::COMMITED {
+//             return Err(CompilationError::TransactionError(
+//                 "Cannot push without a commit",
+//             ));
+//         }
 
-        let statements: Vec<WithLine<Statement>> = program.statements_buffer.drain(..).collect();
+//         let statements: Vec<WithLine<Statement>> = program.statements_buffer.drain(..).collect();
 
-        for statement in statements {
-            let _ = statement
-                .gencode(
-                    scope_manager,
-                    None,
-                    program,
-                    &crate::vm::vm::CodeGenerationContext::default(),
-                )
-                .map_err(|e| CompilationError::CodeGen(statement.line, e))?;
-        }
+//         for statement in statements {
+//             let _ = statement
+//                 .gencode::<E>(
+//                     scope_manager,
+//                     None,
+//                     program,
+//                     &crate::vm::CodeGenerationContext::default(),
+//                 )
+//                 .map_err(|e| CompilationError::CodeGen(statement.line, e))?;
+//         }
 
-        Ok(())
-    }
+//         Ok(())
+//     }
 
-    pub fn compile<G: crate::GameEngineStaticFn>(
-        &mut self,
-        player: crate::vm::vm::Player,
-        tid: usize,
-        src_code: &str,
-    ) -> Result<(), CompilationError> {
-        let (scope_manager, stack, program) = self
-            .runtime
-            .get_mut(player, tid)
-            .map_err(|_| CompilationError::InvalidTID(tid))?;
+//     pub fn compile<E: crate::vm::external::Engine>(
+//         &mut self,
+//         player: crate::vm::vm::Player,
+//         tid: usize,
+//         src_code: &str,
+//     ) -> Result<(), CompilationError> {
+//         let (scope_manager, stack, program) = self
+//             .runtime
+//             .get_mut(player, tid)
+//             .map_err(|_| CompilationError::InvalidTID(tid))?;
 
-        let mut statements = parse_statements(src_code.into(), 0)?;
+//         let mut statements = parse_statements(src_code.into(), 0)?;
 
-        for statement in &mut statements {
-            let _ = statement
-                .resolve::<G>(scope_manager, None, &None, &mut ())
-                .map_err(|e| CompilationError::SemanticError(statement.line, e))?;
-        }
+//         for statement in &mut statements {
+//             let _ = statement
+//                 .resolve::<E>(scope_manager, None, &None, &mut ())
+//                 .map_err(|e| CompilationError::SemanticError(statement.line, e))?;
+//         }
 
-        for statement in &statements {
-            let _ = statement
-                .gencode(
-                    scope_manager,
-                    None,
-                    program,
-                    &crate::vm::vm::CodeGenerationContext::default(),
-                )
-                .map_err(|e| CompilationError::CodeGen(statement.line, e))?;
-        }
+//         for statement in &statements {
+//             let _ = statement
+//                 .gencode::<E>(
+//                     scope_manager,
+//                     None,
+//                     program,
+//                     &crate::vm::CodeGenerationContext::default(),
+//                 )
+//                 .map_err(|e| CompilationError::CodeGen(statement.line, e))?;
+//         }
 
-        Ok(())
-    }
+//         Ok(())
+//     }
 
-    pub fn run<G: crate::GameEngineStaticFn>(
-        &mut self,
-        engine: &mut G,
-    ) -> Result<(), RuntimeError> {
-        self.scheduler.prepare(&mut self.runtime);
+//     pub fn run<E: crate::vm::external::Engine>(
+//         &mut self,
+//         engine: &mut E,
+//     ) -> Result<(), RuntimeError> {
+//         self.scheduler.prepare(&mut self.runtime);
 
-        self.scheduler.run_major_frame(
-            &mut self.runtime,
-            &mut self.heap,
-            &mut self.stdio,
-            engine,
-        )?;
-        Ok(())
-    }
-}
+//         self.scheduler.run_major_frame(
+//             &mut self.runtime,
+//             &mut self.heap,
+//             &mut self.stdio,
+//             engine,
+//         )?;
+//         Ok(())
+//     }
+// }
 
 pub fn test_extract_variable_with(
     variable_name: &str,
     callback: impl Fn(
         vm::allocator::MemoryAddress,
-        &mut crate::vm::allocator::stack::Stack,
-        &mut crate::vm::allocator::heap::Heap,
+        &crate::vm::allocator::stack::Stack,
+        &crate::vm::allocator::heap::Heap,
     ),
-    scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-    stack: &mut crate::vm::allocator::stack::Stack,
-    heap: &mut crate::vm::allocator::heap::Heap,
+    scope_manager: &crate::semantic::scope::scope::ScopeManager,
+    stack: &crate::vm::allocator::stack::Stack,
+    heap: &crate::vm::allocator::heap::Heap,
 ) {
     let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
         .find_var_by_name(variable_name, None)
@@ -266,9 +260,9 @@ pub fn test_extract_variable_with(
 
 pub fn test_extract_variable<N: num_traits::PrimInt>(
     variable_name: &str,
-    scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-    stack: &mut crate::vm::allocator::stack::Stack,
-    heap: &mut crate::vm::allocator::heap::Heap,
+    scope_manager: &crate::semantic::scope::scope::ScopeManager,
+    stack: &crate::vm::allocator::stack::Stack,
+    heap: &crate::vm::allocator::heap::Heap,
 ) -> Option<N> {
     let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
         .find_var_by_name(variable_name, None)
@@ -290,251 +284,262 @@ pub fn test_extract_variable<N: num_traits::PrimInt>(
     return Some(res);
 }
 
-pub fn test_statements<G: crate::GameEngineStaticFn>(
+pub fn test_statements<E: crate::vm::external::Engine>(
     input: &str,
-    engine: &mut G,
+    engine: &mut E,
     assert_fn: fn(
-        &mut crate::semantic::scope::scope::ScopeManager,
-        &mut vm::allocator::stack::Stack,
-        &mut vm::allocator::heap::Heap,
+        &crate::semantic::scope::scope::ScopeManager,
+        &vm::allocator::stack::Stack,
+        &vm::allocator::heap::Heap,
     ) -> bool,
 ) {
     let mut statements = parse_statements(input.into(), 0).expect("Parsing should have succeeded");
-    let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-    let mut instructions = vm::asm::Program::default();
-    let (mut runtime, mut heap, mut stdio) = Runtime::new();
 
-    for statement in statements.iter_mut() {
-        statement
-            .resolve::<G>(&mut scope_manager, None, &None, &mut ())
-            .expect(&format!("Resulotion should have succeeded {:?}", statement));
-    }
+    let mut heap = Heap::new();
+    let mut stdio = StdIO::default();
+    let mut runtime: Runtime<E, vm::scheduler_v2::ToCompletion> = Runtime::default();
 
-    for statement in statements {
-        statement
-            .gencode(
-                &mut scope_manager,
-                None,
-                &mut instructions,
-                &crate::vm::vm::CodeGenerationContext::default(),
-            )
-            .expect(&format!(
-                "Code generation should have succeeded {:?}",
-                statement
-            ));
-    }
     let tid = runtime
-        .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
-        .expect("Thread spawn_with_scopeing should have succeeded");
-    let (scope_manager, stack, program) = runtime
-        .get_mut(crate::vm::vm::Player::P1, tid)
-        .expect("Thread should exist");
-    program.merge(instructions);
+        .spawn(engine)
+        .expect("Spawning should have succeeded");
+    {
+        let vm::runtime::ThreadContext {
+            scope_manager,
+            program,
+        } = runtime
+            .context_of(&tid)
+            .expect("Thread should have been found");
 
-    program
-        .execute::<G>(stack, &mut heap, &mut stdio, engine, tid)
+        for statement in statements.iter_mut() {
+            statement
+                .resolve::<E>(scope_manager, None, &None, &mut ())
+                .expect(&format!("Resulotion should have succeeded {:?}", statement));
+        }
+
+        for statement in statements {
+            statement
+                .gencode::<E>(
+                    scope_manager,
+                    None,
+                    program,
+                    &crate::vm::CodeGenerationContext::default(),
+                )
+                .expect(&format!(
+                    "Code generation should have succeeded {:?}",
+                    statement
+                ));
+        }
+    }
+
+    let _ = runtime
+        .run(&mut heap, &mut stdio, engine)
         .expect("Execution should have succeeded");
+
+    let (vm::runtime::Thread { stack, .. }, vm::runtime::ThreadContext { scope_manager, .. }) =
+        runtime
+            .thread_with_context_of(&tid)
+            .expect("Thread should have been found");
 
     assert!(assert_fn(scope_manager, stack, &mut heap));
 }
 
-#[cfg(test)]
-mod tests {
-    use vm::vm::StdoutTestGameEngine;
+// #[cfg(test)]
+// mod tests {
+//     use vm::vm::StdoutTestGameEngine;
 
-    use self::vm::vm::{DbgGameEngine, NoopGameEngine};
+//     use self::vm::vm::{DbgGameEngine, NoopGameEngine};
 
-    use super::*;
+//     use super::*;
 
-    #[test]
-    fn valid_hello_world() {
-        let mut engine = DbgGameEngine {};
-        let mut ciphel = Ciphel::new();
-        let tid = ciphel
-            .start_arena(&mut engine)
-            .expect("starting should not fail");
+//     #[test]
+//     fn valid_hello_world() {
+//         let mut engine = DbgGameEngine {};
+//         let mut ciphel = Ciphel::new();
+//         let tid = ciphel
+//             .start_arena(&mut engine)
+//             .expect("starting should not fail");
 
-        let src = r##"
-        
-        fn main() -> Unit {
-            println("Hello World");
-        }
+//         let src = r##"
 
-        main();
-        
-        "##;
+//         fn main() -> Unit {
+//             println("Hello World");
+//         }
 
-        ciphel
-            .compile::<DbgGameEngine>(crate::vm::vm::Player::P1, tid, src)
-            .expect("Compilation should have succeeded");
+//         main();
 
-        ciphel.run(&mut engine).expect("no error should arise");
-    }
+//         "##;
 
-    #[test]
-    fn valid_multiple_program() {
-        let mut engine = NoopGameEngine {};
-        let mut ciphel = Ciphel::new();
-        let tid = ciphel
-            .start_arena(&mut engine)
-            .expect("starting should not fail");
+//         ciphel
+//             .compile::<DbgGameEngine>(crate::vm::vm::Player::P1, tid, src)
+//             .expect("Compilation should have succeeded");
 
-        let src = r##"
-        
-        fn main() -> Unit {
-            print("Hello World");
-        }
+//         ciphel.run(&mut engine).expect("no error should arise");
+//     }
 
-        fn add(x:u64,y:u64) -> u64 {
-            return x+y;
-        }
+//     #[test]
+//     fn valid_multiple_program() {
+//         let mut engine = NoopGameEngine {};
+//         let mut ciphel = Ciphel::new();
+//         let tid = ciphel
+//             .start_arena(&mut engine)
+//             .expect("starting should not fail");
 
-        main();
-        
-        "##;
+//         let src = r##"
 
-        ciphel
-            .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, tid, src)
-            .expect("Compilation should have succeeded");
+//         fn main() -> Unit {
+//             print("Hello World");
+//         }
 
-        let src = r##"
-        
-        let res = add(10,10);
-        
-        print(f"result = {res}");
-        
-        "##;
+//         fn add(x:u64,y:u64) -> u64 {
+//             return x+y;
+//         }
 
-        ciphel
-            .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, tid, src)
-            .expect("Compilation should have succeeded");
+//         main();
 
-        ciphel.run(&mut engine).expect("no error should arise");
-        ciphel.run(&mut engine).expect("no error should arise");
-    }
+//         "##;
 
-    #[test]
-    fn valid_multiple_thread() {
-        let mut engine = NoopGameEngine {};
-        let mut ciphel = Ciphel::new();
-        let main_tid = ciphel
-            .start_arena(&mut engine)
-            .expect("starting should not fail");
+//         ciphel
+//             .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, tid, src)
+//             .expect("Compilation should have succeeded");
 
-        let src = r##"
-        
-        fn main() -> Unit {
-            print("Hello World\n");
-        }
-        main();
-        
-        "##;
+//         let src = r##"
 
-        ciphel
-            .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, main_tid, src)
-            .expect("Compilation should have succeeded");
+//         let res = add(10,10);
 
-        let tid = ciphel
-            .runtime
-            .spawn(crate::vm::vm::Player::P1, &mut engine)
-            .expect("spawning should have succeeded");
+//         print(f"result = {res}");
 
-        let src = r##"
-        fn add(x:u64,y:u64) -> u64 {
-            return x+y;
-        }
-        let res = add(10,10);
+//         "##;
 
-        print(f"result = {res}");
-        
-        "##;
+//         ciphel
+//             .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, tid, src)
+//             .expect("Compilation should have succeeded");
 
-        ciphel
-            .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, tid, src)
-            .expect("Compilation should have succeeded");
+//         ciphel.run(&mut engine).expect("no error should arise");
+//         ciphel.run(&mut engine).expect("no error should arise");
+//     }
 
-        ciphel.run(&mut engine).expect("no error should arise");
-    }
+//     #[test]
+//     fn valid_multiple_thread() {
+//         let mut engine = NoopGameEngine {};
+//         let mut ciphel = Ciphel::new();
+//         let main_tid = ciphel
+//             .start_arena(&mut engine)
+//             .expect("starting should not fail");
 
-    #[test]
-    fn valid_commit_transaction() {
-        let mut engine = StdoutTestGameEngine { out: String::new() };
-        let mut ciphel = Ciphel::new();
-        let tid = ciphel
-            .start_arena(&mut engine)
-            .expect("starting should not fail");
+//         let src = r##"
 
-        let src = r##"
-        println("Hello world");
-        "##;
+//         fn main() -> Unit {
+//             print("Hello World\n");
+//         }
+//         main();
 
-        ciphel
-            .compile_with_transaction::<StdoutTestGameEngine>(
-                crate::vm::vm::Player::P1,
-                tid,
-                src,
-                0,
-            )
-            .expect("Compilation should have succeeded");
+//         "##;
 
-        ciphel
-            .commit_transaction(crate::vm::vm::Player::P1, tid)
-            .expect("Compilation should have succeeded");
-        ciphel
-            .push_compilation(crate::vm::vm::Player::P1, tid)
-            .expect("Compilation should have succeeded");
-        ciphel.run(&mut engine).expect("no error should arise");
+//         ciphel
+//             .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, main_tid, src)
+//             .expect("Compilation should have succeeded");
 
-        let output = engine.out;
-        assert_eq!(output, "Hello world\n");
-    }
-    #[test]
-    fn valid_reject_transaction() {
-        let mut engine = StdoutTestGameEngine { out: String::new() };
-        let mut ciphel = Ciphel::new();
-        let tid = ciphel
-            .start_arena(&mut engine)
-            .expect("starting should not fail");
+//         let tid = ciphel
+//             .runtime
+//             .spawn(crate::vm::vm::Player::P1, &mut engine)
+//             .expect("spawning should have succeeded");
 
-        let src = r##"
-        println("Hello world");
-        "##;
+//         let src = r##"
+//         fn add(x:u64,y:u64) -> u64 {
+//             return x+y;
+//         }
+//         let res = add(10,10);
 
-        ciphel
-            .compile_with_transaction::<StdoutTestGameEngine>(
-                crate::vm::vm::Player::P1,
-                tid,
-                src,
-                0,
-            )
-            .expect("Compilation should have succeeded");
+//         print(f"result = {res}");
 
-        ciphel
-            .reject_transaction(crate::vm::vm::Player::P1, tid)
-            .expect("Compilation should have succeeded");
+//         "##;
 
-        let src = r##"
-        println("Hi");
-        "##;
+//         ciphel
+//             .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, tid, src)
+//             .expect("Compilation should have succeeded");
 
-        ciphel
-            .compile_with_transaction::<StdoutTestGameEngine>(
-                crate::vm::vm::Player::P1,
-                tid,
-                src,
-                0,
-            )
-            .expect("Compilation should have succeeded");
+//         ciphel.run(&mut engine).expect("no error should arise");
+//     }
 
-        ciphel
-            .commit_transaction(crate::vm::vm::Player::P1, tid)
-            .expect("Compilation should have succeeded");
-        ciphel
-            .push_compilation(crate::vm::vm::Player::P1, tid)
-            .expect("Compilation should have succeeded");
-        ciphel.run(&mut engine).expect("no error should arise");
+//     #[test]
+//     fn valid_commit_transaction() {
+//         let mut engine = StdoutTestGameEngine { out: String::new() };
+//         let mut ciphel = Ciphel::new();
+//         let tid = ciphel
+//             .start_arena(&mut engine)
+//             .expect("starting should not fail");
 
-        let output = engine.out;
-        assert_eq!(output, "Hi\n");
-    }
-}
+//         let src = r##"
+//         println("Hello world");
+//         "##;
+
+//         ciphel
+//             .compile_with_transaction::<StdoutTestGameEngine>(
+//                 crate::vm::vm::Player::P1,
+//                 tid,
+//                 src,
+//                 0,
+//             )
+//             .expect("Compilation should have succeeded");
+
+//         ciphel
+//             .commit_transaction(crate::vm::vm::Player::P1, tid)
+//             .expect("Compilation should have succeeded");
+//         ciphel
+//             .push_compilation(crate::vm::vm::Player::P1, tid)
+//             .expect("Compilation should have succeeded");
+//         ciphel.run(&mut engine).expect("no error should arise");
+
+//         let output = engine.out;
+//         assert_eq!(output, "Hello world\n");
+//     }
+//     #[test]
+//     fn valid_reject_transaction() {
+//         let mut engine = StdoutTestGameEngine { out: String::new() };
+//         let mut ciphel = Ciphel::new();
+//         let tid = ciphel
+//             .start_arena(&mut engine)
+//             .expect("starting should not fail");
+
+//         let src = r##"
+//         println("Hello world");
+//         "##;
+
+//         ciphel
+//             .compile_with_transaction::<StdoutTestGameEngine>(
+//                 crate::vm::vm::Player::P1,
+//                 tid,
+//                 src,
+//                 0,
+//             )
+//             .expect("Compilation should have succeeded");
+
+//         ciphel
+//             .reject_transaction(crate::vm::vm::Player::P1, tid)
+//             .expect("Compilation should have succeeded");
+
+//         let src = r##"
+//         println("Hi");
+//         "##;
+
+//         ciphel
+//             .compile_with_transaction::<StdoutTestGameEngine>(
+//                 crate::vm::vm::Player::P1,
+//                 tid,
+//                 src,
+//                 0,
+//             )
+//             .expect("Compilation should have succeeded");
+
+//         ciphel
+//             .commit_transaction(crate::vm::vm::Player::P1, tid)
+//             .expect("Compilation should have succeeded");
+//         ciphel
+//             .push_compilation(crate::vm::vm::Player::P1, tid)
+//             .expect("Compilation should have succeeded");
+//         ciphel.run(&mut engine).expect("no error should arise");
+
+//         let output = engine.out;
+//         assert_eq!(output, "Hi\n");
+//     }
+// }

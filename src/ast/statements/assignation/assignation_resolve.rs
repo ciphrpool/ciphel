@@ -7,7 +7,7 @@ impl Resolve for Assignation {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -19,12 +19,12 @@ impl Resolve for Assignation {
     {
         let _ = self
             .left
-            .resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+            .resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
         if self.left.is_assignable() {
             let left_type = self.left.type_of(&scope_manager, scope_id)?;
             let _ = self
                 .right
-                .resolve::<G>(scope_manager, scope_id, &Some(left_type), &mut ())?;
+                .resolve::<E>(scope_manager, scope_id, &Some(left_type), &mut ())?;
 
             Ok(())
         } else {
@@ -34,15 +34,15 @@ impl Resolve for Assignation {
 }
 
 impl Desugar<Statement> for Assignation {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Statement>, SemanticError> {
-        if let Some(output) = self.left.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.left.desugar::<E>(scope_manager, scope_id)? {
             self.left = output.into();
         }
-        if let Some(output) = self.right.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.right.desugar::<E>(scope_manager, scope_id)? {
             self.right = output.into();
         }
         Ok(None)
@@ -53,7 +53,7 @@ impl Resolve for AssignValue {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -65,7 +65,7 @@ impl Resolve for AssignValue {
     {
         match self {
             AssignValue::Block(value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut ())?;
+                let _ = value.resolve::<E>(scope_manager, scope_id, context, &mut ())?;
                 let scope_type = value.type_of(&scope_manager, scope_id)?;
 
                 if let Some(context) = context {
@@ -74,7 +74,7 @@ impl Resolve for AssignValue {
                 Ok(())
             }
             AssignValue::Expr(value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = value.resolve::<E>(scope_manager, scope_id, context, &mut None)?;
                 let scope_type = value.type_of(&scope_manager, scope_id)?;
 
                 if let Some(context) = context {
@@ -87,19 +87,19 @@ impl Resolve for AssignValue {
 }
 
 impl Desugar<AssignValue> for AssignValue {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<AssignValue>, SemanticError> {
         match self {
             AssignValue::Block(expr_block) => {
-                if let Some(output) = expr_block.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = expr_block.desugar::<E>(scope_manager, scope_id)? {
                     *expr_block = output.into();
                 }
             }
             AssignValue::Expr(expression) => {
-                if let Some(output) = expression.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = expression.desugar::<E>(scope_manager, scope_id)? {
                     *expression = output.into();
                 }
             }
@@ -121,7 +121,7 @@ mod tests {
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = assignation.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = assignation.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -143,7 +143,7 @@ mod tests {
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = assignation.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = assignation.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -157,7 +157,7 @@ mod tests {
         let mut assignation = Assignation::parse("x = 1;".into()).unwrap().1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = assignation.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = assignation.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,

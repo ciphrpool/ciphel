@@ -13,8 +13,11 @@ use crate::{
     vm::{
         allocator::{heap::Heap, stack::Stack, MemoryAddress},
         asm::operation::{GetNumFrom, PopNum},
+        program::Program,
+        runtime::RuntimeError,
+        scheduler_v2::Executable,
         stdio::StdIO,
-        vm::CasmMetadata,
+        CodeGenerationError, GenerateCode,
     },
 };
 
@@ -36,13 +39,12 @@ use crate::{
             data::Data,
             mem::Mem,
             operation::OpPrimitive,
-            Asm, Program,
+            Asm,
         },
-        vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
 };
 
-use super::{lexem, CoreCasm, PathFinder, ERROR_SLICE, OK_SLICE};
+use super::{lexem, CoreAsm, PathFinder, ERROR_SLICE, OK_SLICE};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AllocFn {
@@ -55,7 +57,7 @@ pub enum AllocFn {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum AllocCasm {
+pub enum AllocAsm {
     Len,
     Cap,
     Free,
@@ -63,24 +65,26 @@ pub enum AllocCasm {
     MemCopy,
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for AllocCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for AllocAsm {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
-            AllocCasm::Len => stdio.push_asm_lib(engine, "len"),
-            AllocCasm::Cap => stdio.push_asm_lib(engine, "cap"),
-            AllocCasm::Free => stdio.push_asm_lib(engine, "free"),
-            AllocCasm::Alloc => stdio.push_asm_lib(engine, "malloc"),
-            AllocCasm::MemCopy => stdio.push_asm_lib(engine, "memcpy"),
+            AllocAsm::Len => stdio.push_asm_lib(engine, "len"),
+            AllocAsm::Cap => stdio.push_asm_lib(engine, "cap"),
+            AllocAsm::Free => stdio.push_asm_lib(engine, "free"),
+            AllocAsm::Alloc => stdio.push_asm_lib(engine, "malloc"),
+            AllocAsm::MemCopy => stdio.push_asm_lib(engine, "memcpy"),
         }
     }
+}
 
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
+impl crate::vm::AsmWeight for AllocAsm {
+    fn weight(&self) -> crate::vm::Weight {
         match self {
-            AllocCasm::Len => crate::vm::vm::CasmWeight::LOW,
-            AllocCasm::Cap => crate::vm::vm::CasmWeight::LOW,
-            AllocCasm::Free => crate::vm::vm::CasmWeight::MEDIUM,
-            AllocCasm::Alloc => crate::vm::vm::CasmWeight::HIGH,
-            AllocCasm::MemCopy => crate::vm::vm::CasmWeight::HIGH,
+            AllocAsm::Len => crate::vm::Weight::LOW,
+            AllocAsm::Cap => crate::vm::Weight::LOW,
+            AllocAsm::Free => crate::vm::Weight::MEDIUM,
+            AllocAsm::Alloc => crate::vm::Weight::HIGH,
+            AllocAsm::MemCopy => crate::vm::Weight::HIGH,
         }
     }
 }
@@ -106,7 +110,7 @@ impl PathFinder for AllocFn {
 }
 
 impl ResolveCore for AllocFn {
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -121,7 +125,7 @@ impl ResolveCore for AllocFn {
 
                 let address = &mut parameters[0];
 
-                let _ = address.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = address.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let address_type = address.type_of(&scope_manager, scope_id)?;
                 match &address_type {
                     EType::Static(StaticType::Address(_)) => {}
@@ -140,7 +144,7 @@ impl ResolveCore for AllocFn {
                 let size = &mut parameters[0];
 
                 let _ =
-                    size.resolve::<G>(scope_manager, scope_id, &Some(p_num!(U64)), &mut None)?;
+                    size.resolve::<E>(scope_manager, scope_id, &Some(p_num!(U64)), &mut None)?;
 
                 let p_num!(U64) = size.type_of(&scope_manager, scope_id)? else {
                     return Err(SemanticError::IncorrectArguments);
@@ -161,7 +165,7 @@ impl ResolveCore for AllocFn {
                 }
                 let address = &mut parameters[0];
 
-                let _ = address.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = address.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let address_type = address.type_of(&scope_manager, scope_id)?;
                 match &address_type {
                     EType::Static(value) => match value {
@@ -180,7 +184,7 @@ impl ResolveCore for AllocFn {
                 }
                 let address = &mut parameters[0];
 
-                let _ = address.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = address.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let address_type = address.type_of(&scope_manager, scope_id)?;
 
                 match &address_type {
@@ -200,7 +204,7 @@ impl ResolveCore for AllocFn {
                 }
                 let param = &mut parameters[0];
 
-                let _ = param.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = param.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let param_type = param.type_of(&scope_manager, scope_id)?;
 
                 *size = param_type.size_of();
@@ -219,8 +223,8 @@ impl ResolveCore for AllocFn {
                 let src = &mut second_part[0];
                 let size = &mut third_part[0];
 
-                let _ = dest.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
-                let _ = src.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = dest.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = src.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let dest_type = dest.type_of(&scope_manager, scope_id)?;
                 let src_type = src.type_of(&scope_manager, scope_id)?;
 
@@ -249,7 +253,7 @@ impl ResolveCore for AllocFn {
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
                 let _ =
-                    size.resolve::<G>(scope_manager, scope_id, &Some(p_num!(U64)), &mut None)?;
+                    size.resolve::<E>(scope_manager, scope_id, &Some(p_num!(U64)), &mut None)?;
                 let p_num!(U64) = size.type_of(&scope_manager, scope_id)? else {
                     return Err(SemanticError::IncorrectArguments);
                 };
@@ -261,20 +265,18 @@ impl ResolveCore for AllocFn {
 }
 
 impl GenerateCode for AllocFn {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
-            AllocFn::Free => instructions.push(Asm::Core(super::CoreCasm::Alloc(AllocCasm::Free))),
-            AllocFn::Alloc => {
-                instructions.push(Asm::Core(super::CoreCasm::Alloc(AllocCasm::Alloc)))
-            }
-            AllocFn::Len => instructions.push(Asm::Core(super::CoreCasm::Alloc(AllocCasm::Len))),
-            AllocFn::Cap => instructions.push(Asm::Core(super::CoreCasm::Alloc(AllocCasm::Cap))),
+            AllocFn::Free => instructions.push(Asm::Core(super::CoreAsm::Alloc(AllocAsm::Free))),
+            AllocFn::Alloc => instructions.push(Asm::Core(super::CoreAsm::Alloc(AllocAsm::Alloc))),
+            AllocFn::Len => instructions.push(Asm::Core(super::CoreAsm::Alloc(AllocAsm::Len))),
+            AllocFn::Cap => instructions.push(Asm::Core(super::CoreAsm::Alloc(AllocAsm::Cap))),
             AllocFn::SizeOf { size } => {
                 instructions.push(Asm::Pop(*size));
                 instructions.push(Asm::Data(Data::Serialized {
@@ -282,39 +284,40 @@ impl GenerateCode for AllocFn {
                 }));
             }
             AllocFn::MemCopy => {
-                instructions.push(Asm::Core(super::CoreCasm::Alloc(AllocCasm::MemCopy)))
+                instructions.push(Asm::Core(super::CoreAsm::Alloc(AllocAsm::MemCopy)))
             }
         }
         Ok(())
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match self {
-            AllocCasm::Len => {
+            AllocAsm::Len => {
                 let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
                 let len = OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)?;
 
                 let _ = stack.push_with(&len.to_le_bytes())?;
             }
-            AllocCasm::Cap => {
+            AllocAsm::Cap => {
                 let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
                 let cap = OpPrimitive::get_num_from::<u64>(address, stack, heap)?;
 
                 let _ = stack.push_with(&cap.to_le_bytes())?;
             }
-            AllocCasm::Free => {
+            AllocAsm::Free => {
                 let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 if heap.free(address).is_ok() {
                     stack.push_with(&OK_SLICE)?;
@@ -322,7 +325,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
                     stack.push_with(&ERROR_SLICE)?;
                 }
             }
-            AllocCasm::Alloc => {
+            AllocAsm::Alloc => {
                 let size = OpPrimitive::pop_num::<u64>(stack)? as usize;
                 if let Ok(address) = heap.alloc(size) {
                     let address: u64 = address.into(stack);
@@ -333,7 +336,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
                     stack.push_with(&ERROR_SLICE)?;
                 }
             }
-            AllocCasm::MemCopy => {
+            AllocAsm::MemCopy => {
                 let size = OpPrimitive::pop_num::<u64>(stack)? as usize;
                 let source: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let destination: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
@@ -372,7 +375,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
             }
         }
 
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }
@@ -424,16 +427,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -448,7 +451,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -487,16 +490,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -511,7 +514,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -541,16 +544,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -565,7 +568,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -616,16 +619,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -640,7 +643,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -861,16 +864,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -885,7 +888,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -910,16 +913,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -934,7 +937,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -974,16 +977,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -998,7 +1001,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1049,16 +1052,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -1073,7 +1076,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1147,16 +1150,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -1171,7 +1174,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1198,16 +1201,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -1222,7 +1225,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1254,16 +1257,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -1278,7 +1281,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1330,16 +1333,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -1354,7 +1357,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1390,16 +1393,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -1414,7 +1417,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1465,16 +1468,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -1489,7 +1492,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1547,16 +1550,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -1571,7 +1574,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1609,16 +1612,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -1633,7 +1636,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1665,16 +1668,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -1689,7 +1692,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1746,16 +1749,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -1770,7 +1773,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1817,16 +1820,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
 //         statement
-//             .gencode(
+//             .gencode::<E>(
 //                 &mut scope_manager,
 //                 None,
 //                 &mut instructions,
-//                 &crate::vm::vm::CodeGenerationContext::default(),
+//                 &crate::vm::CodeGenerationContext::default(),
 //             )
 //             .expect("Code generation should have succeeded");
 
@@ -1841,7 +1844,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopGameEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)

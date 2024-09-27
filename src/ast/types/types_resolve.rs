@@ -10,7 +10,7 @@ impl Resolve for Type {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -21,24 +21,24 @@ impl Resolve for Type {
         Self: Sized,
     {
         match self {
-            Type::Primitive(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            Type::Slice(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            Type::StrSlice(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Type::Primitive(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Slice(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::StrSlice(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Type::UserType(ref value) => {
                 let _ = scope_manager.find_type_by_name(value, scope_id)?;
                 Ok(())
             }
-            Type::Vec(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            Type::Closure(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            Type::Function(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            Type::Lambda(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            Type::Tuple(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Type::Vec(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Closure(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Function(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Lambda(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Tuple(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Type::Unit => Ok(()),
             Type::Any => Ok(()),
-            Type::Address(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            Type::Map(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            Type::String(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            Type::Range(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Type::Address(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Map(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::String(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Range(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Type::Error => Ok(()),
         }
     }
@@ -48,7 +48,7 @@ impl Resolve for PrimitiveType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         _scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -66,7 +66,7 @@ impl Resolve for SliceType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -77,7 +77,7 @@ impl Resolve for SliceType {
         Self: Sized,
     {
         self.item_type
-            .resolve::<G>(scope_manager, scope_id, context, extra)
+            .resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 
@@ -86,7 +86,7 @@ impl Resolve for StrSliceType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         _scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -105,7 +105,7 @@ impl Resolve for StringType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         _scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -124,7 +124,7 @@ impl Resolve for VecType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -134,7 +134,7 @@ impl Resolve for VecType {
     where
         Self: Sized,
     {
-        self.0.resolve::<G>(scope_manager, scope_id, context, extra)
+        self.0.resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 
@@ -143,7 +143,7 @@ impl Resolve for FunctionType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -154,10 +154,10 @@ impl Resolve for FunctionType {
         Self: Sized,
     {
         for param in &mut self.params {
-            let _ = param.resolve::<G>(scope_manager, scope_id, context, extra)?;
+            let _ = param.resolve::<E>(scope_manager, scope_id, context, extra)?;
         }
         self.ret
-            .resolve::<G>(scope_manager, scope_id, context, extra)
+            .resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 impl Resolve for ClosureType {
@@ -165,7 +165,7 @@ impl Resolve for ClosureType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -176,10 +176,10 @@ impl Resolve for ClosureType {
         Self: Sized,
     {
         for param in &mut self.params {
-            let _ = param.resolve::<G>(scope_manager, scope_id, context, extra)?;
+            let _ = param.resolve::<E>(scope_manager, scope_id, context, extra)?;
         }
         self.ret
-            .resolve::<G>(scope_manager, scope_id, context, extra)
+            .resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 
@@ -188,7 +188,7 @@ impl Resolve for LambdaType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -199,10 +199,10 @@ impl Resolve for LambdaType {
         Self: Sized,
     {
         for param in &mut self.params {
-            let _ = param.resolve::<G>(scope_manager, scope_id, context, extra)?;
+            let _ = param.resolve::<E>(scope_manager, scope_id, context, extra)?;
         }
         self.ret
-            .resolve::<G>(scope_manager, scope_id, context, extra)
+            .resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 impl Resolve for Types {
@@ -210,7 +210,7 @@ impl Resolve for Types {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -221,7 +221,7 @@ impl Resolve for Types {
         Self: Sized,
     {
         for item in self {
-            let _ = item.resolve::<G>(scope_manager, scope_id, context, extra)?;
+            let _ = item.resolve::<E>(scope_manager, scope_id, context, extra)?;
         }
         Ok(())
     }
@@ -232,7 +232,7 @@ impl Resolve for TupleType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -242,7 +242,7 @@ impl Resolve for TupleType {
     where
         Self: Sized,
     {
-        self.0.resolve::<G>(scope_manager, scope_id, context, extra)
+        self.0.resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 
@@ -251,7 +251,7 @@ impl Resolve for AddrType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -261,7 +261,7 @@ impl Resolve for AddrType {
     where
         Self: Sized,
     {
-        self.0.resolve::<G>(scope_manager, scope_id, context, extra)
+        self.0.resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 impl Resolve for RangeType {
@@ -269,7 +269,7 @@ impl Resolve for RangeType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         _scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -288,7 +288,7 @@ impl Resolve for MapType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -300,8 +300,8 @@ impl Resolve for MapType {
     {
         let _ = self
             .keys_type
-            .resolve::<G>(scope_manager, scope_id, context, extra)?;
+            .resolve::<E>(scope_manager, scope_id, context, extra)?;
         self.values_type
-            .resolve::<G>(scope_manager, scope_id, context, extra)
+            .resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }

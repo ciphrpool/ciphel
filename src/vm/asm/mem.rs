@@ -2,10 +2,7 @@ use nom::combinator::into;
 use num_traits::{CheckedSub, ToBytes};
 use ulid::Ulid;
 
-use super::{
-    operation::{OpPrimitive, PopNum},
-    Program,
-};
+use super::operation::{OpPrimitive, PopNum};
 
 use crate::vm::{
     allocator::{
@@ -13,8 +10,10 @@ use crate::vm::{
         stack::{Stack, STACK_SIZE},
         MemoryAddress,
     },
+    program::Program,
+    runtime::RuntimeError,
+    scheduler_v2::Executable,
     stdio::StdIO,
-    vm::{CasmMetadata, Executable, RuntimeError},
 };
 
 #[derive(Debug, Clone)]
@@ -25,8 +24,8 @@ pub enum Mem {
     Take { size: usize },
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Mem {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Mem {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
             Mem::Dup(n) => stdio.push_asm(engine, &format!("dup {n}")),
             Mem::Label(label) => {
@@ -42,26 +41,28 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Mem {
             }
         }
     }
-
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
+}
+impl crate::vm::AsmWeight for Mem {
+    fn weight(&self) -> crate::vm::Weight {
         match self {
-            Mem::Dup(_) => crate::vm::vm::CasmWeight::ZERO,
-            Mem::Label(_) => crate::vm::vm::CasmWeight::LOW,
-            Mem::Take { size } => crate::vm::vm::CasmWeight::LOW,
-            Mem::Store { size, address } => crate::vm::vm::CasmWeight::ZERO,
+            Mem::Dup(_) => crate::vm::Weight::ZERO,
+            Mem::Label(_) => crate::vm::Weight::LOW,
+            Mem::Take { size } => crate::vm::Weight::LOW,
+            Mem::Store { size, address } => crate::vm::Weight::ZERO,
         }
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Mem {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match self {
             Mem::Take { size } => {
@@ -98,7 +99,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
                 let _ = stack.push_with(&data)?;
             }
             Mem::Label(label) => {
-                let Some(idx) = program.get(label) else {
+                let Some(idx) = program.get_cursor_from_label(label) else {
                     return Err(RuntimeError::CodeSegmentation);
                 };
                 let idx = idx as u64;
@@ -123,7 +124,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
             }
         };
 
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }

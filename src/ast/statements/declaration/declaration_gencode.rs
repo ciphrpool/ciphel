@@ -1,34 +1,34 @@
 use crate::ast::statements::assignation::AssignValue;
 use crate::ast::utils::lexem;
 use crate::semantic::scope::scope::{ScopeManager, Variable, VariableInfo};
+use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
     ast::statements::declaration::{DeclaredVar, PatternVar},
     semantic::SizeOf,
     vm::{
         allocator::MemoryAddress,
-        asm::{alloc::Alloc, locate::Locate, mem::Mem, Asm, Program},
-        vm::{CodeGenerationError, GenerateCode},
+        asm::{alloc::Alloc, locate::Locate, mem::Mem, Asm},
     },
 };
 
 use super::{Declaration, TypedVar};
 
 impl GenerateCode for Declaration {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
-        fn store_right_side(
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        fn store_right_side<E: crate::vm::external::Engine>(
             left: &DeclaredVar,
             right: &AssignValue,
             scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
             scope_id: Option<u128>,
-            instructions: &mut Program,
-            context: &crate::vm::vm::CodeGenerationContext,
-        ) -> Result<(), CodeGenerationError> {
+            instructions: &mut crate::vm::program::Program<E>,
+            context: &crate::vm::CodeGenerationContext,
+        ) -> Result<(), crate::vm::CodeGenerationError> {
             let Some(right_type) = (match right {
                 AssignValue::Block(value) => value.metadata.signature(),
                 AssignValue::Expr(value) => value.signature(),
@@ -36,7 +36,7 @@ impl GenerateCode for Declaration {
                 return Err(CodeGenerationError::UnresolvedError);
             };
 
-            let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+            let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
             match left {
                 DeclaredVar::Id { id: Some(id), .. }
@@ -83,7 +83,7 @@ impl GenerateCode for Declaration {
             //     }
             // };
 
-            // let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+            // let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
             // let Some(right_type) = (match right {
             //     crate::ast::statements::assignation::AssignValue::Block(value) => {
@@ -169,22 +169,18 @@ mod tests {
             Resolve,
         },
         test_extract_variable, test_statements, v_num,
-        vm::{
-            asm::Program,
-            vm::{Executable, Runtime},
-        },
     };
 
     use super::*;
 
     #[test]
     fn valid_declaration() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -421,17 +417,17 @@ mod tests {
     //         .register_type("Point", UserType::Struct(user_type), None)
     //         .expect("Registering of user type should have succeeded");
     //     let _ = statement
-    //         .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+    //         .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
     //     let mut instructions = Program::default();
     //     statement
-    //         .gencode(
+    //         .gencode::<E>(
     //             &mut scope_manager,
     //             None,
     //             &mut instructions,
-    //             &crate::vm::vm::CodeGenerationContext::default(),
+    //             &crate::vm::CodeGenerationContext::default(),
     //         )
     //         .expect("Code generation should have succeeded");
 
@@ -446,7 +442,7 @@ mod tests {
     //         .get_mut(crate::vm::vm::Player::P1, tid)
     //         .expect("Thread should exist");
     //     program.merge(instructions);
-    //     let mut engine = crate::vm::vm::NoopGameEngine {};
+    //     let mut engine = crate::vm::external::test::NoopGameEngine {};
 
     //     program
     //         .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -494,17 +490,17 @@ mod tests {
     //         .register_type("Point", UserType::Struct(user_type), None)
     //         .expect("Registering of user type should have succeeded");
     //     let _ = statement
-    //         .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+    //         .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
     //     let mut instructions = Program::default();
     //     statement
-    //         .gencode(
+    //         .gencode::<E>(
     //             &mut scope_manager,
     //             None,
     //             &mut instructions,
-    //             &crate::vm::vm::CodeGenerationContext::default(),
+    //             &crate::vm::CodeGenerationContext::default(),
     //         )
     //         .expect("Code generation should have succeeded");
 
@@ -519,7 +515,7 @@ mod tests {
     //         .get_mut(crate::vm::vm::Player::P1, tid)
     //         .expect("Thread should exist");
     //     program.merge(instructions);
-    //     let mut engine = crate::vm::vm::NoopGameEngine {};
+    //     let mut engine = crate::vm::external::test::NoopGameEngine {};
     //     program
     //         .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
     //         .expect("Execution should have succeeded");
@@ -558,17 +554,17 @@ mod tests {
     //     let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
     //     let _ = statement
-    //         .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+    //         .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
     //     let mut instructions = Program::default();
     //     statement
-    //         .gencode(
+    //         .gencode::<E>(
     //             &mut scope_manager,
     //             None,
     //             &mut instructions,
-    //             &crate::vm::vm::CodeGenerationContext::default(),
+    //             &crate::vm::CodeGenerationContext::default(),
     //         )
     //         .expect("Code generation should have succeeded");
 
@@ -583,7 +579,7 @@ mod tests {
     //         .get_mut(crate::vm::vm::Player::P1, tid)
     //         .expect("Thread should exist");
     //     program.merge(instructions);
-    //     let mut engine = crate::vm::vm::NoopGameEngine {};
+    //     let mut engine = crate::vm::external::test::NoopGameEngine {};
 
     //     program
     //         .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -617,17 +613,17 @@ mod tests {
     //     let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
     //     let _ = statement
-    //         .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+    //         .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
     //     let mut instructions = Program::default();
     //     statement
-    //         .gencode(
+    //         .gencode::<E>(
     //             &mut scope_manager,
     //             None,
     //             &mut instructions,
-    //             &crate::vm::vm::CodeGenerationContext::default(),
+    //             &crate::vm::CodeGenerationContext::default(),
     //         )
     //         .expect("Code generation should have succeeded");
 
@@ -642,14 +638,14 @@ mod tests {
     //         .get_mut(crate::vm::vm::Player::P1, tid)
     //         .expect("Thread should exist");
     //     program.merge(instructions);
-    //     let mut engine = crate::vm::vm::NoopGameEngine {};
+    //     let mut engine = crate::vm::external::test::NoopGameEngine {};
 
     //     program
     //         .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
     //         .expect("Execution should have succeeded");
     //     let memory = stack;
     //     let data = clear_stack!(memory);
-    //     let engine = crate::vm::vm::NoopGameEngine {};
+    //     let engine = crate::vm::external::test::NoopGameEngine {};
 
     //     let value = <PrimitiveType as DeserializeFrom>::deserialize_from(
     //         &PrimitiveType::Number(NumberType::I64),
@@ -679,17 +675,17 @@ mod tests {
     //     let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
     //     let _ = statement
-    //         .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+    //         .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
     //     let mut instructions = Program::default();
     //     statement
-    //         .gencode(
+    //         .gencode::<E>(
     //             &mut scope_manager,
     //             None,
     //             &mut instructions,
-    //             &crate::vm::vm::CodeGenerationContext::default(),
+    //             &crate::vm::CodeGenerationContext::default(),
     //         )
     //         .expect("Code generation should have succeeded");
 
@@ -704,7 +700,7 @@ mod tests {
     //         .get_mut(crate::vm::vm::Player::P1, tid)
     //         .expect("Thread should exist");
     //     program.merge(instructions);
-    //     let mut engine = crate::vm::vm::NoopGameEngine {};
+    //     let mut engine = crate::vm::external::test::NoopGameEngine {};
 
     //     program
     //         .execute(stack, &mut heap, &mut stdio, &mut engine, tid)

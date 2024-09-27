@@ -8,11 +8,14 @@ use crate::{
         allocator::{align, heap::Heap, stack::Stack},
         asm::{
             operation::{GetNumFrom, OpPrimitive, PopNum},
-            Asm, Program,
+            Asm,
         },
-        core::{lexem, CoreCasm},
+        core::{lexem, CoreAsm},
+        program::Program,
+        runtime::RuntimeError,
+        scheduler_v2::Executable,
         stdio::StdIO,
-        vm::{CasmMetadata, CodeGenerationError, Executable, GenerateCode, RuntimeError},
+        CodeGenerationError, GenerateCode,
     },
 };
 
@@ -65,19 +68,19 @@ impl PathFinder for VectorFn {
 }
 
 impl ResolveCore for VectorFn {
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
         context: Option<&EType>,
         parameters: &mut Vec<Expression>,
     ) -> Result<EType, SemanticError> {
-        fn vec_param<G: crate::GameEngineStaticFn>(
+        fn vec_param<E: crate::vm::external::Engine>(
             param: &mut Expression,
             scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
             scope_id: Option<u128>,
         ) -> Result<VecType, SemanticError> {
-            let _ = param.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+            let _ = param.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
             let EType::Static(StaticType::Vec(vector_type)) =
                 param.type_of(scope_manager, scope_id)?
             else {
@@ -101,7 +104,7 @@ impl ResolveCore for VectorFn {
                 }
 
                 for param in parameters.iter_mut() {
-                    let _ = param.resolve::<G>(
+                    let _ = param.resolve::<E>(
                         scope_manager,
                         scope_id,
                         &Some(crate::p_num!(U64)),
@@ -124,9 +127,9 @@ impl ResolveCore for VectorFn {
                 let (first_part, second_part) = parameters.split_at_mut(1);
                 let vector = &mut first_part[0];
                 let item = &mut second_part[1];
-                let vector_type = vec_param::<G>(vector, scope_manager, scope_id)?;
+                let vector_type = vec_param::<E>(vector, scope_manager, scope_id)?;
 
-                let _ = item.resolve::<G>(
+                let _ = item.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(vector_type.0.as_ref().clone()),
@@ -145,7 +148,7 @@ impl ResolveCore for VectorFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let vector = &mut parameters[0];
-                let vector_type = vec_param::<G>(vector, scope_manager, scope_id)?;
+                let vector_type = vec_param::<E>(vector, scope_manager, scope_id)?;
 
                 *item_size = vector_type.0.size_of();
 
@@ -158,9 +161,9 @@ impl ResolveCore for VectorFn {
                 let (first_part, second_part) = parameters.split_at_mut(1);
                 let vector = &mut first_part[0];
                 let index = &mut second_part[1];
-                let vector_type = vec_param::<G>(vector, scope_manager, scope_id)?;
+                let vector_type = vec_param::<E>(vector, scope_manager, scope_id)?;
 
-                let _ = index.resolve::<G>(
+                let _ = index.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(crate::p_num!(U64)),
@@ -180,7 +183,7 @@ impl ResolveCore for VectorFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let vector = &mut parameters[0];
-                let vector_type = vec_param::<G>(vector, scope_manager, scope_id)?;
+                let vector_type = vec_param::<E>(vector, scope_manager, scope_id)?;
 
                 *item_size = vector_type.0.size_of();
 
@@ -191,7 +194,7 @@ impl ResolveCore for VectorFn {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum VectorCasm {
+pub enum VectorAsm {
     Vec { item_size: usize },
     VecWithCapacity { item_size: usize },
     Push { item_size: usize },
@@ -201,67 +204,69 @@ pub enum VectorCasm {
     Clear { item_size: usize },
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for VectorCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for VectorAsm {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
-            VectorCasm::Vec { item_size } => stdio.push_asm_lib(engine, "vec"),
-            VectorCasm::VecWithCapacity { item_size } => stdio.push_asm_lib(engine, "vec"),
-            VectorCasm::Push { item_size } => stdio.push_asm_lib(engine, "push"),
-            VectorCasm::Pop { item_size } => stdio.push_asm_lib(engine, "pop"),
-            VectorCasm::Extend { item_size } => stdio.push_asm_lib(engine, "extend"),
-            VectorCasm::Delete { item_size } => stdio.push_asm_lib(engine, "delete"),
-            VectorCasm::Clear { item_size } => stdio.push_asm_lib(engine, "clear_vec"),
+            VectorAsm::Vec { item_size } => stdio.push_asm_lib(engine, "vec"),
+            VectorAsm::VecWithCapacity { item_size } => stdio.push_asm_lib(engine, "vec"),
+            VectorAsm::Push { item_size } => stdio.push_asm_lib(engine, "push"),
+            VectorAsm::Pop { item_size } => stdio.push_asm_lib(engine, "pop"),
+            VectorAsm::Extend { item_size } => stdio.push_asm_lib(engine, "extend"),
+            VectorAsm::Delete { item_size } => stdio.push_asm_lib(engine, "delete"),
+            VectorAsm::Clear { item_size } => stdio.push_asm_lib(engine, "clear_vec"),
         }
     }
+}
 
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
+impl crate::vm::AsmWeight for VectorAsm {
+    fn weight(&self) -> crate::vm::Weight {
         match self {
-            VectorCasm::Vec { item_size } => crate::vm::vm::CasmWeight::HIGH,
-            VectorCasm::VecWithCapacity { item_size } => crate::vm::vm::CasmWeight::HIGH,
-            VectorCasm::Push { item_size } => crate::vm::vm::CasmWeight::MEDIUM,
-            VectorCasm::Pop { item_size } => crate::vm::vm::CasmWeight::LOW,
-            VectorCasm::Extend { item_size } => crate::vm::vm::CasmWeight::HIGH,
-            VectorCasm::Delete { item_size } => crate::vm::vm::CasmWeight::LOW,
-            VectorCasm::Clear { item_size } => crate::vm::vm::CasmWeight::HIGH,
+            VectorAsm::Vec { item_size } => crate::vm::Weight::HIGH,
+            VectorAsm::VecWithCapacity { item_size } => crate::vm::Weight::HIGH,
+            VectorAsm::Push { item_size } => crate::vm::Weight::MEDIUM,
+            VectorAsm::Pop { item_size } => crate::vm::Weight::LOW,
+            VectorAsm::Extend { item_size } => crate::vm::Weight::HIGH,
+            VectorAsm::Delete { item_size } => crate::vm::Weight::LOW,
+            VectorAsm::Clear { item_size } => crate::vm::Weight::HIGH,
         }
     }
 }
 
 impl GenerateCode for VectorFn {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match *self {
             VectorFn::Vec {
                 with_capacity,
                 item_size,
             } => {
                 if with_capacity {
-                    instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::VecWithCapacity {
+                    instructions.push(Asm::Core(CoreAsm::Vec(VectorAsm::VecWithCapacity {
                         item_size,
                     })));
                 } else {
-                    instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::Vec { item_size })));
+                    instructions.push(Asm::Core(CoreAsm::Vec(VectorAsm::Vec { item_size })));
                 }
             }
             VectorFn::Push { item_size } => {
-                instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::Push { item_size })));
+                instructions.push(Asm::Core(CoreAsm::Vec(VectorAsm::Push { item_size })));
             }
             VectorFn::Pop { item_size } => {
-                instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::Pop { item_size })));
+                instructions.push(Asm::Core(CoreAsm::Vec(VectorAsm::Pop { item_size })));
             }
             VectorFn::Extend { item_size } => {
-                instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::Extend { item_size })));
+                instructions.push(Asm::Core(CoreAsm::Vec(VectorAsm::Extend { item_size })));
             }
             VectorFn::Delete { item_size } => {
-                instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::Delete { item_size })));
+                instructions.push(Asm::Core(CoreAsm::Vec(VectorAsm::Delete { item_size })));
             }
             VectorFn::ClearVec { item_size } => {
-                instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::Clear { item_size })))
+                instructions.push(Asm::Core(CoreAsm::Vec(VectorAsm::Clear { item_size })))
             }
         }
         Ok(())
@@ -277,20 +282,23 @@ impl GenerateCode for VectorFn {
 
 pub const VEC_HEADER: usize = 16;
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for VectorCasm {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E>
+    for VectorAsm
+{
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match *self {
-            VectorCasm::Vec { item_size } => todo!(),
-            VectorCasm::VecWithCapacity { item_size } => todo!(),
-            VectorCasm::Push { item_size } => {
+            VectorAsm::Vec { item_size } => todo!(),
+            VectorAsm::VecWithCapacity { item_size } => todo!(),
+            VectorAsm::Push { item_size } => {
                 let item_data = stack.pop(item_size)?.to_owned();
                 let mut address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
@@ -321,7 +329,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for VectorCasm {
                 let address: u64 = address.into(stack);
                 stack.push_with(&address.to_le_bytes())?;
             }
-            VectorCasm::Pop { item_size } => {
+            VectorAsm::Pop { item_size } => {
                 let mut address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
                 let mut cap = OpPrimitive::get_num_from::<u64>(address, stack, heap)? as usize;
@@ -344,8 +352,8 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for VectorCasm {
 
                 stack.push_with(&item_data)?;
             }
-            VectorCasm::Extend { item_size } => todo!(),
-            VectorCasm::Delete { item_size } => {
+            VectorAsm::Extend { item_size } => todo!(),
+            VectorAsm::Delete { item_size } => {
                 let mut index = OpPrimitive::pop_num::<u64>(stack)? as usize;
                 let mut address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
@@ -386,7 +394,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for VectorCasm {
 
                 stack.push_with(&item_data)?;
             }
-            VectorCasm::Clear { item_size } => {
+            VectorAsm::Clear { item_size } => {
                 let mut address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
                 let mut cap = OpPrimitive::get_num_from::<u64>(address, stack, heap)? as usize;
@@ -404,7 +412,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for VectorCasm {
                 stack.push_with(&address.to_le_bytes())?;
             }
         }
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }

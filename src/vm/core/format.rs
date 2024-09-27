@@ -11,17 +11,16 @@ use crate::vm::allocator::stack::Stack;
 use crate::vm::asm::operation::{OpPrimitive, PopNum};
 use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
-use crate::vm::core::CoreCasm;
+use crate::vm::core::CoreAsm;
 
+use crate::vm::program::Program;
+use crate::vm::runtime::RuntimeError;
+use crate::vm::scheduler_v2::Executable;
 use crate::vm::stdio::StdIO;
-use crate::vm::vm::{CasmMetadata, Executable, RuntimeError};
+use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
     ast::expressions::Expression,
     semantic::{Resolve, SemanticError},
-    vm::{
-        asm::Program,
-        vm::{CodeGenerationError, GenerateCode},
-    },
 };
 
 use super::PathFinder;
@@ -63,7 +62,7 @@ impl PathFinder for FormatFn {
 }
 
 impl ResolveCore for FormatFn {
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -89,13 +88,13 @@ impl ResolveCore for FormatFn {
 }
 
 impl GenerateCode for FormatFn {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             FormatFn::Format => {
                 //
@@ -114,7 +113,7 @@ impl GenerateCode for FormatFn {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum FormatCasm {
+pub enum FormatAsm {
     U128TOA,
     ATOU128,
 
@@ -187,30 +186,30 @@ pub mod type_printer {
                 operation::{Equal, Operation},
                 Asm,
             },
-            core::CoreCasm,
+            core::CoreAsm,
         },
     };
 
-    use super::FormatCasm;
+    use super::FormatAsm;
 
-    fn build_struct(
+    fn build_struct<E: crate::vm::external::Engine>(
         Struct { id, fields }: &Struct,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), crate::vm::vm::CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match fields.len() {
-            0 => instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStr(
+            0 => instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
                 format!("{} {{}}", id).as_bytes().into(),
             )))),
             1 => {
                 let _ = build(&fields[0].1, scope_manager, scope_id, instructions)?;
-                instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStrBefore(
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStrBefore(
                     format!("{0}: ", fields[0].0).as_bytes().into(),
                 ))));
-                instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::Merge(2))));
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::Merge(2))));
 
-                instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::Wrap {
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::Wrap {
                     left: format!("{0} {{", id).as_bytes().into(),
                     right: "}".as_bytes().into(),
                 })));
@@ -218,31 +217,31 @@ pub mod type_printer {
             2.. => {
                 for i in fields.len() - 1..=1 {
                     let _ = build(&fields[i].1, scope_manager, scope_id, instructions)?;
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStrBefore(
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStrBefore(
                         format!("{0}: ", fields[i].0).as_bytes().into(),
                     ))));
                     if i != fields.len() - 1 {
-                        instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStr(
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
                             ", ".as_bytes().into(),
                         ))));
                     }
 
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::InsertBefore(
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::InsertBefore(
                         fields[i - 1].1.size_of(),
                     ))));
                 }
 
                 let _ = build(&fields[0].1, scope_manager, scope_id, instructions)?;
-                instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStrBefore(
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStrBefore(
                     format!("{0}: ", fields[0].0).as_bytes().into(),
                 ))));
-                instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStr(
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
                     ", ".as_bytes().into(),
                 ))));
 
-                instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::Merge(fields.len()))));
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::Merge(fields.len()))));
 
-                instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::Wrap {
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::Wrap {
                     left: format!("{0} {{ ", id).as_bytes().into(),
                     right: " }".as_bytes().into(),
                 })));
@@ -251,151 +250,153 @@ pub mod type_printer {
         Ok(())
     }
 
-    pub fn build(
+    pub fn build<E: crate::vm::external::Engine>(
         ctype: &crate::semantic::EType,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), crate::vm::vm::CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match ctype {
-            crate::semantic::EType::Static(static_type) => match static_type {
-                StaticType::Primitive(primitive_type) => {
-                    match primitive_type {
-                        PrimitiveType::Number(number_type) => {
-                            match number_type {
-                                NumberType::U8 => instructions
-                                    .push(Asm::Core(CoreCasm::Format(FormatCasm::U8TOA))),
-                                NumberType::U16 => instructions
-                                    .push(Asm::Core(CoreCasm::Format(FormatCasm::U16TOA))),
-                                NumberType::U32 => instructions
-                                    .push(Asm::Core(CoreCasm::Format(FormatCasm::U32TOA))),
-                                NumberType::U64 => instructions
-                                    .push(Asm::Core(CoreCasm::Format(FormatCasm::U64TOA))),
-                                NumberType::U128 => instructions
-                                    .push(Asm::Core(CoreCasm::Format(FormatCasm::U128TOA))),
-                                NumberType::I8 => instructions
-                                    .push(Asm::Core(CoreCasm::Format(FormatCasm::I8TOA))),
-                                NumberType::I16 => instructions
-                                    .push(Asm::Core(CoreCasm::Format(FormatCasm::I16TOA))),
-                                NumberType::I32 => instructions
-                                    .push(Asm::Core(CoreCasm::Format(FormatCasm::I32TOA))),
-                                NumberType::I64 => instructions
-                                    .push(Asm::Core(CoreCasm::Format(FormatCasm::I64TOA))),
-                                NumberType::I128 => instructions
-                                    .push(Asm::Core(CoreCasm::Format(FormatCasm::I128TOA))),
-                                NumberType::F64 => {
-                                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::FTOA)))
+            crate::semantic::EType::Static(static_type) => {
+                match static_type {
+                    StaticType::Primitive(primitive_type) => {
+                        match primitive_type {
+                            PrimitiveType::Number(number_type) => {
+                                match number_type {
+                                    NumberType::U8 => instructions
+                                        .push(Asm::Core(CoreAsm::Format(FormatAsm::U8TOA))),
+                                    NumberType::U16 => instructions
+                                        .push(Asm::Core(CoreAsm::Format(FormatAsm::U16TOA))),
+                                    NumberType::U32 => instructions
+                                        .push(Asm::Core(CoreAsm::Format(FormatAsm::U32TOA))),
+                                    NumberType::U64 => instructions
+                                        .push(Asm::Core(CoreAsm::Format(FormatAsm::U64TOA))),
+                                    NumberType::U128 => instructions
+                                        .push(Asm::Core(CoreAsm::Format(FormatAsm::U128TOA))),
+                                    NumberType::I8 => instructions
+                                        .push(Asm::Core(CoreAsm::Format(FormatAsm::I8TOA))),
+                                    NumberType::I16 => instructions
+                                        .push(Asm::Core(CoreAsm::Format(FormatAsm::I16TOA))),
+                                    NumberType::I32 => instructions
+                                        .push(Asm::Core(CoreAsm::Format(FormatAsm::I32TOA))),
+                                    NumberType::I64 => instructions
+                                        .push(Asm::Core(CoreAsm::Format(FormatAsm::I64TOA))),
+                                    NumberType::I128 => instructions
+                                        .push(Asm::Core(CoreAsm::Format(FormatAsm::I128TOA))),
+                                    NumberType::F64 => instructions
+                                        .push(Asm::Core(CoreAsm::Format(FormatAsm::FTOA))),
                                 }
                             }
-                        }
-                        PrimitiveType::Char => {
-                            instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::CTOA)))
-                        }
-                        PrimitiveType::Bool => {
-                            instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::BTOA)))
+                            PrimitiveType::Char => {
+                                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::CTOA)))
+                            }
+                            PrimitiveType::Bool => {
+                                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::BTOA)))
+                            }
                         }
                     }
-                }
-                StaticType::StrSlice(_) => {
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::STOA)));
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::Wrap {
-                        left: "\"".as_bytes().into(),
-                        right: "\"".as_bytes().into(),
-                    })));
-                }
-                StaticType::String(_) => {
-                    instructions.push(Asm::Offset(LocateOffset {
-                        offset: POINTER_SIZE,
-                    }));
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::STOA)));
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::Wrap {
-                        left: "\"".as_bytes().into(),
-                        right: "\"".as_bytes().into(),
-                    })));
-                }
-                StaticType::Tuple(tuple_type) => match tuple_type.0.len() {
-                    0 => instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStr(
-                        "()".as_bytes().into(),
-                    )))),
-                    1 => {
-                        let _ = build(&tuple_type.0[0], scope_manager, scope_id, instructions)?;
-                        instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::Wrap {
-                            left: "(".as_bytes().into(),
-                            right: ")".as_bytes().into(),
+                    StaticType::StrSlice(_) => {
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::STOA)));
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::Wrap {
+                            left: "\"".as_bytes().into(),
+                            right: "\"".as_bytes().into(),
                         })));
                     }
-                    2.. => {
-                        for i in tuple_type.0.len() - 1..=1 {
-                            let _ = build(&tuple_type.0[i], scope_manager, scope_id, instructions)?;
-                            if i != tuple_type.0.len() - 1 {
-                                instructions.push(Asm::Core(CoreCasm::Format(
-                                    FormatCasm::PushStr(", ".as_bytes().into()),
+                    StaticType::String(_) => {
+                        instructions.push(Asm::Offset(LocateOffset {
+                            offset: POINTER_SIZE,
+                        }));
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::STOA)));
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::Wrap {
+                            left: "\"".as_bytes().into(),
+                            right: "\"".as_bytes().into(),
+                        })));
+                    }
+                    StaticType::Tuple(tuple_type) => match tuple_type.0.len() {
+                        0 => instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
+                            "()".as_bytes().into(),
+                        )))),
+                        1 => {
+                            let _ = build(&tuple_type.0[0], scope_manager, scope_id, instructions)?;
+                            instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::Wrap {
+                                left: "(".as_bytes().into(),
+                                right: ")".as_bytes().into(),
+                            })));
+                        }
+                        2.. => {
+                            for i in tuple_type.0.len() - 1..=1 {
+                                let _ =
+                                    build(&tuple_type.0[i], scope_manager, scope_id, instructions)?;
+                                if i != tuple_type.0.len() - 1 {
+                                    instructions.push(Asm::Core(CoreAsm::Format(
+                                        FormatAsm::PushStr(", ".as_bytes().into()),
+                                    )));
+                                }
+                                instructions.push(Asm::Core(CoreAsm::Format(
+                                    FormatAsm::InsertBefore(tuple_type.0[i - 1].size_of()),
                                 )));
                             }
-                            instructions.push(Asm::Core(CoreCasm::Format(
-                                FormatCasm::InsertBefore(tuple_type.0[i - 1].size_of()),
-                            )));
+
+                            let _ = build(&tuple_type.0[0], scope_manager, scope_id, instructions)?;
+                            instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
+                                ", ".as_bytes().into(),
+                            ))));
+                            instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::Merge(
+                                tuple_type.0.len(),
+                            ))));
+                            instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::Wrap {
+                                left: "(".as_bytes().into(),
+                                right: ")".as_bytes().into(),
+                            })));
                         }
-
-                        let _ = build(&tuple_type.0[0], scope_manager, scope_id, instructions)?;
-                        instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStr(
-                            ", ".as_bytes().into(),
+                    },
+                    StaticType::Slice(_)
+                    | StaticType::Vec(_)
+                    | StaticType::Map(_)
+                    | StaticType::Address(_) => {
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::U64TOH)));
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStrBefore(
+                            "@".as_bytes().into(),
                         ))));
-                        instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::Merge(
-                            tuple_type.0.len(),
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStrBefore(
+                            ctype.name(scope_manager, scope_id)?.as_bytes().into(),
                         ))));
-                        instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::Wrap {
-                            left: "(".as_bytes().into(),
-                            right: ")".as_bytes().into(),
-                        })));
                     }
-                },
-                StaticType::Slice(_)
-                | StaticType::Vec(_)
-                | StaticType::Map(_)
-                | StaticType::Address(_) => {
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::U64TOH)));
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStrBefore(
-                        "@".as_bytes().into(),
-                    ))));
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStrBefore(
-                        ctype.name(scope_manager, scope_id)?.as_bytes().into(),
-                    ))));
-                }
-                StaticType::Closure(_) | StaticType::Lambda(_) | StaticType::Function(_) => {
-                    instructions.push(Asm::Pop(POINTER_SIZE));
+                    StaticType::Closure(_) | StaticType::Lambda(_) | StaticType::Function(_) => {
+                        instructions.push(Asm::Pop(POINTER_SIZE));
 
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStr(
-                        ctype.name(scope_manager, scope_id)?.as_bytes().into(),
-                    ))));
-                    instructions.push(Asm::Data(Data::Serialized {
-                        data: 0u64.to_le_bytes().into(),
-                    }));
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
+                            ctype.name(scope_manager, scope_id)?.as_bytes().into(),
+                        ))));
+                        instructions.push(Asm::Data(Data::Serialized {
+                            data: 0u64.to_le_bytes().into(),
+                        }));
+                    }
+                    StaticType::Range(range_type) => todo!(),
+                    StaticType::Unit => {
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
+                            "unit".as_bytes().into(),
+                        ))));
+                        instructions.push(Asm::Data(Data::Serialized {
+                            data: 0u64.to_le_bytes().into(),
+                        }));
+                    }
+                    StaticType::Any => {
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
+                            "any".as_bytes().into(),
+                        ))));
+                        instructions.push(Asm::Data(Data::Serialized {
+                            data: 0u64.to_le_bytes().into(),
+                        }));
+                    }
+                    StaticType::Error => {
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ETOA)))
+                    }
                 }
-                StaticType::Range(range_type) => todo!(),
-                StaticType::Unit => {
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStr(
-                        "unit".as_bytes().into(),
-                    ))));
-                    instructions.push(Asm::Data(Data::Serialized {
-                        data: 0u64.to_le_bytes().into(),
-                    }));
-                }
-                StaticType::Any => {
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStr(
-                        "any".as_bytes().into(),
-                    ))));
-                    instructions.push(Asm::Data(Data::Serialized {
-                        data: 0u64.to_le_bytes().into(),
-                    }));
-                }
-                StaticType::Error => {
-                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::ETOA)))
-                }
-            },
+            }
             crate::semantic::EType::User { id, size } => {
                 let Ok(utype) = scope_manager.find_type_by_id(*id, scope_id) else {
-                    return Err(crate::vm::vm::CodeGenerationError::UnresolvedError);
+                    return Err(crate::vm::CodeGenerationError::UnresolvedError);
                 };
                 match utype {
                     UserType::Struct(struct_type) => {
@@ -407,15 +408,17 @@ pub mod type_printer {
                         instructions.push(Asm::Data(Data::Serialized {
                             data: 0u64.to_le_bytes().into(),
                         }));
-                        instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStr(
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
                             format!("{0}::", id).as_bytes().into(),
                         ))));
-                        instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::InsertBefore(
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::InsertBefore(
                             POINTER_SIZE,
                         ))));
                         for (i, variant_name) in values.iter().enumerate() {
-                            instructions
-                                .push_label_id(else_label, format!("format_{variant_name}").into());
+                            instructions.push_label_by_id(
+                                else_label,
+                                format!("format_{variant_name}").into(),
+                            );
                             instructions.push(Asm::Mem(Mem::Dup(POINTER_SIZE)));
 
                             instructions.push(Asm::Data(Data::Serialized {
@@ -430,23 +433,26 @@ pub mod type_printer {
                             else_label = Label::gen();
                             instructions.push(Asm::If(BranchIf { else_label }));
                             instructions.push(Asm::Pop(POINTER_SIZE));
-                            instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStr(
+                            instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
                                 format!("{0}", variant_name).as_bytes().into(),
                             ))));
                             instructions.push(Asm::Goto(Goto {
                                 label: Some(end_label),
                             }));
                         }
-                        instructions.push_label_id(else_label, format!("format_union").into());
-                        instructions.push_label_id(end_label, format!("end_format_union").into());
+                        instructions.push_label_by_id(else_label, format!("format_union").into());
+                        instructions
+                            .push_label_by_id(end_label, format!("end_format_union").into());
                     }
                     UserType::Union(Union { id, variants }) => {
                         let mut else_label = Label::gen();
                         let end_label = Label::gen();
 
                         for (i, (variant_name, struct_type)) in variants.iter().enumerate() {
-                            instructions
-                                .push_label_id(else_label, format!("format_{variant_name}").into());
+                            instructions.push_label_by_id(
+                                else_label,
+                                format!("format_{variant_name}").into(),
+                            );
                             instructions.push(Asm::Mem(Mem::Dup(POINTER_SIZE)));
 
                             instructions.push(Asm::Data(Data::Serialized {
@@ -467,9 +473,10 @@ pub mod type_printer {
                                 label: Some(end_label),
                             }));
                         }
-                        instructions.push_label_id(else_label, format!("format_union").into());
-                        instructions.push_label_id(end_label, format!("end_format_union").into());
-                        instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStrBefore(
+                        instructions.push_label_by_id(else_label, format!("format_union").into());
+                        instructions
+                            .push_label_by_id(end_label, format!("end_format_union").into());
+                        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStrBefore(
                             format!("{0}::", id).as_bytes().into(),
                         ))));
                     }
@@ -480,212 +487,216 @@ pub mod type_printer {
     }
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for FormatCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for FormatAsm {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
-            FormatCasm::U128TOA => stdio.push_asm_lib(engine, "u128toa"),
-            FormatCasm::ATOU128 => stdio.push_asm_lib(engine, "atou128"),
-            FormatCasm::U64TOA => stdio.push_asm_lib(engine, "u64toa"),
-            FormatCasm::U64TOH => stdio.push_asm_lib(engine, "u64toh"),
-            FormatCasm::ATOU64 => stdio.push_asm_lib(engine, "atou64"),
-            FormatCasm::U32TOA => stdio.push_asm_lib(engine, "u32toa"),
-            FormatCasm::ATOU32 => stdio.push_asm_lib(engine, "atou32"),
-            FormatCasm::U16TOA => stdio.push_asm_lib(engine, "u16toa"),
-            FormatCasm::ATOU16 => stdio.push_asm_lib(engine, "atou16"),
-            FormatCasm::U8TOA => stdio.push_asm_lib(engine, "u8toa"),
-            FormatCasm::ATOU8 => stdio.push_asm_lib(engine, "atou8"),
-            FormatCasm::I128TOA => stdio.push_asm_lib(engine, "i128toa"),
-            FormatCasm::ATOI128 => stdio.push_asm_lib(engine, "atoi128"),
-            FormatCasm::I64TOA => stdio.push_asm_lib(engine, "i64toa"),
-            FormatCasm::ATOI64 => stdio.push_asm_lib(engine, "atoi64"),
-            FormatCasm::I32TOA => stdio.push_asm_lib(engine, "i32toa"),
-            FormatCasm::ATOI32 => stdio.push_asm_lib(engine, "atoi32"),
-            FormatCasm::I16TOA => stdio.push_asm_lib(engine, "i16toa"),
-            FormatCasm::ATOI16 => stdio.push_asm_lib(engine, "atoi16"),
-            FormatCasm::I8TOA => stdio.push_asm_lib(engine, "i8toa"),
-            FormatCasm::ATOI8 => stdio.push_asm_lib(engine, "atoi8"),
-            FormatCasm::FTOA => stdio.push_asm_lib(engine, "ftoa"),
-            FormatCasm::ATOF => stdio.push_asm_lib(engine, "atof"),
-            FormatCasm::BTOA => stdio.push_asm_lib(engine, "btoa"),
-            FormatCasm::ATOB => stdio.push_asm_lib(engine, "atob"),
-            FormatCasm::CTOA => stdio.push_asm_lib(engine, "ctoa"),
-            FormatCasm::ATOC => stdio.push_asm_lib(engine, "atoc"),
-            FormatCasm::STOA => stdio.push_asm_lib(engine, "stoa"),
-            FormatCasm::ETOA => stdio.push_asm_lib(engine, "etoa"),
-            FormatCasm::PrintfStart => stdio.push_asm_lib(engine, "printfstart"),
-            FormatCasm::FormatStart => stdio.push_asm_lib(engine, "formatstart"),
-            FormatCasm::PushStr(_) => stdio.push_asm_lib(engine, "pushstr"),
-            FormatCasm::PushStrBefore(_) => stdio.push_asm_lib(engine, "pushstr_before"),
-            FormatCasm::Push => stdio.push_asm_lib(engine, "push"),
-            FormatCasm::InsertBefore(size) => {
-                stdio.push_asm_lib(engine, &format!("insert -{size}"))
-            }
-            FormatCasm::Merge(count) => stdio.push_asm_lib(engine, &format!("merge {count}")),
-            FormatCasm::Wrap { left, right } => stdio.push_asm_lib(engine, "wrap"),
-            FormatCasm::PrintfEnd => stdio.push_asm_lib(engine, "printfend"),
-            FormatCasm::FormatEnd => stdio.push_asm_lib(engine, "formatend"),
-        }
-    }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        match self {
-            FormatCasm::U128TOA
-            | FormatCasm::ATOU128
-            | FormatCasm::U64TOA
-            | FormatCasm::U64TOH
-            | FormatCasm::ATOU64
-            | FormatCasm::U32TOA
-            | FormatCasm::ATOU32
-            | FormatCasm::U16TOA
-            | FormatCasm::ATOU16
-            | FormatCasm::U8TOA
-            | FormatCasm::ATOU8
-            | FormatCasm::I128TOA
-            | FormatCasm::ATOI128
-            | FormatCasm::I64TOA
-            | FormatCasm::ATOI64
-            | FormatCasm::I32TOA
-            | FormatCasm::ATOI32
-            | FormatCasm::I16TOA
-            | FormatCasm::ATOI16
-            | FormatCasm::I8TOA
-            | FormatCasm::ATOI8
-            | FormatCasm::FTOA
-            | FormatCasm::ATOF
-            | FormatCasm::BTOA
-            | FormatCasm::ATOB
-            | FormatCasm::CTOA
-            | FormatCasm::ATOC
-            | FormatCasm::STOA
-            | FormatCasm::ETOA => crate::vm::vm::CasmWeight::LOW,
-            FormatCasm::PrintfStart => crate::vm::vm::CasmWeight::ZERO,
-            FormatCasm::FormatStart => crate::vm::vm::CasmWeight::ZERO,
-            FormatCasm::PushStr(_) => crate::vm::vm::CasmWeight::LOW,
-            FormatCasm::PushStrBefore(_) => crate::vm::vm::CasmWeight::LOW,
-            FormatCasm::Push => crate::vm::vm::CasmWeight::ZERO,
-            FormatCasm::InsertBefore(_) => crate::vm::vm::CasmWeight::ZERO,
-            FormatCasm::Merge(_) => crate::vm::vm::CasmWeight::ZERO,
-            FormatCasm::Wrap { left, right } => crate::vm::vm::CasmWeight::ZERO,
-            FormatCasm::PrintfEnd => crate::vm::vm::CasmWeight::EXTREME,
-            FormatCasm::FormatEnd => crate::vm::vm::CasmWeight::HIGH,
+            FormatAsm::U128TOA => stdio.push_asm_lib(engine, "u128toa"),
+            FormatAsm::ATOU128 => stdio.push_asm_lib(engine, "atou128"),
+            FormatAsm::U64TOA => stdio.push_asm_lib(engine, "u64toa"),
+            FormatAsm::U64TOH => stdio.push_asm_lib(engine, "u64toh"),
+            FormatAsm::ATOU64 => stdio.push_asm_lib(engine, "atou64"),
+            FormatAsm::U32TOA => stdio.push_asm_lib(engine, "u32toa"),
+            FormatAsm::ATOU32 => stdio.push_asm_lib(engine, "atou32"),
+            FormatAsm::U16TOA => stdio.push_asm_lib(engine, "u16toa"),
+            FormatAsm::ATOU16 => stdio.push_asm_lib(engine, "atou16"),
+            FormatAsm::U8TOA => stdio.push_asm_lib(engine, "u8toa"),
+            FormatAsm::ATOU8 => stdio.push_asm_lib(engine, "atou8"),
+            FormatAsm::I128TOA => stdio.push_asm_lib(engine, "i128toa"),
+            FormatAsm::ATOI128 => stdio.push_asm_lib(engine, "atoi128"),
+            FormatAsm::I64TOA => stdio.push_asm_lib(engine, "i64toa"),
+            FormatAsm::ATOI64 => stdio.push_asm_lib(engine, "atoi64"),
+            FormatAsm::I32TOA => stdio.push_asm_lib(engine, "i32toa"),
+            FormatAsm::ATOI32 => stdio.push_asm_lib(engine, "atoi32"),
+            FormatAsm::I16TOA => stdio.push_asm_lib(engine, "i16toa"),
+            FormatAsm::ATOI16 => stdio.push_asm_lib(engine, "atoi16"),
+            FormatAsm::I8TOA => stdio.push_asm_lib(engine, "i8toa"),
+            FormatAsm::ATOI8 => stdio.push_asm_lib(engine, "atoi8"),
+            FormatAsm::FTOA => stdio.push_asm_lib(engine, "ftoa"),
+            FormatAsm::ATOF => stdio.push_asm_lib(engine, "atof"),
+            FormatAsm::BTOA => stdio.push_asm_lib(engine, "btoa"),
+            FormatAsm::ATOB => stdio.push_asm_lib(engine, "atob"),
+            FormatAsm::CTOA => stdio.push_asm_lib(engine, "ctoa"),
+            FormatAsm::ATOC => stdio.push_asm_lib(engine, "atoc"),
+            FormatAsm::STOA => stdio.push_asm_lib(engine, "stoa"),
+            FormatAsm::ETOA => stdio.push_asm_lib(engine, "etoa"),
+            FormatAsm::PrintfStart => stdio.push_asm_lib(engine, "printfstart"),
+            FormatAsm::FormatStart => stdio.push_asm_lib(engine, "formatstart"),
+            FormatAsm::PushStr(_) => stdio.push_asm_lib(engine, "pushstr"),
+            FormatAsm::PushStrBefore(_) => stdio.push_asm_lib(engine, "pushstr_before"),
+            FormatAsm::Push => stdio.push_asm_lib(engine, "push"),
+            FormatAsm::InsertBefore(size) => stdio.push_asm_lib(engine, &format!("insert -{size}")),
+            FormatAsm::Merge(count) => stdio.push_asm_lib(engine, &format!("merge {count}")),
+            FormatAsm::Wrap { left, right } => stdio.push_asm_lib(engine, "wrap"),
+            FormatAsm::PrintfEnd => stdio.push_asm_lib(engine, "printfend"),
+            FormatAsm::FormatEnd => stdio.push_asm_lib(engine, "formatend"),
         }
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for FormatCasm {
-    fn execute(
+impl crate::vm::AsmWeight for FormatAsm {
+    fn weight(&self) -> crate::vm::Weight {
+        match self {
+            FormatAsm::U128TOA
+            | FormatAsm::ATOU128
+            | FormatAsm::U64TOA
+            | FormatAsm::U64TOH
+            | FormatAsm::ATOU64
+            | FormatAsm::U32TOA
+            | FormatAsm::ATOU32
+            | FormatAsm::U16TOA
+            | FormatAsm::ATOU16
+            | FormatAsm::U8TOA
+            | FormatAsm::ATOU8
+            | FormatAsm::I128TOA
+            | FormatAsm::ATOI128
+            | FormatAsm::I64TOA
+            | FormatAsm::ATOI64
+            | FormatAsm::I32TOA
+            | FormatAsm::ATOI32
+            | FormatAsm::I16TOA
+            | FormatAsm::ATOI16
+            | FormatAsm::I8TOA
+            | FormatAsm::ATOI8
+            | FormatAsm::FTOA
+            | FormatAsm::ATOF
+            | FormatAsm::BTOA
+            | FormatAsm::ATOB
+            | FormatAsm::CTOA
+            | FormatAsm::ATOC
+            | FormatAsm::STOA
+            | FormatAsm::ETOA => crate::vm::Weight::LOW,
+            FormatAsm::PrintfStart => crate::vm::Weight::ZERO,
+            FormatAsm::FormatStart => crate::vm::Weight::ZERO,
+            FormatAsm::PushStr(_) => crate::vm::Weight::LOW,
+            FormatAsm::PushStrBefore(_) => crate::vm::Weight::LOW,
+            FormatAsm::Push => crate::vm::Weight::ZERO,
+            FormatAsm::InsertBefore(_) => crate::vm::Weight::ZERO,
+            FormatAsm::Merge(_) => crate::vm::Weight::ZERO,
+            FormatAsm::Wrap { left, right } => crate::vm::Weight::ZERO,
+            FormatAsm::PrintfEnd => crate::vm::Weight::EXTREME,
+            FormatAsm::FormatEnd => crate::vm::Weight::HIGH,
+        }
+    }
+}
+
+impl<E: crate::vm::external::Engine> Executable<E>
+    for FormatAsm
+{
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match self {
-            FormatCasm::U128TOA => {
+            FormatAsm::U128TOA => {
                 let data = OpPrimitive::pop_num::<u128>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOU128 => todo!(),
-            FormatCasm::U64TOA => {
+            FormatAsm::ATOU128 => todo!(),
+            FormatAsm::U64TOA => {
                 let data = OpPrimitive::pop_num::<u64>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::U64TOH => {
+            FormatAsm::U64TOH => {
                 let data = OpPrimitive::pop_num::<u64>(stack)?;
                 let words = format!("0x{:X}", data);
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOU64 => todo!(),
-            FormatCasm::U32TOA => {
+            FormatAsm::ATOU64 => todo!(),
+            FormatAsm::U32TOA => {
                 let data = OpPrimitive::pop_num::<u32>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOU32 => todo!(),
-            FormatCasm::U16TOA => {
+            FormatAsm::ATOU32 => todo!(),
+            FormatAsm::U16TOA => {
                 let data = OpPrimitive::pop_num::<u16>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOU16 => todo!(),
-            FormatCasm::U8TOA => {
+            FormatAsm::ATOU16 => todo!(),
+            FormatAsm::U8TOA => {
                 let data = OpPrimitive::pop_num::<u8>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOU8 => todo!(),
-            FormatCasm::I128TOA => {
+            FormatAsm::ATOU8 => todo!(),
+            FormatAsm::I128TOA => {
                 let data = OpPrimitive::pop_num::<i128>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOI128 => todo!(),
-            FormatCasm::I64TOA => {
+            FormatAsm::ATOI128 => todo!(),
+            FormatAsm::I64TOA => {
                 let data = OpPrimitive::pop_num::<i64>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOI64 => todo!(),
-            FormatCasm::I32TOA => {
+            FormatAsm::ATOI64 => todo!(),
+            FormatAsm::I32TOA => {
                 let data = OpPrimitive::pop_num::<i32>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOI32 => todo!(),
-            FormatCasm::I16TOA => {
+            FormatAsm::ATOI32 => todo!(),
+            FormatAsm::I16TOA => {
                 let data = OpPrimitive::pop_num::<i16>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOI16 => todo!(),
-            FormatCasm::I8TOA => {
+            FormatAsm::ATOI16 => todo!(),
+            FormatAsm::I8TOA => {
                 let data = OpPrimitive::pop_num::<i8>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOI8 => todo!(),
-            FormatCasm::FTOA => {
+            FormatAsm::ATOI8 => todo!(),
+            FormatAsm::FTOA => {
                 let data = OpPrimitive::pop_float(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOF => todo!(),
-            FormatCasm::BTOA => {
+            FormatAsm::ATOF => todo!(),
+            FormatAsm::BTOA => {
                 let data = OpPrimitive::pop_num::<u8>(stack)?;
                 let words = if data >= 1 { "true" } else { "false" }.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOB => todo!(),
-            FormatCasm::CTOA => {
+            FormatAsm::ATOB => todo!(),
+            FormatAsm::CTOA => {
                 let data = OpPrimitive::pop_char(stack)?;
                 let words = format!("'{0}'", data.to_string());
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ATOC => todo!(),
-            FormatCasm::STOA => {
+            FormatAsm::ATOC => todo!(),
+            FormatAsm::STOA => {
                 let address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let words = OpPrimitive::get_string_from(address, stack, heap)?;
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::ETOA => {
+            FormatAsm::ETOA => {
                 let data = OpPrimitive::pop_num::<u8>(stack)?;
                 let words = if data >= super::ERROR_VALUE {
                     "ERROR".to_string()
@@ -695,13 +706,13 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for FormatCasm {
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::PrintfStart => {
+            FormatAsm::PrintfStart => {
                 let _ = stack.push_with(&((0u64).to_le_bytes()))?;
             }
-            FormatCasm::FormatStart => {
+            FormatAsm::FormatStart => {
                 let _ = stack.push_with(&((0u64).to_le_bytes()))?;
             }
-            FormatCasm::PushStr(words) => {
+            FormatAsm::PushStr(words) => {
                 let size = OpPrimitive::pop_num::<u64>(stack)?;
                 let mut data = stack.pop(size as usize)?.to_vec();
                 data.extend_from_slice(&words);
@@ -709,7 +720,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for FormatCasm {
                 let _ = stack.push_with(&data)?;
                 let _ = stack.push_with(&((data.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::PushStrBefore(words) => {
+            FormatAsm::PushStrBefore(words) => {
                 let size = OpPrimitive::pop_num::<u64>(stack)?;
                 let data = stack.pop(size as usize)?.to_vec();
                 let mut result = words.to_vec();
@@ -718,7 +729,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for FormatCasm {
                 let _ = stack.push_with(&result)?;
                 let _ = stack.push_with(&((result.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::Push => {
+            FormatAsm::Push => {
                 let size = OpPrimitive::pop_num::<u64>(stack)?;
                 let right = stack.pop(size as usize)?.to_vec();
                 let size = OpPrimitive::pop_num::<u64>(stack)?;
@@ -728,7 +739,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for FormatCasm {
                 let _ = stack.push_with(&left)?;
                 let _ = stack.push_with(&((left.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::InsertBefore(before) => {
+            FormatAsm::InsertBefore(before) => {
                 let size = OpPrimitive::pop_num::<u64>(stack)?;
                 let data = stack.pop(size as usize)?.to_vec();
 
@@ -738,7 +749,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for FormatCasm {
                 let _ = stack.push_with(&((data.len() as u64).to_le_bytes()))?;
                 let _ = stack.push_with(&real)?;
             }
-            FormatCasm::Merge(count) => {
+            FormatAsm::Merge(count) => {
                 let mut buffer = Vec::with_capacity(*count);
                 for _ in 0..*count {
                     let size = OpPrimitive::pop_num::<u64>(stack)?;
@@ -750,7 +761,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for FormatCasm {
                 let _ = stack.push_with(&rev_buffer)?;
                 let _ = stack.push_with(&((rev_buffer.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::Wrap { left, right } => {
+            FormatAsm::Wrap { left, right } => {
                 let size = OpPrimitive::pop_num::<u64>(stack)?;
                 let data = stack.pop(size as usize)?.to_vec();
                 let mut words = Vec::with_capacity(left.len() + data.len() + right.len());
@@ -761,13 +772,13 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for FormatCasm {
                 let _ = stack.push_with(&words)?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatCasm::PrintfEnd => {
+            FormatAsm::PrintfEnd => {
                 let size = OpPrimitive::pop_num::<u64>(stack)?;
                 let data = stack.pop(size as usize)?.to_vec();
                 stdio.stdout.push(&String::from_utf8_lossy(&data));
                 stdio.stdout.flushln(engine);
             }
-            FormatCasm::FormatEnd => {
+            FormatAsm::FormatEnd => {
                 let size = OpPrimitive::pop_num::<u64>(stack)?;
                 let data = stack.pop(size as usize)?.to_vec();
 
@@ -788,7 +799,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for FormatCasm {
                 stack.push_with(&address.to_le_bytes())?;
             }
         }
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }
@@ -797,10 +808,6 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for FormatCasm {
 mod tests {
 
     use super::*;
-    use crate::ast::statements::Statement;
-    use crate::ast::TryParse;
-    use crate::clear_stack;
-    use crate::vm::vm::Runtime;
 
     // #[test]
     // fn valid_format_i64() {

@@ -14,11 +14,14 @@ use crate::{
         allocator::{align, heap::Heap, stack::Stack, MemoryAddress},
         asm::{
             operation::{OpPrimitive, PopNum},
-            Asm, Program,
+            Asm,
         },
-        core::{lexem, map::map_layout, CoreCasm},
+        core::{lexem, map::map_layout, CoreAsm},
+        program::Program,
+        runtime::RuntimeError,
+        scheduler_v2::Executable,
         stdio::StdIO,
-        vm::{CasmMetadata, CodeGenerationError, Executable, GenerateCode, RuntimeError},
+        CodeGenerationError, GenerateCode,
     },
 };
 
@@ -32,22 +35,25 @@ pub enum IterFn {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum IterCasm {
+pub enum IterAsm {
     MapItems { key_size: usize, value_size: usize },
     MapValues { key_size: usize, value_size: usize },
     MapKeys { key_size: usize, value_size: usize },
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IterCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for IterAsm {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
-            IterCasm::MapItems { .. } => stdio.push_asm_lib(engine, "items"),
-            IterCasm::MapValues { .. } => stdio.push_asm_lib(engine, "values"),
-            IterCasm::MapKeys { .. } => stdio.push_asm_lib(engine, "keys"),
+            IterAsm::MapItems { .. } => stdio.push_asm_lib(engine, "items"),
+            IterAsm::MapValues { .. } => stdio.push_asm_lib(engine, "values"),
+            IterAsm::MapKeys { .. } => stdio.push_asm_lib(engine, "keys"),
         }
     }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        crate::vm::vm::CasmWeight::HIGH
+}
+
+impl crate::vm::AsmWeight for IterAsm {
+    fn weight(&self) -> crate::vm::Weight {
+        crate::vm::Weight::HIGH
     }
 }
 
@@ -78,7 +84,7 @@ impl PathFinder for IterFn {
 }
 
 impl ResolveCore for IterFn {
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -94,7 +100,7 @@ impl ResolveCore for IterFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let map = &mut parameters[0];
-                let _ = map.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = map.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let mut map_type = map.type_of(&scope_manager, scope_id)?;
                 match &map_type {
                     EType::Static(value) => match value {
@@ -137,7 +143,7 @@ impl ResolveCore for IterFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let map = &mut parameters[0];
-                let _ = map.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = map.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let mut map_type = map.type_of(&scope_manager, scope_id)?;
                 match &map_type {
                     EType::Static(value) => match value {
@@ -175,7 +181,7 @@ impl ResolveCore for IterFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let map = &mut parameters[0];
-                let _ = map.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = map.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let mut map_type = map.type_of(&scope_manager, scope_id)?;
                 match &map_type {
                     EType::Static(value) => match value {
@@ -208,32 +214,32 @@ impl ResolveCore for IterFn {
 }
 
 impl GenerateCode for IterFn {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             IterFn::MapItems {
                 key_size,
                 value_size,
-            } => instructions.push(Asm::Core(super::CoreCasm::Iter(IterCasm::MapItems {
+            } => instructions.push(Asm::Core(super::CoreAsm::Iter(IterAsm::MapItems {
                 key_size: *key_size,
                 value_size: *value_size,
             }))),
             IterFn::MapValues {
                 key_size,
                 value_size,
-            } => instructions.push(Asm::Core(super::CoreCasm::Iter(IterCasm::MapValues {
+            } => instructions.push(Asm::Core(super::CoreAsm::Iter(IterAsm::MapValues {
                 key_size: *key_size,
                 value_size: *value_size,
             }))),
             IterFn::MapKeys {
                 key_size,
                 value_size,
-            } => instructions.push(Asm::Core(super::CoreCasm::Iter(IterCasm::MapKeys {
+            } => instructions.push(Asm::Core(super::CoreAsm::Iter(IterAsm::MapKeys {
                 key_size: *key_size,
                 value_size: *value_size,
             }))),
@@ -242,18 +248,21 @@ impl GenerateCode for IterFn {
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E>
+    for IterAsm
+{
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match self {
-            IterCasm::MapItems {
+            IterAsm::MapItems {
                 key_size,
                 value_size,
             } => {
@@ -290,7 +299,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 let address: u64 = address.into(stack);
                 let _ = stack.push_with(&address.to_le_bytes())?;
             }
-            IterCasm::MapValues {
+            IterAsm::MapValues {
                 key_size,
                 value_size,
             } => {
@@ -327,7 +336,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 let address: u64 = address.into(stack);
                 let _ = stack.push_with(&address.to_le_bytes())?;
             }
-            IterCasm::MapKeys {
+            IterAsm::MapKeys {
                 key_size,
                 value_size,
             } => {
@@ -364,7 +373,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 let _ = stack.push_with(&address.to_le_bytes())?;
             }
         }
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }

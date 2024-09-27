@@ -10,7 +10,7 @@ use crate::{
             locate::{LocateIndex, LocateOffset, LocateOffsetFromStackPointer},
             Asm,
         },
-        vm::{CodeGenerationContext, CodeGenerationError, GenerateCode},
+        CodeGenerationContext, CodeGenerationError, GenerateCode,
     },
 };
 
@@ -21,35 +21,35 @@ use super::{
 };
 
 pub trait Locatable {
-    fn locate(
+    fn locate<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError>;
 
-    fn locate_from(
+    fn locate_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError>;
 
-    fn access_from(
+    fn access_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: MemoryAddress,
-    ) -> Result<(), CodeGenerationError>;
+    ) -> Result<(), crate::vm::CodeGenerationError>;
 
-    fn runtime_access(
+    fn runtime_access<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), CodeGenerationError>;
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError>;
 
     fn is_assignable(&self) -> bool;
 }
@@ -58,11 +58,11 @@ impl Locatable for Variable {
     fn is_assignable(&self) -> bool {
         true
     }
-    fn locate(
+    fn locate<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let Some(super::data::VariableState::Variable { id }) = &self.state else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -91,11 +91,11 @@ impl Locatable for Variable {
         }
     }
 
-    fn locate_from(
+    fn locate_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let Some(super::data::VariableState::Field { offset, size }) = &self.state else {
@@ -115,13 +115,13 @@ impl Locatable for Variable {
         }
     }
 
-    fn access_from(
+    fn access_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: MemoryAddress,
-    ) -> Result<(), CodeGenerationError> {
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(super::data::VariableState::Field { offset, size }) = &self.state else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -132,12 +132,12 @@ impl Locatable for Variable {
         Ok(())
     }
 
-    fn runtime_access(
+    fn runtime_access<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(super::data::VariableState::Field { offset, size }) = &self.state else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -151,41 +151,41 @@ impl Locatable for Address {
     fn is_assignable(&self) -> bool {
         false
     }
-    fn locate(
+    fn locate<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         Err(CodeGenerationError::Unlocatable)
     }
 
-    fn locate_from(
+    fn locate_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         Err(CodeGenerationError::Unlocatable)
     }
 
-    fn access_from(
+    fn access_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: MemoryAddress,
-    ) -> Result<(), CodeGenerationError> {
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         Err(CodeGenerationError::Unaccessible)
     }
 
-    fn runtime_access(
+    fn runtime_access<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         Err(CodeGenerationError::Unaccessible)
     }
 }
@@ -193,13 +193,13 @@ impl Locatable for PtrAccess {
     fn is_assignable(&self) -> bool {
         true
     }
-    fn locate(
+    fn locate<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
-        let _ = self.value.gencode(
+        let _ = self.value.gencode::<E>(
             scope_manager,
             scope_id,
             instructions,
@@ -208,32 +208,32 @@ impl Locatable for PtrAccess {
         Ok(None)
     }
 
-    fn locate_from(
+    fn locate_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         Err(CodeGenerationError::Unlocatable)
     }
 
-    fn access_from(
+    fn access_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: MemoryAddress,
-    ) -> Result<(), CodeGenerationError> {
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         Err(CodeGenerationError::Unaccessible)
     }
 
-    fn runtime_access(
+    fn runtime_access<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         Err(CodeGenerationError::Unaccessible)
     }
 }
@@ -241,11 +241,11 @@ impl Locatable for FieldAccess {
     fn is_assignable(&self) -> bool {
         true
     }
-    fn locate(
+    fn locate<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self.var.locate(scope_manager, scope_id, instructions)? {
             Some(address) => {
@@ -261,11 +261,11 @@ impl Locatable for FieldAccess {
         }
     }
 
-    fn locate_from(
+    fn locate_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self
@@ -285,13 +285,13 @@ impl Locatable for FieldAccess {
         }
     }
 
-    fn access_from(
+    fn access_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: MemoryAddress,
-    ) -> Result<(), CodeGenerationError> {
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self
             .var
             .locate_from(scope_manager, scope_id, instructions, Some(address))?
@@ -310,12 +310,12 @@ impl Locatable for FieldAccess {
         Ok(())
     }
 
-    fn runtime_access(
+    fn runtime_access<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self
             .var
             .locate_from(scope_manager, scope_id, instructions, None)?
@@ -338,11 +338,11 @@ impl Locatable for TupleAccess {
     fn is_assignable(&self) -> bool {
         true
     }
-    fn locate(
+    fn locate<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let Some(offset) = self.offset else {
             return Err(CodeGenerationError::Unlocatable);
@@ -361,11 +361,11 @@ impl Locatable for TupleAccess {
         }
     }
 
-    fn locate_from(
+    fn locate_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let Some(offset) = self.offset else {
@@ -388,13 +388,13 @@ impl Locatable for TupleAccess {
         }
     }
 
-    fn access_from(
+    fn access_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: MemoryAddress,
-    ) -> Result<(), CodeGenerationError> {
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
             return Err(CodeGenerationError::Unlocatable);
         };
@@ -425,12 +425,12 @@ impl Locatable for TupleAccess {
         Ok(())
     }
 
-    fn runtime_access(
+    fn runtime_access<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
             return Err(CodeGenerationError::Unlocatable);
         };
@@ -466,11 +466,11 @@ impl Locatable for ListAccess {
     fn is_assignable(&self) -> bool {
         true
     }
-    fn locate(
+    fn locate<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -490,7 +490,7 @@ impl Locatable for ListAccess {
         match self.var.locate(scope_manager, scope_id, instructions)? {
             Some(address) => {
                 // the address is static
-                let _ = self.index.gencode(
+                let _ = self.index.gencode::<E>(
                     scope_manager,
                     scope_id,
                     instructions,
@@ -509,7 +509,7 @@ impl Locatable for ListAccess {
                     size: Some(POINTER_SIZE),
                 }));
 
-                let _ = self.index.gencode(
+                let _ = self.index.gencode::<E>(
                     scope_manager,
                     scope_id,
                     instructions,
@@ -526,11 +526,11 @@ impl Locatable for ListAccess {
         Ok(None)
     }
 
-    fn locate_from(
+    fn locate_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
@@ -553,7 +553,7 @@ impl Locatable for ListAccess {
         {
             Some(address) => {
                 // the address is static
-                let _ = self.index.gencode(
+                let _ = self.index.gencode::<E>(
                     scope_manager,
                     scope_id,
                     instructions,
@@ -572,7 +572,7 @@ impl Locatable for ListAccess {
                     size: Some(POINTER_SIZE),
                 }));
 
-                let _ = self.index.gencode(
+                let _ = self.index.gencode::<E>(
                     scope_manager,
                     scope_id,
                     instructions,
@@ -589,13 +589,13 @@ impl Locatable for ListAccess {
         Ok(None)
     }
 
-    fn access_from(
+    fn access_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: MemoryAddress,
-    ) -> Result<(), CodeGenerationError> {
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -615,7 +615,7 @@ impl Locatable for ListAccess {
         {
             Some(address) => {
                 // the address is static
-                let _ = self.index.gencode(
+                let _ = self.index.gencode::<E>(
                     scope_manager,
                     scope_id,
                     instructions,
@@ -635,7 +635,7 @@ impl Locatable for ListAccess {
                     size: Some(POINTER_SIZE),
                 }));
 
-                let _ = self.index.gencode(
+                let _ = self.index.gencode::<E>(
                     scope_manager,
                     scope_id,
                     instructions,
@@ -653,12 +653,12 @@ impl Locatable for ListAccess {
         Ok(())
     }
 
-    fn runtime_access(
+    fn runtime_access<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -679,7 +679,7 @@ impl Locatable for ListAccess {
         {
             Some(address) => {
                 // the address is static
-                let _ = self.index.gencode(
+                let _ = self.index.gencode::<E>(
                     scope_manager,
                     scope_id,
                     instructions,
@@ -696,7 +696,7 @@ impl Locatable for ListAccess {
             None => {
                 // the address was pushed on the stack
 
-                let _ = self.index.gencode(
+                let _ = self.index.gencode::<E>(
                     scope_manager,
                     scope_id,
                     instructions,
@@ -719,13 +719,13 @@ impl Locatable for Call {
     fn is_assignable(&self) -> bool {
         false
     }
-    fn locate(
+    fn locate<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
-        self.gencode(
+        self.gencode::<E>(
             scope_manager,
             scope_id,
             instructions,
@@ -739,32 +739,32 @@ impl Locatable for Call {
         Ok(None)
     }
 
-    fn locate_from(
+    fn locate_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         Err(CodeGenerationError::Unlocatable)
     }
 
-    fn access_from(
+    fn access_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: MemoryAddress,
-    ) -> Result<(), CodeGenerationError> {
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         Err(CodeGenerationError::Unlocatable)
     }
 
-    fn runtime_access(
+    fn runtime_access<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         Err(CodeGenerationError::Unlocatable)
     }
 }
@@ -773,13 +773,13 @@ impl Locatable for ExprCall {
     fn is_assignable(&self) -> bool {
         false
     }
-    fn locate(
+    fn locate<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
-        self.gencode(
+        self.gencode::<E>(
             scope_manager,
             scope_id,
             instructions,
@@ -793,32 +793,32 @@ impl Locatable for ExprCall {
         Ok(None)
     }
 
-    fn locate_from(
+    fn locate_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         Err(CodeGenerationError::Unlocatable)
     }
 
-    fn access_from(
+    fn access_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: MemoryAddress,
-    ) -> Result<(), CodeGenerationError> {
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         Err(CodeGenerationError::Unlocatable)
     }
 
-    fn runtime_access(
+    fn runtime_access<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         Err(CodeGenerationError::Unlocatable)
     }
 }
@@ -833,11 +833,11 @@ impl Locatable for Expression {
             _ => false,
         }
     }
-    fn locate(
+    fn locate<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
             Expression::FieldAccess(value) => value.locate(scope_manager, scope_id, instructions),
@@ -849,11 +849,11 @@ impl Locatable for Expression {
         }
     }
 
-    fn locate_from(
+    fn locate_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
@@ -876,13 +876,13 @@ impl Locatable for Expression {
         }
     }
 
-    fn access_from(
+    fn access_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: MemoryAddress,
-    ) -> Result<(), CodeGenerationError> {
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             Expression::FieldAccess(value) => {
                 value.access_from(scope_manager, scope_id, instructions, address)
@@ -903,12 +903,12 @@ impl Locatable for Expression {
         }
     }
 
-    fn runtime_access(
+    fn runtime_access<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             Expression::FieldAccess(value) => {
                 value.runtime_access(scope_manager, scope_id, instructions)
@@ -937,11 +937,11 @@ impl Locatable for Atomic {
             _ => false,
         }
     }
-    fn locate(
+    fn locate<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
             Atomic::Data(value) => value.locate(scope_manager, scope_id, instructions),
@@ -950,11 +950,11 @@ impl Locatable for Atomic {
         }
     }
 
-    fn locate_from(
+    fn locate_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
@@ -968,13 +968,13 @@ impl Locatable for Atomic {
         }
     }
 
-    fn access_from(
+    fn access_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: MemoryAddress,
-    ) -> Result<(), CodeGenerationError> {
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             Atomic::Data(value) => {
                 value.access_from(scope_manager, scope_id, instructions, address)
@@ -986,12 +986,12 @@ impl Locatable for Atomic {
         }
     }
 
-    fn runtime_access(
+    fn runtime_access<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             Atomic::Data(value) => value.runtime_access(scope_manager, scope_id, instructions),
             Atomic::Paren(value) => value.runtime_access(scope_manager, scope_id, instructions),
@@ -1008,11 +1008,11 @@ impl Locatable for Data {
             _ => false,
         }
     }
-    fn locate(
+    fn locate<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
             Data::Address(value) => value.locate(scope_manager, scope_id, instructions),
@@ -1023,11 +1023,11 @@ impl Locatable for Data {
         }
     }
 
-    fn locate_from(
+    fn locate_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
@@ -1045,13 +1045,13 @@ impl Locatable for Data {
         }
     }
 
-    fn access_from(
+    fn access_from<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
+        instructions: &mut crate::vm::program::Program<E>,
         address: MemoryAddress,
-    ) -> Result<(), CodeGenerationError> {
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             Data::Address(value) => {
                 value.access_from(scope_manager, scope_id, instructions, address)
@@ -1067,12 +1067,12 @@ impl Locatable for Data {
         }
     }
 
-    fn runtime_access(
+    fn runtime_access<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::asm::Program,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             Data::Address(value) => value.runtime_access(scope_manager, scope_id, instructions),
             Data::PtrAccess(value) => value.runtime_access(scope_manager, scope_id, instructions),

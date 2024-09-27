@@ -6,7 +6,6 @@ use nom::{
 };
 use operation::ExprCall;
 
-use crate::semantic::{scope::scope::ScopeManager, Desugar, ResolveNumber};
 use crate::{
     ast::{
         expressions::operation::LogicalOr,
@@ -21,10 +20,13 @@ use crate::{
         allocator::MemoryAddress,
         asm::{
             locate::{Locate, LocateOffsetFromStackPointer},
-            Asm, Program,
+            Asm,
         },
-        vm::{CodeGenerationError, GenerateCode},
     },
+};
+use crate::{
+    semantic::{scope::scope::ScopeManager, Desugar, ResolveNumber},
+    vm::GenerateCode,
 };
 
 use self::operation::{
@@ -138,7 +140,7 @@ impl Resolve for Atomic {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -149,20 +151,20 @@ impl Resolve for Atomic {
         Self: Sized,
     {
         match self {
-            Atomic::Data(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Atomic::Data(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Atomic::UnaryOperation(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
-            Atomic::Paren(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Atomic::Paren(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Atomic::ExprFlow(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
         }
     }
 }
 
 impl ResolveFromStruct for Atomic {
-    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+    fn resolve_from_struct<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -170,10 +172,10 @@ impl ResolveFromStruct for Atomic {
     ) -> Result<(), SemanticError> {
         match self {
             Atomic::Data(value) => {
-                value.resolve_from_struct::<G>(scope_manager, scope_id, struct_id)
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
             }
             Atomic::Paren(value) => {
-                value.resolve_from_struct::<G>(scope_manager, scope_id, struct_id)
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
             }
             _ => Err(SemanticError::UnknownField),
         }
@@ -181,19 +183,19 @@ impl ResolveFromStruct for Atomic {
 }
 
 impl Desugar<Expression> for Atomic {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
         let output = match self {
-            Atomic::Data(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Atomic::UnaryOperation(value) => value.desugar::<G>(scope_manager, scope_id)?,
+            Atomic::Data(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Atomic::UnaryOperation(value) => value.desugar::<E>(scope_manager, scope_id)?,
             Atomic::Paren(value) => {
-                let _ = value.desugar::<G>(scope_manager, scope_id)?;
+                let _ = value.desugar::<E>(scope_manager, scope_id)?;
                 None
             }
-            Atomic::ExprFlow(value) => value.desugar::<G>(scope_manager, scope_id)?,
+            Atomic::ExprFlow(value) => value.desugar::<E>(scope_manager, scope_id)?,
         };
 
         if let Some(output) = output {
@@ -246,7 +248,7 @@ impl Resolve for Expression {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -258,58 +260,58 @@ impl Resolve for Expression {
     {
         match self {
             Expression::Product(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::Addition(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::Substraction(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::Shift(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::BitwiseAnd(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::BitwiseXOR(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::BitwiseOR(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::Comparaison(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::LogicalAnd(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::Equation(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::LogicalOr(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::Atomic(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, extra)
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
             }
             Expression::Cast(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::Range(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
             Expression::FieldAccess(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, extra)
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
             }
             Expression::ListAccess(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, extra)
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
             }
             Expression::TupleAccess(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, extra)
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
             }
             Expression::ExprCall(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, extra)
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
             }
         }
     }
@@ -390,7 +392,7 @@ impl ResolveNumber for Atomic {
 }
 
 impl ResolveFromStruct for Expression {
-    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+    fn resolve_from_struct<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -398,16 +400,16 @@ impl ResolveFromStruct for Expression {
     ) -> Result<(), SemanticError> {
         match self {
             Expression::FieldAccess(value) => {
-                value.resolve_from_struct::<G>(scope_manager, scope_id, struct_id)
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
             }
             Expression::ListAccess(value) => {
-                value.resolve_from_struct::<G>(scope_manager, scope_id, struct_id)
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
             }
             Expression::TupleAccess(value) => {
-                value.resolve_from_struct::<G>(scope_manager, scope_id, struct_id)
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
             }
             Expression::Atomic(value) => {
-                value.resolve_from_struct::<G>(scope_manager, scope_id, struct_id)
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
             }
             _ => Err(SemanticError::UnknownField),
         }
@@ -415,30 +417,30 @@ impl ResolveFromStruct for Expression {
 }
 
 impl Desugar<Expression> for Expression {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Expression>, SemanticError> {
         let output = match self {
-            Expression::Product(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::Addition(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::Substraction(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::Shift(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::BitwiseAnd(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::BitwiseXOR(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::BitwiseOR(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::Cast(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::Comparaison(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::Equation(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::LogicalAnd(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::LogicalOr(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::Range(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::FieldAccess(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::ListAccess(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::TupleAccess(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::ExprCall(value) => value.desugar::<G>(scope_manager, scope_id)?,
-            Expression::Atomic(value) => value.desugar::<G>(scope_manager, scope_id)?,
+            Expression::Product(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Addition(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Substraction(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Shift(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::BitwiseAnd(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::BitwiseXOR(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::BitwiseOR(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Cast(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Comparaison(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Equation(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::LogicalAnd(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::LogicalOr(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Range(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::FieldAccess(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::ListAccess(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::TupleAccess(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::ExprCall(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Atomic(value) => value.desugar::<E>(scope_manager, scope_id)?,
         };
 
         if let Some(output) = output {
@@ -482,88 +484,92 @@ impl TypeOf for Expression {
 }
 
 impl GenerateCode for Expression {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             Expression::Product(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::Addition(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::Substraction(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::Shift(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::BitwiseAnd(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::BitwiseXOR(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::BitwiseOR(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::Cast(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::Comparaison(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::Equation(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::LogicalAnd(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::LogicalOr(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::Atomic(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::Range(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::FieldAccess(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::ListAccess(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::TupleAccess(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Expression::ExprCall(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
         }
     }
 }
 
 impl GenerateCode for Atomic {
-    fn gencode(
+    fn gencode<E:crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
-            Atomic::Data(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Atomic::UnaryOperation(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+            Atomic::Data(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
-            Atomic::Paren(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Atomic::UnaryOperation(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Atomic::Paren(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
             Atomic::ExprFlow(value) => {
-                value.gencode(scope_manager, scope_id, instructions, context)
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
         }
     }

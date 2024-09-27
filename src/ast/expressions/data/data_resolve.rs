@@ -29,7 +29,7 @@ impl Resolve for Data {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -40,23 +40,23 @@ impl Resolve for Data {
         Self: Sized,
     {
         match self {
-            Data::Primitive(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::Slice(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::Vec(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::Closure(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::Lambda(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::Tuple(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::Address(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::PtrAccess(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::Variable(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Data::Primitive(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Slice(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Vec(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Closure(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Lambda(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Tuple(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Address(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::PtrAccess(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Variable(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Data::Unit => Ok(()),
-            Data::Map(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::Struct(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::Union(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::Enum(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::StrSlice(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::Call(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
-            Data::Printf(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Map(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Struct(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Union(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Enum(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::StrSlice(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Call(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Printf(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
         }
     }
 }
@@ -81,7 +81,7 @@ impl ResolveNumber for Data {
 }
 
 impl ResolveFromStruct for Data {
-    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+    fn resolve_from_struct<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -89,38 +89,38 @@ impl ResolveFromStruct for Data {
     ) -> Result<(), SemanticError> {
         match self {
             Data::Variable(value) => {
-                value.resolve_from_struct::<G>(scope_manager, scope_id, struct_id)
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
             }
-            Data::Call(value) => value.resolve_from_struct::<G>(scope_manager, scope_id, struct_id),
+            Data::Call(value) => value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id),
             _ => Err(SemanticError::UnknownField),
         }
     }
 }
 
 impl Desugar<Atomic> for Data {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
         match self {
             Data::Primitive(value) => Ok(None),
-            Data::Slice(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Slice(value) => value.desugar::<E>(scope_manager, scope_id),
             Data::StrSlice(value) => Ok(None),
-            Data::Vec(value) => value.desugar::<G>(scope_manager, scope_id),
-            Data::Closure(value) => value.desugar::<G>(scope_manager, scope_id),
-            Data::Lambda(value) => value.desugar::<G>(scope_manager, scope_id),
-            Data::Tuple(value) => value.desugar::<G>(scope_manager, scope_id),
-            Data::Address(value) => value.desugar::<G>(scope_manager, scope_id),
-            Data::PtrAccess(value) => value.desugar::<G>(scope_manager, scope_id),
-            Data::Variable(value) => value.desugar::<G>(scope_manager, scope_id),
-            Data::Call(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Vec(value) => value.desugar::<E>(scope_manager, scope_id),
+            Data::Closure(value) => value.desugar::<E>(scope_manager, scope_id),
+            Data::Lambda(value) => value.desugar::<E>(scope_manager, scope_id),
+            Data::Tuple(value) => value.desugar::<E>(scope_manager, scope_id),
+            Data::Address(value) => value.desugar::<E>(scope_manager, scope_id),
+            Data::PtrAccess(value) => value.desugar::<E>(scope_manager, scope_id),
+            Data::Variable(value) => value.desugar::<E>(scope_manager, scope_id),
+            Data::Call(value) => value.desugar::<E>(scope_manager, scope_id),
             Data::Unit => Ok(None),
-            Data::Map(value) => value.desugar::<G>(scope_manager, scope_id),
-            Data::Struct(value) => value.desugar::<G>(scope_manager, scope_id),
-            Data::Union(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Map(value) => value.desugar::<E>(scope_manager, scope_id),
+            Data::Struct(value) => value.desugar::<E>(scope_manager, scope_id),
+            Data::Union(value) => value.desugar::<E>(scope_manager, scope_id),
             Data::Enum(value) => Ok(None),
-            Data::Printf(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Printf(value) => value.desugar::<E>(scope_manager, scope_id),
         }
     }
 }
@@ -128,7 +128,7 @@ impl Resolve for Variable {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -158,7 +158,7 @@ impl Resolve for Variable {
 }
 
 impl ResolveFromStruct for Variable {
-    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+    fn resolve_from_struct<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -199,7 +199,7 @@ impl ResolveFromStruct for Variable {
 }
 
 impl Desugar<Atomic> for Variable {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -304,7 +304,7 @@ impl Resolve for Primitive {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -336,7 +336,7 @@ impl Resolve for Slice {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -356,7 +356,7 @@ impl Resolve for Slice {
                     }
                     for value in &mut self.value {
                         let _ =
-                            value.resolve::<G>(scope_manager, scope_id, sitem_type, &mut None)?;
+                            value.resolve::<E>(scope_manager, scope_id, sitem_type, &mut None)?;
                         let _ = item_type.compatible_with(
                             &value.type_of(scope_manager, scope_id)?,
                             &scope_manager,
@@ -385,11 +385,11 @@ impl Resolve for Slice {
                         "of an empty array".to_string(),
                     ));
                 }
-                let _ = self.value[0].resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = self.value[0].resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let item_type = self.value[0].type_of(scope_manager, scope_id)?;
 
                 for value in &mut self.value[1..] {
-                    let _ = value.resolve::<G>(
+                    let _ = value.resolve::<E>(
                         scope_manager,
                         scope_id,
                         &Some(item_type.clone()),
@@ -420,13 +420,13 @@ impl Resolve for Slice {
 }
 
 impl Desugar<Atomic> for Slice {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
         for expr in self.value.iter_mut() {
-            if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = expr.desugar::<E>(scope_manager, scope_id)? {
                 *expr = output;
             }
         }
@@ -438,7 +438,7 @@ impl Resolve for StrSlice {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -467,7 +467,7 @@ impl Resolve for Vector {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -485,7 +485,7 @@ impl Resolve for Vector {
 
                     for value in &mut self.value {
                         let _ =
-                            value.resolve::<G>(scope_manager, scope_id, sitem_type, &mut None)?;
+                            value.resolve::<E>(scope_manager, scope_id, sitem_type, &mut None)?;
                         let _ = item_type.compatible_with(
                             &value.type_of(scope_manager, scope_id)?,
                             &scope_manager,
@@ -508,11 +508,11 @@ impl Resolve for Vector {
                         "of an empty array".to_string(),
                     ));
                 }
-                let _ = self.value[0].resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = self.value[0].resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let item_type = self.value[0].type_of(scope_manager, scope_id)?;
 
                 for value in &mut self.value[1..] {
-                    let _ = value.resolve::<G>(
+                    let _ = value.resolve::<E>(
                         scope_manager,
                         scope_id,
                         &Some(item_type.clone()),
@@ -537,13 +537,13 @@ impl Resolve for Vector {
 }
 
 impl Desugar<Atomic> for Vector {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
         for expr in self.value.iter_mut() {
-            if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = expr.desugar::<E>(scope_manager, scope_id)? {
                 *expr = output;
             }
         }
@@ -555,7 +555,7 @@ impl Resolve for Tuple {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -572,7 +572,7 @@ impl Resolve for Tuple {
                         return Err(SemanticError::IncompatibleTypes);
                     }
                     for (value, value_type) in self.value.iter_mut().zip(values_type) {
-                        let _ = value.resolve::<G>(
+                        let _ = value.resolve::<E>(
                             scope_manager,
                             scope_id,
                             &Some(value_type.clone()),
@@ -599,7 +599,7 @@ impl Resolve for Tuple {
             None => {
                 let mut values_type = Vec::new();
                 for value in &mut self.value {
-                    let _ = value.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                    let _ = value.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                     values_type.push(value.type_of(&scope_manager, scope_id)?);
                 }
 
@@ -615,13 +615,13 @@ impl Resolve for Tuple {
 }
 
 impl Desugar<Atomic> for Tuple {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
         for expr in self.value.iter_mut() {
-            if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = expr.desugar::<E>(scope_manager, scope_id)? {
                 *expr = output;
             }
         }
@@ -633,7 +633,7 @@ impl Resolve for Closure {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -655,7 +655,7 @@ impl Resolve for Closure {
                 };
 
                 for (param, expected_param) in self.params.iter_mut().zip(params) {
-                    let _ = param.resolve::<G>(
+                    let _ = param.resolve::<E>(
                         scope_manager,
                         Some(inner_scope),
                         &Some(expected_param.clone()),
@@ -663,7 +663,7 @@ impl Resolve for Closure {
                     )?;
                 }
 
-                let _ = self.block.resolve::<G>(
+                let _ = self.block.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(ret.as_ref().clone()),
@@ -672,12 +672,12 @@ impl Resolve for Closure {
             }
             None => {
                 for param in self.params.iter_mut() {
-                    let _ = param.resolve::<G>(scope_manager, Some(inner_scope), &None, &mut ())?;
+                    let _ = param.resolve::<E>(scope_manager, Some(inner_scope), &None, &mut ())?;
                 }
 
                 let _ = self
                     .block
-                    .resolve::<G>(scope_manager, scope_id, &None, &mut ())?;
+                    .resolve::<E>(scope_manager, scope_id, &None, &mut ())?;
             }
         }
 
@@ -711,12 +711,12 @@ impl Resolve for Closure {
 }
 
 impl Desugar<Atomic> for Closure {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
-        if let Some(output) = self.block.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.block.desugar::<E>(scope_manager, scope_id)? {
             self.block = output;
         }
         Ok(None)
@@ -727,7 +727,7 @@ impl Resolve for ClosureParam {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -739,7 +739,7 @@ impl Resolve for ClosureParam {
     {
         match self {
             ClosureParam::Full(var) => {
-                let _ = var.resolve::<G>(scope_manager, scope_id, &mut (), &mut ());
+                let _ = var.resolve::<E>(scope_manager, scope_id, &mut (), &mut ());
                 let var_type = var.type_of(scope_manager, scope_id)?;
 
                 if let Some(context) = context {
@@ -768,7 +768,7 @@ impl Resolve for Lambda {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -789,7 +789,7 @@ impl Resolve for Lambda {
                 };
 
                 for (param, expected_param) in self.params.iter_mut().zip(params) {
-                    let _ = param.resolve::<G>(
+                    let _ = param.resolve::<E>(
                         scope_manager,
                         Some(inner_scope),
                         &Some(expected_param.clone()),
@@ -797,7 +797,7 @@ impl Resolve for Lambda {
                     )?;
                 }
 
-                let _ = self.block.resolve::<G>(
+                let _ = self.block.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(ret.as_ref().clone()),
@@ -806,12 +806,12 @@ impl Resolve for Lambda {
             }
             None => {
                 for param in self.params.iter_mut() {
-                    let _ = param.resolve::<G>(scope_manager, Some(inner_scope), &None, &mut ())?;
+                    let _ = param.resolve::<E>(scope_manager, Some(inner_scope), &None, &mut ())?;
                 }
 
                 let _ = self
                     .block
-                    .resolve::<G>(scope_manager, scope_id, &None, &mut ())?;
+                    .resolve::<E>(scope_manager, scope_id, &None, &mut ())?;
             }
         }
 
@@ -833,12 +833,12 @@ impl Resolve for Lambda {
 }
 
 impl Desugar<Atomic> for Lambda {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
-        if let Some(output) = self.block.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.block.desugar::<E>(scope_manager, scope_id)? {
             self.block = output;
         }
         Ok(None)
@@ -849,7 +849,7 @@ impl Resolve for Address {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -867,7 +867,7 @@ impl Resolve for Address {
         }
         let _ = self
             .value
-            .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+            .resolve::<E>(scope_manager, scope_id, context, &mut None)?;
         self.metadata.info = crate::semantic::Info::Resolved {
             context: context.clone(),
             signature: Some(self.type_of(scope_manager, scope_id)?),
@@ -877,13 +877,13 @@ impl Resolve for Address {
 }
 
 impl Desugar<Atomic> for Address {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
         if let Some(Expression::Atomic(output)) =
-            self.value.desugar::<G>(scope_manager, scope_id)?
+            self.value.desugar::<E>(scope_manager, scope_id)?
         {
             self.value = output.into();
         }
@@ -895,7 +895,7 @@ impl Resolve for PtrAccess {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -907,7 +907,7 @@ impl Resolve for PtrAccess {
     {
         let _ = self
             .value
-            .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+            .resolve::<E>(scope_manager, scope_id, context, &mut None)?;
 
         let address_type = self.value.type_of(&scope_manager, scope_id)?;
 
@@ -938,13 +938,13 @@ impl Resolve for PtrAccess {
 }
 
 impl Desugar<Atomic> for PtrAccess {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
         if let Some(Expression::Atomic(output)) =
-            self.value.desugar::<G>(scope_manager, scope_id)?
+            self.value.desugar::<E>(scope_manager, scope_id)?
         {
             self.value = output.into();
         }
@@ -956,7 +956,7 @@ impl Resolve for Struct {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -981,7 +981,7 @@ impl Resolve for Struct {
                 return Err(SemanticError::UnknownField);
             };
 
-            let _ = expr.resolve::<G>(
+            let _ = expr.resolve::<E>(
                 scope_manager,
                 scope_id,
                 &Some(field_type.clone()),
@@ -1003,13 +1003,13 @@ impl Resolve for Struct {
 }
 
 impl Desugar<Atomic> for Struct {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
         for (_, expr) in self.fields.iter_mut() {
-            if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = expr.desugar::<E>(scope_manager, scope_id)? {
                 *expr = output;
             }
         }
@@ -1021,7 +1021,7 @@ impl Resolve for Union {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1053,7 +1053,7 @@ impl Resolve for Union {
                 return Err(SemanticError::UnknownField);
             };
 
-            let _ = expr.resolve::<G>(
+            let _ = expr.resolve::<E>(
                 scope_manager,
                 scope_id,
                 &Some(field_type.clone()),
@@ -1075,13 +1075,13 @@ impl Resolve for Union {
 }
 
 impl Desugar<Atomic> for Union {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
         for (_, expr) in self.fields.iter_mut() {
-            if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = expr.desugar::<E>(scope_manager, scope_id)? {
                 *expr = output;
             }
         }
@@ -1093,7 +1093,7 @@ impl Resolve for Enum {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1125,7 +1125,7 @@ impl Resolve for Map {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1147,14 +1147,14 @@ impl Resolve for Map {
                     let svalue_type = &Some(value_type);
 
                     for (key, value) in &mut self.fields {
-                        let _ = key.resolve::<G>(scope_manager, scope_id, skey_type, &mut None)?;
+                        let _ = key.resolve::<E>(scope_manager, scope_id, skey_type, &mut None)?;
                         let _ = keys_type.compatible_with(
                             &key.type_of(scope_manager, scope_id)?,
                             &scope_manager,
                             scope_id,
                         )?;
                         let _ =
-                            value.resolve::<G>(scope_manager, scope_id, svalue_type, &mut None)?;
+                            value.resolve::<E>(scope_manager, scope_id, svalue_type, &mut None)?;
                         let _ = values_type.compatible_with(
                             &value.type_of(scope_manager, scope_id)?,
                             &scope_manager,
@@ -1180,7 +1180,7 @@ impl Resolve for Map {
                 let mut current_value_type: Option<EType> = None;
 
                 for (key, value) in &mut self.fields {
-                    let _ = key.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                    let _ = key.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
 
                     let key_type = key.type_of(scope_manager, scope_id)?;
                     if let Some(current_key_type) = &current_key_type {
@@ -1189,7 +1189,7 @@ impl Resolve for Map {
                     }
                     let _ = current_key_type.insert(key_type);
 
-                    let _ = value.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                    let _ = value.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
 
                     let value_type = value.type_of(scope_manager, scope_id)?;
                     if let Some(current_value_type) = &current_value_type {
@@ -1226,16 +1226,16 @@ impl Resolve for Map {
 }
 
 impl Desugar<Atomic> for Map {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
         for (key, value) in self.fields.iter_mut() {
-            if let Some(output) = key.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = key.desugar::<E>(scope_manager, scope_id)? {
                 *key = output;
             }
-            if let Some(output) = value.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = value.desugar::<E>(scope_manager, scope_id)? {
                 *value = output;
             }
         }
@@ -1247,7 +1247,7 @@ impl Resolve for Call {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1302,7 +1302,7 @@ impl Resolve for Call {
 
                         let mut params_size = 0;
                         for (arg, param) in self.args.args.iter_mut().zip(params) {
-                            let _ = arg.resolve::<G>(
+                            let _ = arg.resolve::<E>(
                                 scope_manager,
                                 scope_id,
                                 &Some(param.clone()),
@@ -1327,7 +1327,7 @@ impl Resolve for Call {
             }
             LeftCall::ExternCall(extern_call) => todo!(),
             LeftCall::CoreCall(CoreCall { path }) => {
-                let return_type = path.resolve::<G>(
+                let return_type = path.resolve::<E>(
                     scope_manager,
                     scope_id,
                     context.as_ref(),
@@ -1346,7 +1346,7 @@ impl Resolve for Call {
 }
 
 impl ResolveFromStruct for Call {
-    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+    fn resolve_from_struct<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1357,7 +1357,7 @@ impl ResolveFromStruct for Call {
 }
 
 impl Desugar<Atomic> for Call {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1384,7 +1384,7 @@ impl Resolve for Printf {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1398,7 +1398,7 @@ impl Resolve for Printf {
             match item {
                 FormatItem::Str(_) => {}
                 FormatItem::Expr(expr) => {
-                    let _ = expr.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                    let _ = expr.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 }
             }
         }
@@ -1411,7 +1411,7 @@ impl Resolve for Printf {
 }
 
 impl Desugar<Atomic> for Printf {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -1420,7 +1420,7 @@ impl Desugar<Atomic> for Printf {
             match item {
                 FormatItem::Str(_) => {}
                 FormatItem::Expr(expr) => {
-                    if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+                    if let Some(output) = expr.desugar::<E>(scope_manager, scope_id)? {
                         *expr = output;
                     }
                 }
@@ -1455,7 +1455,7 @@ mod tests {
             .1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = primitive.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = primitive.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1463,7 +1463,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res = primitive.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = primitive.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(p_num!(I64)),
@@ -1478,7 +1478,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = primitive.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = primitive.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1496,7 +1496,7 @@ mod tests {
             .1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = string.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = string.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1504,7 +1504,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res = string.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = string.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(StaticType::StrSlice(StrSliceType {}).into())),
@@ -1519,7 +1519,7 @@ mod tests {
             .1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = slice.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = slice.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1527,7 +1527,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res = slice.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = slice.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1549,7 +1549,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = string.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = string.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1566,7 +1566,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = slice.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = slice.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1590,7 +1590,7 @@ mod tests {
             .1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = vector.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = vector.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1598,7 +1598,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res = vector.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = vector.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1616,7 +1616,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = vector.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = vector.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1637,7 +1637,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = variable.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1657,7 +1657,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = variable.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1672,7 +1672,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = variable.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1696,7 +1696,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = variable.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1717,7 +1717,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = variable.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1760,7 +1760,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = variable.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1781,7 +1781,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = address.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = address.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1804,7 +1804,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = tuple.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = tuple.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1812,7 +1812,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res = tuple.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = tuple.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1833,7 +1833,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = tuple.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = tuple.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1847,7 +1847,7 @@ mod tests {
         );
         assert!(res.is_err());
 
-        let res = tuple.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = tuple.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1864,11 +1864,15 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            map.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = map.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res = map.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = map.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1890,7 +1894,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = map.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = map.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1906,7 +1910,7 @@ mod tests {
         );
         assert!(res.is_err());
 
-        let res = map.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = map.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1943,7 +1947,7 @@ mod tests {
             )
             .unwrap();
 
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1958,7 +1962,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1984,7 +1988,7 @@ mod tests {
             )
             .unwrap();
 
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2034,7 +2038,7 @@ mod tests {
             )
             .unwrap();
 
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2050,7 +2054,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2089,7 +2093,7 @@ mod tests {
         let mut object = Union::parse(r##"Geo::Axe { x : 2, y : 8}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2100,7 +2104,7 @@ mod tests {
         let mut object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2129,7 +2133,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2158,7 +2162,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,

@@ -1,9 +1,7 @@
 use num_traits::ToBytes;
 
-use crate::{
-    semantic::scope::static_types::NumberType,
-    vm::{allocator::stack::Stack, vm::RuntimeError},
-};
+use crate::vm::runtime::RuntimeError;
+use crate::{semantic::scope::static_types::NumberType, vm::allocator::stack::Stack};
 
 use super::operation::{OpPrimitive, PopNum};
 

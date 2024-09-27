@@ -14,7 +14,7 @@ impl Resolve for Loop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -25,15 +25,15 @@ impl Resolve for Loop {
         Self: Sized,
     {
         match self {
-            Loop::For(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            Loop::While(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Loop::For(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Loop::While(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Loop::Loop(value) => {
                 let inner_scope = value.init_from_parent(scope_manager, scope_id)?;
                 scope_manager
                     .scope_states
                     .insert(inner_scope, ScopeState::Loop);
 
-                let _ = value.resolve::<G>(scope_manager, scope_id, &context, &mut ())?;
+                let _ = value.resolve::<E>(scope_manager, scope_id, &context, &mut ())?;
                 Ok(())
             }
         }
@@ -41,16 +41,16 @@ impl Resolve for Loop {
 }
 
 impl Desugar<Statement> for Loop {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Statement>, SemanticError> {
         match self {
-            Loop::For(for_loop) => for_loop.desugar::<G>(scope_manager, scope_id),
-            Loop::While(while_loop) => while_loop.desugar::<G>(scope_manager, scope_id),
+            Loop::For(for_loop) => for_loop.desugar::<E>(scope_manager, scope_id),
+            Loop::While(while_loop) => while_loop.desugar::<E>(scope_manager, scope_id),
             Loop::Loop(block) => {
-                let _: Option<Block> = block.desugar::<G>(scope_manager, scope_id)?;
+                let _: Option<Block> = block.desugar::<E>(scope_manager, scope_id)?;
                 Ok(None)
             }
         }
@@ -58,7 +58,7 @@ impl Desugar<Statement> for Loop {
 }
 
 impl Desugar<Statement> for ForLoop {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -67,14 +67,14 @@ impl Desugar<Statement> for ForLoop {
             match index {
                 ForInit::Assignation(assignation) => {
                     if let Some(Statement::Assignation(output)) =
-                        assignation.desugar::<G>(scope_manager, scope_id)?
+                        assignation.desugar::<E>(scope_manager, scope_id)?
                     {
                         *index = ForInit::Assignation(output);
                     }
                 }
                 ForInit::Declaration(declaration) => {
                     if let Some(Statement::Declaration(output)) =
-                        declaration.desugar::<G>(scope_manager, scope_id)?
+                        declaration.desugar::<E>(scope_manager, scope_id)?
                     {
                         *index = ForInit::Declaration(output);
                     }
@@ -82,19 +82,19 @@ impl Desugar<Statement> for ForLoop {
             }
         }
 
-        if let Some(output) = self.block.desugar::<G>(scope_manager, scope_id)? {
+        if let Some(output) = self.block.desugar::<E>(scope_manager, scope_id)? {
             self.block = Box::new(output);
         }
 
         if let Some(condition) = &mut self.condition {
-            if let Some(output) = condition.desugar::<G>(scope_manager, scope_id)? {
+            if let Some(output) = condition.desugar::<E>(scope_manager, scope_id)? {
                 *condition = output;
             }
         }
 
         for increment in self.increments.iter_mut() {
             if let Some(Statement::Assignation(output)) =
-                increment.desugar::<G>(scope_manager, scope_id)?
+                increment.desugar::<E>(scope_manager, scope_id)?
             {
                 *increment = output;
             }
@@ -104,13 +104,13 @@ impl Desugar<Statement> for ForLoop {
     }
 }
 impl Desugar<Statement> for WhileLoop {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Statement>, SemanticError> {
-        let _: Option<Block> = self.block.desugar::<G>(scope_manager, scope_id)?;
-        self.condition.desugar::<G>(scope_manager, scope_id)?;
+        let _: Option<Block> = self.block.desugar::<E>(scope_manager, scope_id)?;
+        self.condition.desugar::<E>(scope_manager, scope_id)?;
         Ok(None)
     }
 }
@@ -118,7 +118,7 @@ impl Resolve for ForLoop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -131,16 +131,16 @@ impl Resolve for ForLoop {
         for index in self.indices.iter_mut() {
             match index {
                 ForInit::Assignation(assignation) => {
-                    let _ = assignation.resolve::<G>(scope_manager, scope_id, context, extra)?;
+                    let _ = assignation.resolve::<E>(scope_manager, scope_id, context, extra)?;
                 }
                 ForInit::Declaration(declaration) => {
-                    let _ = declaration.resolve::<G>(scope_manager, scope_id, context, extra)?;
+                    let _ = declaration.resolve::<E>(scope_manager, scope_id, context, extra)?;
                 }
             }
         }
 
         if let Some(condition) = &mut self.condition {
-            let _ = condition.resolve::<G>(
+            let _ = condition.resolve::<E>(
                 scope_manager,
                 scope_id,
                 &Some(EType::Static(StaticType::Primitive(PrimitiveType::Bool))),
@@ -154,7 +154,7 @@ impl Resolve for ForLoop {
         }
 
         for increment in self.increments.iter_mut() {
-            let _ = increment.resolve::<G>(scope_manager, scope_id, context, extra)?;
+            let _ = increment.resolve::<E>(scope_manager, scope_id, context, extra)?;
         }
 
         let inner = self.block.init_from_parent(scope_manager, scope_id)?;
@@ -162,7 +162,7 @@ impl Resolve for ForLoop {
 
         let _ = self
             .block
-            .resolve::<G>(scope_manager, scope_id, context, extra)?;
+            .resolve::<E>(scope_manager, scope_id, context, extra)?;
 
         Ok(())
     }
@@ -172,7 +172,7 @@ impl Resolve for WhileLoop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -184,7 +184,7 @@ impl Resolve for WhileLoop {
     {
         let _ = self
             .condition
-            .resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+            .resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
         // check that the condition is a boolean
         let condition_type = self.condition.type_of(&scope_manager, scope_id)?;
         if EType::Static(StaticType::Primitive(PrimitiveType::Bool)) != condition_type {
@@ -196,7 +196,7 @@ impl Resolve for WhileLoop {
             .insert(inner_scope, ScopeState::Loop);
         let _ = self
             .block
-            .resolve::<G>(scope_manager, scope_id, context, &mut ())?;
+            .resolve::<E>(scope_manager, scope_id, context, &mut ())?;
         Ok(())
     }
 }
@@ -222,7 +222,7 @@ mod tests {
         .1;
         let mut scope_manager = scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_loop.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -242,7 +242,7 @@ mod tests {
         .1;
         let mut scope_manager = scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_loop.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -265,7 +265,7 @@ mod tests {
         .1;
         let mut scope_manager = scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_loop.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -288,7 +288,7 @@ mod tests {
         .1;
         let mut scope_manager = scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_loop.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -311,7 +311,7 @@ mod tests {
         .1;
         let mut scope_manager = scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_loop.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -333,7 +333,7 @@ mod tests {
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
 
         let _ = scope_manager.register_var("y", p_num!(I64), None).unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_loop.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -356,7 +356,7 @@ mod tests {
         .1;
         let mut scope_manager = scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_loop.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -379,7 +379,7 @@ mod tests {
         .1;
         let mut scope_manager = scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_loop.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -402,7 +402,7 @@ mod tests {
         .1;
         let mut scope_manager = scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(
+        let res = expr_loop.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,
             None,
             &None,

@@ -14,16 +14,15 @@ use crate::vm::asm::operation::{OpPrimitive, PopNum};
 use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
 
-use crate::vm::core::CoreCasm;
+use crate::vm::core::CoreAsm;
+use crate::vm::program::Program;
+use crate::vm::runtime::RuntimeError;
+use crate::vm::scheduler_v2::Executable;
 use crate::vm::stdio::StdIO;
-use crate::vm::vm::{CasmMetadata, Executable, RuntimeError};
+use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, Resolve, SemanticError},
-    vm::{
-        asm::Program,
-        vm::{CodeGenerationError, GenerateCode},
-    },
 };
 
 use super::{PathFinder, ERROR_VALUE, OK_VALUE};
@@ -36,7 +35,7 @@ pub enum IOFn {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum IOCasm {
+pub enum IOAsm {
     PrintStr,
     PrintString,
     PrintlnStr,
@@ -49,29 +48,31 @@ pub enum IOCasm {
     RequestScan,
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IOCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for IOAsm {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
-            IOCasm::PrintStr => stdio.push_asm_lib(engine, "print"),
-            IOCasm::PrintString => stdio.push_asm_lib(engine, "print"),
-            IOCasm::PrintlnStr => stdio.push_asm_lib(engine, "println"),
-            IOCasm::PrintlnString => stdio.push_asm_lib(engine, "println"),
-            IOCasm::Flushln => stdio.push_asm_lib(engine, "flushln"),
-            IOCasm::Flush => stdio.push_asm_lib(engine, "flush"),
-            IOCasm::Scan => stdio.push_asm_lib(engine, "scan"),
-            IOCasm::RequestScan => stdio.push_asm_lib(engine, "rscan"),
+            IOAsm::PrintStr => stdio.push_asm_lib(engine, "print"),
+            IOAsm::PrintString => stdio.push_asm_lib(engine, "print"),
+            IOAsm::PrintlnStr => stdio.push_asm_lib(engine, "println"),
+            IOAsm::PrintlnString => stdio.push_asm_lib(engine, "println"),
+            IOAsm::Flushln => stdio.push_asm_lib(engine, "flushln"),
+            IOAsm::Flush => stdio.push_asm_lib(engine, "flush"),
+            IOAsm::Scan => stdio.push_asm_lib(engine, "scan"),
+            IOAsm::RequestScan => stdio.push_asm_lib(engine, "rscan"),
         }
     }
+}
 
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
+impl crate::vm::AsmWeight for IOAsm {
+    fn weight(&self) -> crate::vm::Weight {
         match self {
-            IOCasm::PrintStr | IOCasm::PrintString | IOCasm::PrintlnStr | IOCasm::PrintlnString => {
-                crate::vm::vm::CasmWeight::ZERO
+            IOAsm::PrintStr | IOAsm::PrintString | IOAsm::PrintlnStr | IOAsm::PrintlnString => {
+                crate::vm::Weight::ZERO
             }
-            IOCasm::Flush => crate::vm::vm::CasmWeight::EXTREME,
-            IOCasm::Flushln => crate::vm::vm::CasmWeight::EXTREME,
-            IOCasm::Scan => crate::vm::vm::CasmWeight::HIGH,
-            IOCasm::RequestScan => crate::vm::vm::CasmWeight::EXTREME,
+            IOAsm::Flush => crate::vm::Weight::EXTREME,
+            IOAsm::Flushln => crate::vm::Weight::EXTREME,
+            IOAsm::Scan => crate::vm::Weight::HIGH,
+            IOAsm::RequestScan => crate::vm::Weight::EXTREME,
         }
     }
 }
@@ -94,7 +95,7 @@ impl PathFinder for IOFn {
 }
 
 impl ResolveCore for IOFn {
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -107,7 +108,7 @@ impl ResolveCore for IOFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let param = parameters.first_mut().unwrap();
-                let _ = param.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = param.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 match param.type_of(&scope_manager, scope_id)? {
                     EType::Static(StaticType::StrSlice(_)) => {
                         *for_string = false;
@@ -124,7 +125,7 @@ impl ResolveCore for IOFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let param = parameters.first_mut().unwrap();
-                let _ = param.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = param.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 match param.type_of(&scope_manager, scope_id)? {
                     EType::Static(StaticType::StrSlice(_)) => {
                         *for_string = false;
@@ -147,97 +148,98 @@ impl ResolveCore for IOFn {
 }
 
 impl GenerateCode for IOFn {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             IOFn::Print { for_string } => {
                 if *for_string {
-                    instructions.push(Asm::Core(CoreCasm::IO(IOCasm::PrintString)));
+                    instructions.push(Asm::Core(CoreAsm::IO(IOAsm::PrintString)));
                 } else {
-                    instructions.push(Asm::Core(CoreCasm::IO(IOCasm::PrintStr)));
+                    instructions.push(Asm::Core(CoreAsm::IO(IOAsm::PrintStr)));
                 }
                 Ok(())
             }
             IOFn::Println { for_string } => {
                 if *for_string {
-                    instructions.push(Asm::Core(CoreCasm::IO(IOCasm::PrintlnString)));
+                    instructions.push(Asm::Core(CoreAsm::IO(IOAsm::PrintlnString)));
                 } else {
-                    instructions.push(Asm::Core(CoreCasm::IO(IOCasm::PrintlnStr)));
+                    instructions.push(Asm::Core(CoreAsm::IO(IOAsm::PrintlnStr)));
                 }
                 Ok(())
             }
             IOFn::Scan => {
-                instructions.push(Asm::Core(super::CoreCasm::IO(IOCasm::RequestScan)));
-                instructions.push(Asm::Core(super::CoreCasm::IO(IOCasm::Scan)));
+                instructions.push(Asm::Core(super::CoreAsm::IO(IOAsm::RequestScan)));
+                instructions.push(Asm::Core(super::CoreAsm::IO(IOAsm::Scan)));
                 Ok(())
             }
         }
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for IOCasm {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match self {
-            IOCasm::PrintStr => {
+            IOAsm::PrintStr => {
                 let address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let words = OpPrimitive::get_string_from(address, stack, heap)?;
                 stdio.stdout.push(&words);
                 stdio.stdout.flush(engine);
 
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
-            IOCasm::PrintString => {
+            IOAsm::PrintString => {
                 let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let words = OpPrimitive::get_string_from(address.add(POINTER_SIZE), stack, heap)?;
                 stdio.stdout.push(&words);
                 stdio.stdout.flush(engine);
 
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
-            IOCasm::PrintlnStr => {
+            IOAsm::PrintlnStr => {
                 let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let words = OpPrimitive::get_string_from(address, stack, heap)?;
                 stdio.stdout.push(&words);
                 stdio.stdout.flushln(engine);
 
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
-            IOCasm::PrintlnString => {
+            IOAsm::PrintlnString => {
                 let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let words = OpPrimitive::get_string_from(address.add(POINTER_SIZE), stack, heap)?;
                 stdio.stdout.push(&words);
                 stdio.stdout.flushln(engine);
 
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
-            IOCasm::Flush => {
+            IOAsm::Flush => {
                 stdio.stdout.flush(engine);
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
-            IOCasm::Flushln => {
+            IOAsm::Flushln => {
                 stdio.stdout.flushln(engine);
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
-            IOCasm::Scan => {
+            IOAsm::Scan => {
                 let res = stdio.stdin.read(engine);
                 if let Some(content) = res {
                     // Alloc and fill the string with the content, then ^push the address onto the stack
@@ -260,18 +262,20 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IOCasm {
 
                     let address: u64 = address.into(stack);
                     let _ = stack.push_with(&address.to_le_bytes())?;
-                    program.incr();
+                    scheduler.next();
                     Ok(())
                 } else {
                     // the program instruction cursor is not increment, therefore when content will be available in the stdin
                     // the instruction will be run again and only then the program cursor will get incremented
-                    Err(RuntimeError::Signal(crate::vm::vm::Signal::WAIT_STDIN))
+                    // Err(RuntimeError::Signal(crate::vm::vm::Signal::WAIT_STDIN))
+                    todo!()
                 }
             }
-            IOCasm::RequestScan => {
+            IOAsm::RequestScan => {
                 stdio.stdin.request(engine);
-                program.incr();
-                Err(RuntimeError::Signal(crate::vm::vm::Signal::WAIT_STDIN))
+                scheduler.next();
+                // Err(RuntimeError::Signal(crate::vm::vm::Signal::WAIT_STDIN))
+                todo!()
             }
         }
     }
@@ -280,26 +284,20 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IOCasm {
 #[cfg(test)]
 mod tests {
 
-    use crate::{
-        ast::{statements::Statement, TryParse},
-        semantic::scope::scope::ScopeManager,
-        test_statements,
-        vm::vm::{Runtime, StdinTestGameEngine},
-        Ciphel,
-    };
+    use crate::test_statements;
 
     use super::*;
 
     fn nil(
-        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-        stack: &mut crate::vm::allocator::stack::Stack,
-        heap: &mut crate::vm::allocator::heap::Heap,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        stack: &crate::vm::allocator::stack::Stack,
+        heap: &crate::vm::allocator::heap::Heap,
     ) -> bool {
         true
     }
     #[test]
     fn valid_print() {
-        let mut engine = crate::vm::vm::StdoutTestGameEngine { out: String::new() };
+        let mut engine = crate::vm::external::test::StdoutTestGameEngine { out: String::new() };
         test_statements(
             r##"
         print("Hello World");
@@ -341,7 +339,7 @@ mod tests {
 
     #[test]
     fn valid_printf() {
-        let mut engine = crate::vm::vm::StdoutTestGameEngine { out: String::new() };
+        let mut engine = crate::vm::external::test::StdoutTestGameEngine { out: String::new() };
 
         test_statements(
             r##"

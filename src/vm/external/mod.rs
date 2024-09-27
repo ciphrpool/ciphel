@@ -1,0 +1,53 @@
+use std::hash::Hash;
+
+use super::runtime::RuntimeError;
+
+pub mod test;
+
+pub trait ExternResolve {
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<crate::semantic::EType, crate::semantic::SemanticError>;
+}
+
+pub trait ExternPathFinder {
+    fn find(path: &[String], name: &str) -> Option<Self::Function>
+    where
+        Self: Engine;
+}
+
+pub trait ExternFunction<E: Engine>:
+    super::AsmName<E> + super::AsmWeight + super::scheduler_v2::Executable<E> + Sized
+{
+}
+
+pub trait ExternIO {
+    fn stdout_print(&mut self, content: String);
+    fn stdout_println(&mut self, content: String);
+    fn stderr_print(&mut self, content: String);
+    fn stdin_scan(&mut self) -> Option<String>;
+    fn stdin_request(&mut self);
+    fn stdasm_print(&mut self, content: String);
+}
+
+pub trait ExternEnergyDispenser {
+    fn get_energy(&self) -> usize;
+    fn consume_energy(&mut self, energy: usize) -> Result<(), super::runtime::RuntimeError>;
+}
+
+pub trait ExternThreadHandler {
+    type TID: ExternThreadIdentifier;
+    fn spawn(&mut self) -> Result<Self::TID, RuntimeError>;
+    fn close(&mut self, tid: Self::TID);
+}
+
+pub trait Engine:
+    ExternIO + ExternPathFinder + ExternEnergyDispenser + ExternThreadHandler + Sized
+{
+    type Function: ExternFunction<Self>;
+}
+
+pub trait ExternThreadIdentifier: Hash + PartialEq + std::cmp::Eq + Clone + Sized {}

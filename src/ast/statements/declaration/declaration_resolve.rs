@@ -9,7 +9,7 @@ impl Resolve for Declaration {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -21,7 +21,7 @@ impl Resolve for Declaration {
     {
         match self {
             Declaration::Declared(value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, &(), &mut ())?;
+                let _ = value.resolve::<E>(scope_manager, scope_id, &(), &mut ())?;
                 let var_type = value.signature.type_of(&scope_manager, scope_id)?;
 
                 let var_id = scope_manager.register_var(value.name.as_str(), var_type, scope_id)?;
@@ -34,7 +34,7 @@ impl Resolve for Declaration {
             } => {
                 let _ = value
                     .signature
-                    .resolve::<G>(scope_manager, scope_id, &(), &mut ())?;
+                    .resolve::<E>(scope_manager, scope_id, &(), &mut ())?;
                 let var_type = value.signature.type_of(&scope_manager, scope_id)?;
                 if EType::Static(StaticType::Any) == var_type {
                     return Err(SemanticError::CantInferType(format!(
@@ -46,7 +46,7 @@ impl Resolve for Declaration {
                     scope_manager.register_var(value.name.as_str(), var_type.clone(), scope_id)?;
                 let _ = value.id.insert(var_id);
 
-                let _ = right.resolve::<G>(
+                let _ = right.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(var_type.clone()),
@@ -61,9 +61,9 @@ impl Resolve for Declaration {
                 Ok(())
             }
             Declaration::Assigned { left, right } => {
-                let _ = right.resolve::<G>(scope_manager, scope_id, &None, extra)?;
+                let _ = right.resolve::<E>(scope_manager, scope_id, &None, extra)?;
                 let right_type = right.type_of(&scope_manager, scope_id)?;
-                let _ = left.resolve::<G>(scope_manager, scope_id, &Some(right_type), &mut ())?;
+                let _ = left.resolve::<E>(scope_manager, scope_id, &Some(right_type), &mut ())?;
                 Ok(())
             }
             Declaration::RecClosure { left, right } => {
@@ -74,7 +74,7 @@ impl Resolve for Declaration {
 }
 
 impl Desugar<Statement> for Declaration {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -82,7 +82,7 @@ impl Desugar<Statement> for Declaration {
         match self {
             Declaration::Declared(typed_var) => Ok(None),
             Declaration::Assigned { left, right } => {
-                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
                     *right = output;
                 }
                 Ok(None)
@@ -96,7 +96,7 @@ impl Resolve for TypedVar {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -107,14 +107,14 @@ impl Resolve for TypedVar {
         Self: Sized,
     {
         self.signature
-            .resolve::<G>(scope_manager, scope_id, context, extra)
+            .resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 impl Resolve for DeclaredVar {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -146,7 +146,7 @@ impl Resolve for DeclaredVar {
                 unreachable!("Path already covered in Declaration::resolve")
             }
             DeclaredVar::Pattern(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, extra)
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
             }
         }
     }
@@ -155,7 +155,7 @@ impl Resolve for PatternVar {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -236,7 +236,7 @@ mod tests {
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let res =
-            decl.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+            decl.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let variable = scope_manager.find_var_by_name("x", None).unwrap();
@@ -246,7 +246,7 @@ mod tests {
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let res =
-            decl.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+            decl.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let variable = scope_manager.find_var_by_name("x", None).unwrap();
@@ -259,7 +259,7 @@ mod tests {
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let res =
-            decl.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+            decl.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_err());
     }
 
@@ -269,7 +269,7 @@ mod tests {
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let res =
-            decl.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+            decl.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let variable = scope_manager.find_var_by_name("x", None).unwrap();
@@ -305,7 +305,7 @@ mod tests {
             )
             .unwrap();
         let res =
-            decl.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+            decl.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let variable = scope_manager.find_var_by_name("x", None).unwrap();

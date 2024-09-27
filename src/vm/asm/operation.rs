@@ -7,8 +7,10 @@ use crate::{
     },
     vm::{
         allocator::{align, heap::Heap, stack::Stack, MemoryAddress},
+        runtime::RuntimeError,
+        scheduler_v2::Executable,
         stdio::StdIO,
-        vm::{CasmMetadata, CodeGenerationError, Executable, RuntimeError},
+        CodeGenerationError,
     },
 };
 use nom::AsBytes;
@@ -24,26 +26,27 @@ pub struct Operation {
     pub kind: OperationKind,
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Operation {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Operation {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let _ = self
             .kind
-            .execute(program, stack, heap, stdio, engine, tid)?;
-        program.incr();
+            .execute(program, scheduler, stack, heap, stdio, engine, context)?;
+        scheduler.next();
         Ok(())
     }
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Operation {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Operation {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self.kind {
             OperationKind::Align => stdio.push_asm(engine, "align"),
             OperationKind::CastCharToUTF8 => stdio.push_asm(engine, "char_to_utf8"),
@@ -109,6 +112,9 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Operation {
         }
     }
 }
+
+impl crate::vm::AsmWeight for Operation {}
+
 #[derive(Debug, Clone)]
 pub enum OperationKind {
     Align,
@@ -202,8 +208,8 @@ impl OpPrimitive {
 
     pub fn get_bool_from(
         address: MemoryAddress,
-        stack: &mut Stack,
-        heap: &mut Heap,
+        stack: &Stack,
+        heap: &Heap,
     ) -> Result<bool, RuntimeError> {
         let data = match address {
             MemoryAddress::Heap { .. } => heap.read_slice(address, 1)?,
@@ -230,8 +236,8 @@ impl OpPrimitive {
 
     pub fn get_char_from(
         address: MemoryAddress,
-        stack: &mut Stack,
-        heap: &mut Heap,
+        stack: &Stack,
+        heap: &Heap,
     ) -> Result<char, RuntimeError> {
         let data = match address {
             MemoryAddress::Heap { .. } => heap.read_slice(address, 4)?,
@@ -253,8 +259,8 @@ impl OpPrimitive {
 
     pub fn get_string_from(
         address: MemoryAddress,
-        stack: &mut Stack,
-        heap: &mut Heap,
+        stack: &Stack,
+        heap: &Heap,
     ) -> Result<String, RuntimeError> {
         let size = OpPrimitive::get_num_from::<u64>(address, stack, heap)? as usize;
         let data = match address {
@@ -323,15 +329,15 @@ impl PopNum for crate::vm::asm::operation::OpPrimitive {
 pub trait GetNumFrom {
     fn get_num_from<T: PrimInt>(
         address: crate::vm::allocator::MemoryAddress,
-        stack: &mut crate::vm::allocator::stack::Stack,
-        heap: &mut crate::vm::allocator::heap::Heap,
+        stack: &crate::vm::allocator::stack::Stack,
+        heap: &crate::vm::allocator::heap::Heap,
     ) -> Result<T, RuntimeError>;
 }
 
 fn read_data<const N: usize>(
     address: MemoryAddress,
-    stack: &mut Stack,
-    heap: &mut Heap,
+    stack: &Stack,
+    heap: &Heap,
 ) -> Result<[u8; N], RuntimeError> {
     let vec = match address {
         MemoryAddress::Heap { .. } => heap.read_slice(address, N)?,
@@ -345,8 +351,8 @@ fn read_data<const N: usize>(
 impl GetNumFrom for crate::vm::asm::operation::OpPrimitive {
     fn get_num_from<T: PrimInt>(
         address: crate::vm::allocator::MemoryAddress,
-        stack: &mut crate::vm::allocator::stack::Stack,
-        heap: &mut crate::vm::allocator::heap::Heap,
+        stack: &crate::vm::allocator::stack::Stack,
+        heap: &crate::vm::allocator::heap::Heap,
     ) -> Result<T, RuntimeError> {
         match std::mem::size_of::<T>() {
             1 => {
@@ -384,64 +390,81 @@ impl GetNumFrom for crate::vm::asm::operation::OpPrimitive {
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for OperationKind {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for OperationKind {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match self {
-            OperationKind::Mult(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            OperationKind::Div(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            OperationKind::Mod(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            OperationKind::Mult(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
+            OperationKind::Div(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
+            OperationKind::Mod(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
             OperationKind::Addition(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
             OperationKind::Substraction(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
             OperationKind::ShiftLeft(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
             OperationKind::ShiftRight(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
             OperationKind::BitwiseAnd(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
             OperationKind::BitwiseXOR(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
             OperationKind::BitwiseOR(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
-            OperationKind::Cast(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            OperationKind::Less(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            OperationKind::Cast(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
+            OperationKind::Less(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
             OperationKind::LessEqual(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
             OperationKind::Greater(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
             OperationKind::GreaterEqual(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
-            OperationKind::Equal(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            OperationKind::Equal(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
             OperationKind::NotEqual(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
             OperationKind::LogicalAnd(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
             OperationKind::LogicalOr(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
-            OperationKind::Minus(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            OperationKind::Not(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            OperationKind::Minus(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
+            OperationKind::Not(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
             OperationKind::Align => {
                 let num = OpPrimitive::pop_num::<u64>(stack)?;
                 let aligned_num = align(num as usize) as u64;
@@ -455,10 +478,10 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for OperationKind {
                 Ok(stack.push_with(&(chara.len() as u64).to_le_bytes())?)
             }
             OperationKind::StrEqual(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
             OperationKind::StrNotEqual(value) => {
-                value.execute(program, stack, heap, stdio, engine, tid)
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
         }
     }
@@ -480,15 +503,16 @@ pub struct Mod {
     pub right: OpPrimitive,
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Mult {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Mult {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -499,15 +523,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mult {
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Division {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Division {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -518,15 +543,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Division {
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Mod {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Mod {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -549,15 +575,16 @@ pub struct Substraction {
     pub right: OpPrimitive,
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Addition {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Addition {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -568,15 +595,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Addition {
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Substraction {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Substraction {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -598,15 +626,16 @@ pub struct ShiftRight {
     pub right: OpPrimitive,
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for ShiftLeft {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for ShiftLeft {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -617,15 +646,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for ShiftLeft {
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for ShiftRight {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for ShiftRight {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -642,15 +672,16 @@ pub struct BitwiseAnd {
     pub right: OpPrimitive,
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for BitwiseAnd {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for BitwiseAnd {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -667,15 +698,16 @@ pub struct BitwiseXOR {
     pub right: OpPrimitive,
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for BitwiseXOR {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for BitwiseXOR {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -692,15 +724,16 @@ pub struct BitwiseOR {
     pub right: OpPrimitive,
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for BitwiseOR {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for BitwiseOR {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -732,15 +765,16 @@ pub struct GreaterEqual {
     pub right: OpPrimitive,
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Less {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Less {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -768,15 +802,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Less {
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for LessEqual {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for LessEqual {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -804,15 +839,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LessEqual {
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Greater {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Greater {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -840,15 +876,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Greater {
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for GreaterEqual {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for GreaterEqual {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -893,15 +930,16 @@ pub struct StrEqual;
 #[derive(Debug, Clone)]
 pub struct StrNotEqual;
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Equal {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Equal {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let right_data = stack.pop(self.right)?.to_owned();
 
@@ -912,15 +950,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Equal {
     }
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for StrEqual {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for StrEqual {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let right_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
         let left_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
@@ -933,15 +972,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StrEqual {
         Ok(stack.push_with(&data)?)
     }
 }
-impl<G: crate::GameEngineStaticFn> Executable<G> for NotEqual {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for NotEqual {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let right_data = stack.pop(self.right)?.to_owned();
 
@@ -952,15 +992,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for NotEqual {
         Ok(stack.push_with(&data)?)
     }
 }
-impl<G: crate::GameEngineStaticFn> Executable<G> for StrNotEqual {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for StrNotEqual {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let left_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
         let right_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
@@ -975,15 +1016,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StrNotEqual {
 #[derive(Debug, Clone)]
 pub struct LogicalAnd();
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for LogicalAnd {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for LogicalAnd {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let right_data = OpPrimitive::pop_bool(stack)?;
         let left_data = OpPrimitive::pop_bool(stack)?;
@@ -995,15 +1037,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LogicalAnd {
 #[derive(Debug, Clone)]
 pub struct LogicalOr();
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for LogicalOr {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for LogicalOr {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let right_data = OpPrimitive::pop_bool(stack)?;
         let left_data = OpPrimitive::pop_bool(stack)?;
@@ -1017,15 +1060,16 @@ pub struct Minus {
     pub data_type: OpPrimitive,
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Minus {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Minus {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match &self.data_type {
             OpPrimitive::Number(number) => match number {
@@ -1084,15 +1128,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Minus {
 #[derive(Debug, Clone)]
 pub struct Not();
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Not {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Not {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         let data = OpPrimitive::pop_bool(stack)?;
         let data = [(!data) as u8];
@@ -1124,15 +1169,16 @@ macro_rules! push_data_as_type {
     };
 }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for Cast {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match (self.from, self.to) {
             (OpPrimitive::Number(number), OpPrimitive::Number(to)) => match number {
@@ -1274,627 +1320,5 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
             (OpPrimitive::String, OpPrimitive::Char) => Err(RuntimeError::UnsupportedOperation),
             (OpPrimitive::String, OpPrimitive::String) => Ok(()),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{semantic::scope::scope::ScopeManager, vm::vm::Runtime};
-
-    use super::*;
-
-    fn init_float(num: f64, memory: &mut Stack) -> Result<(), RuntimeError> {
-        let data = num.to_le_bytes().to_vec();
-        let _ = memory.push_with(&data)?;
-        Ok(())
-    }
-
-    fn init_num1<T: num_traits::ToBytes<Bytes = [u8; 1]>>(
-        num: T,
-        memory: &mut Stack,
-    ) -> Result<(), RuntimeError> {
-        let data = num.to_le_bytes().to_vec();
-        let _ = memory.push_with(&data)?;
-        Ok(())
-    }
-
-    fn init_num2<T: num_traits::ToBytes<Bytes = [u8; 2]>>(
-        num: T,
-        memory: &mut Stack,
-    ) -> Result<(), RuntimeError> {
-        let data = num.to_le_bytes().to_vec();
-        let _ = memory.push_with(&data)?;
-        Ok(())
-    }
-
-    fn init_num4<T: num_traits::ToBytes<Bytes = [u8; 4]>>(
-        num: T,
-        memory: &mut Stack,
-    ) -> Result<(), RuntimeError> {
-        let data = num.to_le_bytes().to_vec();
-        let _ = memory.push_with(&data)?;
-        Ok(())
-    }
-
-    fn init_num8<T: num_traits::ToBytes<Bytes = [u8; 8]>>(
-        num: T,
-        memory: &mut Stack,
-    ) -> Result<(), RuntimeError> {
-        let data = num.to_le_bytes().to_vec();
-        let _ = memory.push_with(&data)?;
-        Ok(())
-    }
-
-    fn init_num16<T: num_traits::ToBytes<Bytes = [u8; 16]>>(
-        num: T,
-        memory: &mut Stack,
-    ) -> Result<(), RuntimeError> {
-        let data = num.to_le_bytes().to_vec();
-        let _ = memory.push_with(&data)?;
-        Ok(())
-    }
-    fn init_char(memory: &mut Stack) -> Result<(), RuntimeError> {
-        let data = vec!['a' as u8];
-        let _ = memory.push_with(&data)?;
-        Ok(())
-    }
-
-    fn init_bool(state: bool, memory: &mut Stack) -> Result<(), RuntimeError> {
-        let data = vec![state as u8];
-        let _ = memory.push_with(&data)?;
-        Ok(())
-    }
-
-    fn init_string(text: &str, memory: &mut Stack) -> Result<(), RuntimeError> {
-        let data = text.as_bytes().to_vec();
-        let _ = memory.push_with(&data)?;
-        Ok(())
-    }
-
-    fn to_number(data: Vec<u8>) -> Result<i64, ()> {
-        if data.len() != 8 {
-            return Err(());
-        }
-        let data = TryInto::<&[u8; 8]>::try_into(data.as_bytes()).map_err(|_| ())?;
-        Ok(i64::from_le_bytes(*data))
-    }
-    fn to_float(data: Vec<u8>) -> Result<f64, ()> {
-        if data.len() != 8 {
-            return Err(());
-        }
-        let data = TryInto::<&[u8; 8]>::try_into(data.as_bytes()).map_err(|_| ())?;
-        Ok(f64::from_le_bytes(*data))
-    }
-
-    #[test]
-    fn valid_product() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(20u32, stack).expect("init should have succeeded");
-        Mult {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
-        assert_eq!(10 * 20, res);
-    }
-
-    #[test]
-    fn valid_div() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(2u32, stack).expect("init should have succeeded");
-        Division {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
-        assert_eq!(10 / 2, res);
-    }
-
-    #[test]
-    fn valid_mod() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(2u32, stack).expect("init should have succeeded");
-        Mod {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
-        assert_eq!(10 % 2, res);
-    }
-
-    #[test]
-    fn valid_add() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(20u32, stack).expect("init should have succeeded");
-        Addition {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
-        assert_eq!(10 + 20, res);
-    }
-
-    #[test]
-    fn valid_sub() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(5u32, stack).expect("init should have succeeded");
-        Substraction {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
-        assert_eq!(10 - 5, res);
-    }
-
-    #[test]
-    fn valid_sl() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(5u32, stack).expect("init should have succeeded");
-        ShiftLeft {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
-        assert_eq!(10 << 5, res);
-    }
-
-    #[test]
-    fn valid_sr() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(2u32, stack).expect("init should have succeeded");
-        ShiftRight {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
-        assert_eq!(10 >> 2, res);
-    }
-
-    #[test]
-    fn valid_bitand() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(5u32, stack).expect("init should have succeeded");
-        BitwiseAnd {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
-        assert_eq!(10 & 5, res);
-    }
-
-    #[test]
-    fn valid_bitxor() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(5u32, stack).expect("init should have succeeded");
-        BitwiseXOR {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
-        assert_eq!(10 ^ 5, res);
-    }
-
-    #[test]
-    fn valid_bitor() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(5u32, stack).expect("init should have succeeded");
-        BitwiseOR {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
-        assert_eq!(10 | 5, res);
-    }
-
-    #[test]
-    fn valid_less() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(5u32, stack).expect("init should have succeeded");
-        Less {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
-        assert_eq!(10 < 5, res);
-    }
-
-    #[test]
-    fn valid_less_equal() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(5u32, stack).expect("init should have succeeded");
-        LessEqual {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
-        assert_eq!(10 <= 5, res);
-    }
-    #[test]
-    fn valid_cast() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num8(1u64, stack).expect("init should have succeeded");
-        Cast {
-            from: OpPrimitive::Number(NumberType::U64),
-            to: OpPrimitive::Bool,
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
-        assert_eq!(true, res);
-    }
-    #[test]
-    fn valid_greater() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(5u32, stack).expect("init should have succeeded");
-        Greater {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
-        assert_eq!(10 > 5, res);
-    }
-
-    #[test]
-    fn valid_greater_equal() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(5u32, stack).expect("init should have succeeded");
-        GreaterEqual {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
-        assert_eq!(10 >= 5, res);
-    }
-
-    #[test]
-    fn valid_equal() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        GreaterEqual {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
-        assert_eq!(10 == 10, res);
-    }
-
-    #[test]
-    fn valid_not_equal() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        init_num4(5u32, stack).expect("init should have succeeded");
-        GreaterEqual {
-            left: OpPrimitive::Number(NumberType::U32),
-            right: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
-        assert_eq!(10 != 5, res);
-    }
-
-    #[test]
-    fn valid_logical_and() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_bool(true, stack).expect("init should have succeeded");
-        init_bool(true, stack).expect("init should have succeeded");
-        LogicalAnd()
-            .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
-        assert_eq!(true && true, res);
-    }
-
-    #[test]
-    fn valid_logical_or() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_bool(true, stack).expect("init should have succeeded");
-        init_bool(true, stack).expect("init should have succeeded");
-        LogicalOr()
-            .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
-        assert_eq!(true || true, res);
-    }
-
-    #[test]
-    fn valid_minus() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_num4(10u32, stack).expect("init should have succeeded");
-        Minus {
-            data_type: OpPrimitive::Number(NumberType::U32),
-        }
-        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-        .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_num::<i64>(stack).expect("result should be of valid type");
-        assert_eq!(-10i64, res);
-    }
-
-    #[test]
-    fn valid_not() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(
-                crate::vm::vm::Player::P1,
-                crate::semantic::scope::scope::ScopeManager::default(),
-            )
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, mut program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        init_bool(true, stack).expect("init should have succeeded");
-        Not()
-            .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("execution should have succeeded");
-
-        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
-        assert_eq!(false, res);
     }
 }

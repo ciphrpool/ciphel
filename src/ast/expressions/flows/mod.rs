@@ -13,7 +13,7 @@ use crate::{
         TryParse,
     },
     semantic::{EType, Metadata, Resolve},
-    vm::vm::GenerateCode,
+    vm::GenerateCode,
 };
 
 use super::{

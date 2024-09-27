@@ -4,15 +4,17 @@ use crate::vm::allocator::{align, MemoryAddress};
 use crate::vm::asm::operation::{GetNumFrom, OpPrimitive, PopNum};
 use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
-use crate::vm::core::CoreCasm;
+use crate::vm::core::CoreAsm;
+use crate::vm::program::Program;
+use crate::vm::runtime::RuntimeError;
+use crate::vm::scheduler_v2::Executable;
+use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, Metadata, Resolve, ResolveCore, SemanticError},
     vm::{
         allocator::{heap::Heap, stack::Stack},
-        asm::Program,
         stdio::StdIO,
-        vm::{CasmMetadata, CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
 };
 
@@ -44,19 +46,19 @@ impl PathFinder for StringFn {
     }
 }
 impl ResolveCore for StringFn {
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
         context: Option<&EType>,
         parameters: &mut Vec<Expression>,
     ) -> Result<EType, SemanticError> {
-        fn string_param<G: crate::GameEngineStaticFn>(
+        fn string_param<E: crate::vm::external::Engine>(
             param: &mut Expression,
             scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
             scope_id: Option<u128>,
         ) -> Result<StringType, SemanticError> {
-            let _ = param.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+            let _ = param.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
             let EType::Static(StaticType::String(string_type)) =
                 param.type_of(scope_manager, scope_id)?
             else {
@@ -65,12 +67,12 @@ impl ResolveCore for StringFn {
             Ok(string_type)
         }
 
-        fn string_or_slice_param<G: crate::GameEngineStaticFn>(
+        fn string_or_slice_param<E: crate::vm::external::Engine>(
             param: &mut Expression,
             scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
             scope_id: Option<u128>,
         ) -> Result<bool, SemanticError> {
-            let _ = param.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+            let _ = param.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
 
             match param.type_of(scope_manager, scope_id)? {
                 EType::Static(StaticType::String(_)) => Ok(true),
@@ -85,7 +87,7 @@ impl ResolveCore for StringFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let str_slice = &mut parameters[0];
-                let _ = str_slice.resolve::<G>(
+                let _ = str_slice.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(EType::Static(StaticType::StrSlice(StrSliceType()))),
@@ -107,9 +109,9 @@ impl ResolveCore for StringFn {
                 let (first_part, second_part) = parameters.split_at_mut(1);
                 let string = &mut first_part[0];
                 let const_str = &mut second_part[1];
-                let _ = string_param::<G>(string, scope_manager, scope_id)?;
+                let _ = string_param::<E>(string, scope_manager, scope_id)?;
 
-                let _ = const_str.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = const_str.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let EType::Static(StaticType::StrSlice(_)) =
                     const_str.type_of(scope_manager, scope_id)?
                 else {
@@ -125,9 +127,9 @@ impl ResolveCore for StringFn {
                 let (first_part, second_part) = parameters.split_at_mut(1);
                 let string = &mut first_part[0];
                 let index = &mut second_part[1];
-                *for_string = string_or_slice_param::<G>(string, scope_manager, scope_id)?;
+                *for_string = string_or_slice_param::<E>(string, scope_manager, scope_id)?;
 
-                let _ = index.resolve::<G>(
+                let _ = index.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(crate::p_num!(U64)),
@@ -144,7 +146,7 @@ impl ResolveCore for StringFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let string = &mut parameters[0];
-                let _ = string_param::<G>(string, scope_manager, scope_id)?;
+                let _ = string_param::<E>(string, scope_manager, scope_id)?;
 
                 Ok(EType::Static(StaticType::StrSlice(StrSliceType())))
             }
@@ -153,7 +155,7 @@ impl ResolveCore for StringFn {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum StringCasm {
+pub enum StringAsm {
     String {},
     Append {},
     CharAtStrslice,
@@ -161,52 +163,54 @@ pub enum StringCasm {
     ToConstStr,
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StringCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for StringAsm {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
-            StringCasm::String {} => stdio.push_asm_lib(engine, "string"),
-            StringCasm::Append {} => stdio.push_asm_lib(engine, "append"),
-            StringCasm::CharAtString => stdio.push_asm_lib(engine, "char_at"),
-            StringCasm::CharAtStrslice => stdio.push_asm_lib(engine, "char_at"),
-            StringCasm::ToConstStr => stdio.push_asm_lib(engine, "to_const_str"),
+            StringAsm::String {} => stdio.push_asm_lib(engine, "string"),
+            StringAsm::Append {} => stdio.push_asm_lib(engine, "append"),
+            StringAsm::CharAtString => stdio.push_asm_lib(engine, "char_at"),
+            StringAsm::CharAtStrslice => stdio.push_asm_lib(engine, "char_at"),
+            StringAsm::ToConstStr => stdio.push_asm_lib(engine, "to_const_str"),
         }
     }
+}
 
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
+impl crate::vm::AsmWeight for StringAsm {
+    fn weight(&self) -> crate::vm::Weight {
         match self {
-            StringCasm::String {} => crate::vm::vm::CasmWeight::MEDIUM,
-            StringCasm::Append {} => crate::vm::vm::CasmWeight::MEDIUM,
-            StringCasm::CharAtString => crate::vm::vm::CasmWeight::MEDIUM,
-            StringCasm::CharAtStrslice => crate::vm::vm::CasmWeight::MEDIUM,
-            StringCasm::ToConstStr => crate::vm::vm::CasmWeight::MEDIUM,
+            StringAsm::String {} => crate::vm::Weight::MEDIUM,
+            StringAsm::Append {} => crate::vm::Weight::MEDIUM,
+            StringAsm::CharAtString => crate::vm::Weight::MEDIUM,
+            StringAsm::CharAtStrslice => crate::vm::Weight::MEDIUM,
+            StringAsm::ToConstStr => crate::vm::Weight::MEDIUM,
         }
     }
 }
 
 impl GenerateCode for StringFn {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match *self {
             StringFn::String {} => {
-                instructions.push(Asm::Core(CoreCasm::String(StringCasm::String {})))
+                instructions.push(Asm::Core(CoreAsm::String(StringAsm::String {})))
             }
             StringFn::Append {} => {
-                instructions.push(Asm::Core(CoreCasm::String(StringCasm::Append {})))
+                instructions.push(Asm::Core(CoreAsm::String(StringAsm::Append {})))
             }
             StringFn::CharAt { for_string } => {
                 if for_string {
-                    instructions.push(Asm::Core(CoreCasm::String(StringCasm::CharAtString {})))
+                    instructions.push(Asm::Core(CoreAsm::String(StringAsm::CharAtString {})))
                 } else {
-                    instructions.push(Asm::Core(CoreCasm::String(StringCasm::CharAtStrslice {})))
+                    instructions.push(Asm::Core(CoreAsm::String(StringAsm::CharAtStrslice {})))
                 }
             }
             StringFn::ToConstStr {} => {
-                instructions.push(Asm::Core(CoreCasm::String(StringCasm::ToConstStr {})))
+                instructions.push(Asm::Core(CoreAsm::String(StringAsm::ToConstStr {})))
             }
         }
         Ok(())
@@ -220,18 +224,21 @@ impl GenerateCode for StringFn {
 */
 pub const STRING_HEADER: usize = 16;
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for StringCasm {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E>
+    for StringAsm
+{
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match self {
-            StringCasm::String {} => {
+            StringAsm::String {} => {
                 let slice: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let string = OpPrimitive::get_string_from(slice, stack, heap)?;
                 let len = string.len();
@@ -250,7 +257,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringCasm {
                 let address: u64 = address.into(stack);
                 stack.push_with(&address.to_le_bytes())?;
             }
-            StringCasm::Append {} => {
+            StringAsm::Append {} => {
                 let slice = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let mut address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
@@ -282,7 +289,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringCasm {
                 let address: u64 = address.into(stack);
                 stack.push_with(&address.to_le_bytes())?;
             }
-            StringCasm::CharAtString => {
+            StringAsm::CharAtString => {
                 let index = OpPrimitive::pop_num::<u64>(stack)?;
                 let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let string = OpPrimitive::get_string_from(address.add(8), stack, heap)?;
@@ -296,7 +303,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringCasm {
                 stack.push_with(&buffer)?;
             }
 
-            StringCasm::CharAtStrslice => {
+            StringAsm::CharAtStrslice => {
                 let index = OpPrimitive::pop_num::<u64>(stack)?;
                 let address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let string = OpPrimitive::get_string_from(address, stack, heap)?;
@@ -310,14 +317,14 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringCasm {
                 let _ = charac.encode_utf8(&mut buffer);
                 stack.push_with(&buffer)?;
             }
-            StringCasm::ToConstStr => {
+            StringAsm::ToConstStr => {
                 let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
                 let address: u64 = address.add(8).into(stack);
                 stack.push_with(&address.to_le_bytes())?;
             }
         }
-        program.incr();
+        scheduler.next();
         Ok(())
     }
 }

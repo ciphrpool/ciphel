@@ -1,5 +1,3 @@
-use super::vm::GameEngineStaticFn;
-
 #[derive(Debug, Clone)]
 pub struct StdIO {
     pub stdout: StdOut,
@@ -18,28 +16,32 @@ impl Default for StdIO {
 }
 
 impl StdIO {
-    pub fn push_asm_info<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
+    pub fn push_asm_info<E: crate::vm::external::Engine>(&mut self, engine: &mut E, content: &str) {
         engine.stdasm_print(format!("INFO :: {content}\n"));
     }
-    pub fn push_asm<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
+    pub fn push_asm<E: crate::vm::external::Engine>(&mut self, engine: &mut E, content: &str) {
         // self.asm_out.push('\t');
         // self.asm_out.push_str(content);
         // self.asm_out.push('\n');
         engine.stdasm_print(format!("\t{content}"));
     }
-    pub fn push_asm_lib<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
+    pub fn push_asm_lib<E: crate::vm::external::Engine>(&mut self, engine: &mut E, content: &str) {
         // self.asm_out.push_str("\tsyscall ");
         // self.asm_out.push_str(content);
         // self.asm_out.push('\n');
         engine.stdasm_print(format!("\tsyscall {content}"));
     }
-    pub fn push_asm_label<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
+    pub fn push_asm_label<E: crate::vm::external::Engine>(
+        &mut self,
+        engine: &mut E,
+        content: &str,
+    ) {
         // self.asm_out.push_str(content);
         // self.asm_out.push_str(" :\n");
         engine.stdasm_print(format!("{content} :"));
     }
 
-    pub fn print_stderr<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
+    pub fn print_stderr<E: crate::vm::external::Engine>(&mut self, engine: &mut E, content: &str) {
         engine.stderr_print(format!("Error : {content}"));
     }
 }
@@ -164,12 +166,12 @@ impl StdOut {
         std::mem::replace(&mut self.data, String::new())
     }
 
-    pub fn flush<G: GameEngineStaticFn>(&mut self, engine: &mut G) {
+    pub fn flush<E: crate::vm::external::Engine>(&mut self, engine: &mut E) {
         let content = self.take();
         engine.stdout_print(content.into());
     }
 
-    pub fn flushln<G: GameEngineStaticFn>(&mut self, engine: &mut G) {
+    pub fn flushln<E: crate::vm::external::Engine>(&mut self, engine: &mut E) {
         let content = self.take();
         engine.stdout_println(content.into());
     }
@@ -195,12 +197,12 @@ impl StdIn {
         self.valid = true;
         self.data.push_str(&content);
     }
-    pub fn request<G: GameEngineStaticFn>(&mut self, engine: &mut G) {
+    pub fn request<E: crate::vm::external::Engine>(&mut self, engine: &mut E) {
         self.data.clear();
         self.valid = false;
         engine.stdin_request();
     }
-    pub fn read<G: GameEngineStaticFn>(&mut self, engine: &mut G) -> Option<String> {
+    pub fn read<E: crate::vm::external::Engine>(&mut self, engine: &mut E) -> Option<String> {
         if !self.valid {
             None
         } else {

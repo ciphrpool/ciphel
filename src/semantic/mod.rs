@@ -3,8 +3,8 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::ScopeManager;
+use crate::{ast::utils::strings::ID, vm::CodeGenerationError};
 
 use self::scope::{static_types::StaticType, user_types::UserType};
 
@@ -140,7 +140,7 @@ pub trait Resolve {
     type Output;
     type Context: Default;
     type Extra: Default;
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -152,7 +152,7 @@ pub trait Resolve {
 }
 
 pub trait Desugar<O> {
-    fn desugar<G: crate::GameEngineStaticFn>(
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -165,7 +165,7 @@ pub trait ResolveNumber {
 }
 
 pub trait ResolveCore {
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -177,7 +177,7 @@ pub trait ResolveCore {
 }
 
 pub trait ResolveFromStruct {
-    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+    fn resolve_from_struct<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -298,7 +298,7 @@ impl EType {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-    ) -> Result<String, crate::vm::vm::CodeGenerationError> {
+    ) -> Result<String, CodeGenerationError> {
         match self {
             EType::Static(static_type) => match static_type {
                 StaticType::Primitive(primitive_type) => match primitive_type {
@@ -383,7 +383,7 @@ impl EType {
             },
             EType::User { id, size } => {
                 let Ok(utype) = scope_manager.find_type_by_id(*id, scope_id) else {
-                    return Err(crate::vm::vm::CodeGenerationError::UnresolvedError);
+                    return Err(CodeGenerationError::UnresolvedError);
                 };
                 match utype {
                     UserType::Struct(Struct { id, fields }) => Ok(id),

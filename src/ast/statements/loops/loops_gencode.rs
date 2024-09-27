@@ -2,38 +2,37 @@ use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::SizeOf;
 use crate::vm::asm::branch::BranchIf;
 
-use crate::vm::vm::CodeGenerationContext;
-use crate::vm::{
-    asm::{
-        branch::{Goto, Label},
-        mem::Mem,
-        Asm, Program,
-    },
-    vm::{CodeGenerationError, GenerateCode},
+use crate::vm::asm::{
+    branch::{Goto, Label},
+    mem::Mem,
+    Asm,
 };
+use crate::vm::{CodeGenerationContext, GenerateCode};
 
 use super::{ForInit, ForLoop, Loop, WhileLoop};
 
 impl GenerateCode for Loop {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
-            Loop::For(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Loop::While(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Loop::For(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
+            Loop::While(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
             Loop::Loop(value) => {
                 let start_label = Label::gen();
                 let end_label = Label::gen();
                 let break_label = Label::gen();
                 let continue_label = Label::gen();
 
-                instructions.push_label_id(start_label, "start_loop".to_string().into());
+                instructions.push_label_by_id(start_label, "start_loop".to_string().into());
 
-                value.gencode(
+                value.gencode::<E>(
                     scope_manager,
                     scope_id,
                     instructions,
@@ -49,15 +48,15 @@ impl GenerateCode for Loop {
                     label: Some(start_label),
                 }));
 
-                instructions.push_label_id(break_label, "break_loop".to_string().into());
+                instructions.push_label_by_id(break_label, "break_loop".to_string().into());
                 instructions.push(Asm::Goto(Goto {
                     label: Some(end_label),
                 }));
-                instructions.push_label_id(continue_label, "continue_loop".to_string().into());
+                instructions.push_label_by_id(continue_label, "continue_loop".to_string().into());
                 instructions.push(Asm::Goto(Goto {
                     label: Some(start_label),
                 }));
-                instructions.push_label_id(end_label, "end_loop".to_string().into());
+                instructions.push_label_by_id(end_label, "end_loop".to_string().into());
 
                 Ok(())
             }
@@ -66,13 +65,13 @@ impl GenerateCode for Loop {
 }
 
 impl GenerateCode for ForLoop {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let break_label = Label::gen();
         let continue_label = Label::gen();
         let end_label = Label::gen();
@@ -82,24 +81,26 @@ impl GenerateCode for ForLoop {
         for index in self.indices.iter() {
             match index {
                 ForInit::Assignation(assignation) => {
-                    let _ = assignation.gencode(scope_manager, scope_id, instructions, context)?;
+                    let _ =
+                        assignation.gencode::<E>(scope_manager, scope_id, instructions, context)?;
                 }
                 ForInit::Declaration(declaration) => {
-                    let _ = declaration.gencode(scope_manager, scope_id, instructions, context)?;
+                    let _ =
+                        declaration.gencode::<E>(scope_manager, scope_id, instructions, context)?;
                 }
             }
         }
 
-        instructions.push_label_id(start_label, "start_loop".to_string());
+        instructions.push_label_by_id(start_label, "start_loop".to_string());
 
         if let Some(condition) = &self.condition {
-            let _ = condition.gencode(scope_manager, scope_id, instructions, context)?;
+            let _ = condition.gencode::<E>(scope_manager, scope_id, instructions, context)?;
             instructions.push(Asm::If(BranchIf {
                 else_label: break_label,
             }));
         }
 
-        self.block.gencode(
+        self.block.gencode::<E>(
             scope_manager,
             scope_id,
             instructions,
@@ -111,51 +112,51 @@ impl GenerateCode for ForLoop {
         )?;
 
         // Loop epilog
-        instructions.push_label_id(epilog_label, "epilog_loop".to_string());
+        instructions.push_label_by_id(epilog_label, "epilog_loop".to_string());
         instructions.push(Asm::Goto(Goto {
             label: Some(continue_label),
         }));
-        instructions.push_label_id(continue_label, "continue_loop".to_string());
+        instructions.push_label_by_id(continue_label, "continue_loop".to_string());
         for increment in self.increments.iter() {
-            let _ = increment.gencode(scope_manager, scope_id, instructions, context)?;
+            let _ = increment.gencode::<E>(scope_manager, scope_id, instructions, context)?;
         }
         instructions.push(Asm::Goto(Goto {
             label: Some(start_label),
         }));
-        instructions.push_label_id(break_label, "break_loop".to_string());
+        instructions.push_label_by_id(break_label, "break_loop".to_string());
         instructions.push(Asm::Goto(Goto {
             label: Some(end_label),
         }));
-        instructions.push_label_id(end_label, "end_loop".to_string());
+        instructions.push_label_by_id(end_label, "end_loop".to_string());
 
         Ok(())
     }
 }
 
 impl GenerateCode for WhileLoop {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let start_label = Label::gen();
         let end_label = Label::gen();
         let break_label = Label::gen();
         let continue_label = Label::gen();
         let epilog_label = Label::gen();
 
-        instructions.push_label_id(start_label, "start_while".to_string().into());
+        instructions.push_label_by_id(start_label, "start_while".to_string().into());
 
         let _ = self
             .condition
-            .gencode(scope_manager, scope_id, instructions, context)?;
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Asm::If(BranchIf {
             else_label: end_label,
         }));
-        self.block.gencode(
+        self.block.gencode::<E>(
             scope_manager,
             scope_id,
             instructions,
@@ -167,20 +168,20 @@ impl GenerateCode for WhileLoop {
         )?;
 
         // Loop epilog
-        instructions.push_label_id(epilog_label, "epilog_loop".to_string());
+        instructions.push_label_by_id(epilog_label, "epilog_loop".to_string());
         instructions.push(Asm::Goto(Goto {
             label: Some(continue_label),
         }));
-        instructions.push_label_id(continue_label, "continue_loop".to_string());
+        instructions.push_label_by_id(continue_label, "continue_loop".to_string());
         instructions.push(Asm::Goto(Goto {
             label: Some(start_label),
         }));
 
-        instructions.push_label_id(break_label, "break_loop".to_string());
+        instructions.push_label_by_id(break_label, "break_loop".to_string());
         instructions.push(Asm::Goto(Goto {
             label: Some(end_label),
         }));
-        instructions.push_label_id(end_label, "end_loop".to_string());
+        instructions.push_label_by_id(end_label, "end_loop".to_string());
 
         Ok(())
     }
@@ -203,12 +204,12 @@ mod tests {
 
     #[test]
     fn valid_for() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -270,12 +271,12 @@ mod tests {
 
     #[test]
     fn valid_while() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
@@ -329,12 +330,12 @@ mod tests {
 
     #[test]
     fn valid_loop() {
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
-            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-            stack: &mut crate::vm::allocator::stack::Stack,
-            heap: &mut crate::vm::allocator::heap::Heap,
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
         ) -> bool {
             let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");

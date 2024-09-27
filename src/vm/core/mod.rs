@@ -1,12 +1,12 @@
-use alloc::{AllocCasm, AllocFn};
-use format::{FormatCasm, FormatFn};
-use io::{IOCasm, IOFn};
-use iter::{IterCasm, IterFn};
-use map::{MapCasm, MapFn};
-use math::{MathCasm, MathFn};
-use string::{StringCasm, StringFn};
-use thread::{ThreadCasm, ThreadFn};
-use vector::{VectorCasm, VectorFn};
+use alloc::{AllocAsm, AllocFn};
+use format::{FormatAsm, FormatFn};
+use io::{IOAsm, IOFn};
+use iter::{IterAsm, IterFn};
+use map::{MapAsm, MapFn};
+use math::{MathAsm, MathFn};
+use string::{StringAsm, StringFn};
+use thread::{ThreadAsm, ThreadFn};
+use vector::{VectorAsm, VectorFn};
 
 use crate::{
     ast::{expressions::Expression, utils::strings::ID},
@@ -21,12 +21,12 @@ use crate::semantic::scope::scope::ScopeManager;
 
 use super::{
     allocator::{heap::Heap, stack::Stack},
-    asm::{operation::OpPrimitive, Asm, Program},
+    asm::{operation::OpPrimitive, Asm},
+    program::Program,
+    runtime::RuntimeError,
+    scheduler_v2::Executable,
     stdio::StdIO,
-    vm::{
-        CasmMetadata, CodeGenerationError, Executable, GameEngineStaticFn, GenerateCode,
-        RuntimeError,
-    },
+    CodeGenerationError, GenerateCode,
 };
 
 pub mod alloc;
@@ -114,7 +114,7 @@ impl PathFinder for Core {
 }
 
 impl ResolveCore for Core {
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -122,15 +122,15 @@ impl ResolveCore for Core {
         parameters: &mut Vec<Expression>,
     ) -> Result<EType, SemanticError> {
         match self {
-            Core::Vec(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
-            Core::Map(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
-            Core::String(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
-            Core::Alloc(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
-            Core::Thread(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
-            Core::IO(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
-            Core::Math(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
-            Core::Format(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
-            Core::Iter(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
+            Core::Vec(value) => value.resolve::<E>(scope_manager, scope_id, context, parameters),
+            Core::Map(value) => value.resolve::<E>(scope_manager, scope_id, context, parameters),
+            Core::String(value) => value.resolve::<E>(scope_manager, scope_id, context, parameters),
+            Core::Alloc(value) => value.resolve::<E>(scope_manager, scope_id, context, parameters),
+            Core::Thread(value) => value.resolve::<E>(scope_manager, scope_id, context, parameters),
+            Core::IO(value) => value.resolve::<E>(scope_manager, scope_id, context, parameters),
+            Core::Math(value) => value.resolve::<E>(scope_manager, scope_id, context, parameters),
+            Core::Format(value) => value.resolve::<E>(scope_manager, scope_id, context, parameters),
+            Core::Iter(value) => value.resolve::<E>(scope_manager, scope_id, context, parameters),
             Core::Assert(expect_err) => {
                 if parameters.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
@@ -138,7 +138,7 @@ impl ResolveCore for Core {
 
                 let size = &mut parameters[0];
 
-                let _ = size.resolve::<G>(
+                let _ = size.resolve::<E>(
                     scope_manager,
                     scope_id,
                     &Some(e_static!(StaticType::Primitive(PrimitiveType::Bool))),
@@ -172,96 +172,104 @@ impl ResolveCore for Core {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum CoreCasm {
-    Vec(VectorCasm),
-    Map(MapCasm),
-    String(StringCasm),
-    Alloc(AllocCasm),
-    Thread(ThreadCasm),
-    IO(IOCasm),
-    Math(MathCasm),
-    Format(FormatCasm),
+pub enum CoreAsm {
+    Vec(VectorAsm),
+    Map(MapAsm),
+    String(StringAsm),
+    Alloc(AllocAsm),
+    Thread(ThreadAsm),
+    IO(IOAsm),
+    Math(MathAsm),
+    Format(FormatAsm),
     AssertBool,
     AssertErr,
     Error,
     Ok,
-    Iter(IterCasm),
-    Engine(String),
+    Iter(IterAsm),
 }
 
 impl GenerateCode for Core {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut Program,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
-            Core::Vec(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Core::Map(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Core::String(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Core::Alloc(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Core::Thread(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Core::IO(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Core::Math(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Core::Format(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Core::Iter(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Core::Vec(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
+            Core::Map(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
+            Core::String(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Core::Alloc(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Core::Thread(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Core::IO(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
+            Core::Math(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
+            Core::Format(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Core::Iter(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
             Core::Assert(expect_err) => {
                 if *expect_err {
-                    instructions.push(Asm::Core(CoreCasm::AssertErr));
+                    instructions.push(Asm::Core(CoreAsm::AssertErr));
                 } else {
-                    instructions.push(Asm::Core(CoreCasm::AssertBool));
+                    instructions.push(Asm::Core(CoreAsm::AssertBool));
                 }
                 Ok(())
             }
             Core::Error => {
-                instructions.push(Asm::Core(CoreCasm::Error));
+                instructions.push(Asm::Core(CoreAsm::Error));
                 Ok(())
             }
             Core::Ok => {
-                instructions.push(Asm::Core(CoreCasm::Ok));
+                instructions.push(Asm::Core(CoreAsm::Ok));
                 Ok(())
             }
         }
     }
 }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CoreCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for CoreAsm {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
         match self {
-            CoreCasm::Engine(fn_id) => G::name_of_dynamic_fn(fn_id.clone(), stdio, program, engine),
-            CoreCasm::Vec(value) => value.name(stdio, program, engine),
-            CoreCasm::Map(value) => value.name(stdio, program, engine),
-            CoreCasm::String(value) => value.name(stdio, program, engine),
-            CoreCasm::Alloc(value) => value.name(stdio, program, engine),
-            CoreCasm::Thread(value) => value.name(stdio, program, engine),
-            CoreCasm::IO(value) => value.name(stdio, program, engine),
-            CoreCasm::Math(value) => value.name(stdio, program, engine),
-            CoreCasm::Format(value) => value.name(stdio, program, engine),
-            CoreCasm::Iter(value) => value.name(stdio, program, engine),
-            CoreCasm::AssertBool => stdio.push_asm_lib(engine, "assert_true"),
-            CoreCasm::AssertErr => stdio.push_asm_lib(engine, "assert_ok"),
-            CoreCasm::Error => stdio.push_asm_lib(engine, "error"),
-            CoreCasm::Ok => stdio.push_asm_lib(engine, "ok"),
+            CoreAsm::Vec(value) => value.name(stdio, program, engine),
+            CoreAsm::Map(value) => value.name(stdio, program, engine),
+            CoreAsm::String(value) => value.name(stdio, program, engine),
+            CoreAsm::Alloc(value) => value.name(stdio, program, engine),
+            CoreAsm::Thread(value) => value.name(stdio, program, engine),
+            CoreAsm::IO(value) => value.name(stdio, program, engine),
+            CoreAsm::Math(value) => value.name(stdio, program, engine),
+            CoreAsm::Format(value) => value.name(stdio, program, engine),
+            CoreAsm::Iter(value) => value.name(stdio, program, engine),
+            CoreAsm::AssertBool => stdio.push_asm_lib(engine, "assert_true"),
+            CoreAsm::AssertErr => stdio.push_asm_lib(engine, "assert_ok"),
+            CoreAsm::Error => stdio.push_asm_lib(engine, "error"),
+            CoreAsm::Ok => stdio.push_asm_lib(engine, "ok"),
         }
     }
-    fn weight(&self) -> super::vm::CasmWeight {
+}
+
+impl crate::vm::AsmWeight for CoreAsm {
+    fn weight(&self) -> super::Weight {
         match self {
-            CoreCasm::Engine(fn_id) => G::weight_of_dynamic_fn(fn_id.clone()),
-            CoreCasm::Vec(value) => <VectorCasm as CasmMetadata<G>>::weight(value),
-            CoreCasm::Map(value) => <MapCasm as CasmMetadata<G>>::weight(value),
-            CoreCasm::String(value) => <StringCasm as CasmMetadata<G>>::weight(value),
-            CoreCasm::Alloc(value) => <AllocCasm as CasmMetadata<G>>::weight(value),
-            CoreCasm::Thread(value) => <ThreadCasm as CasmMetadata<G>>::weight(value),
-            CoreCasm::IO(value) => <IOCasm as CasmMetadata<G>>::weight(value),
-            CoreCasm::Math(value) => <MathCasm as CasmMetadata<G>>::weight(value),
-            CoreCasm::Format(value) => <FormatCasm as CasmMetadata<G>>::weight(value),
-            CoreCasm::Iter(value) => <IterCasm as CasmMetadata<G>>::weight(value),
-            CoreCasm::AssertBool => super::vm::CasmWeight::ZERO,
-            CoreCasm::AssertErr => super::vm::CasmWeight::ZERO,
-            CoreCasm::Error => super::vm::CasmWeight::ZERO,
-            CoreCasm::Ok => super::vm::CasmWeight::ZERO,
+            CoreAsm::Vec(value) => value.weight(),
+            CoreAsm::Map(value) => value.weight(),
+            CoreAsm::String(value) => value.weight(),
+            CoreAsm::Alloc(value) => value.weight(),
+            CoreAsm::Thread(value) => value.weight(),
+            CoreAsm::IO(value) => value.weight(),
+            CoreAsm::Math(value) => value.weight(),
+            CoreAsm::Format(value) => value.weight(),
+            CoreAsm::Iter(value) => value.weight(),
+            CoreAsm::AssertBool => super::Weight::ZERO,
+            CoreAsm::AssertErr => super::Weight::ZERO,
+            CoreAsm::Error => super::Weight::ZERO,
+            CoreAsm::Ok => super::Weight::ZERO,
         }
     }
 }
@@ -271,32 +279,48 @@ pub const ERROR_SLICE: [u8; 1] = [ERROR_VALUE];
 pub const OK_VALUE: u8 = 0;
 pub const OK_SLICE: [u8; 1] = [OK_VALUE];
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for CoreCasm {
-    fn execute(
+impl<E: crate::vm::external::Engine> Executable<E> for CoreAsm {
+    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
         &self,
-        program: &mut Program,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler_v2::ExecutionContext,
     ) -> Result<(), RuntimeError> {
         match self {
-            CoreCasm::Engine(fn_id) => {
-                G::execute_dynamic_fn(fn_id.clone(), program, stack, heap, stdio, engine, tid)
+            CoreAsm::Vec(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
             }
-            CoreCasm::Vec(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            CoreCasm::Map(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            CoreCasm::String(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            CoreCasm::Alloc(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            CoreCasm::Thread(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            CoreCasm::IO(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            CoreCasm::Math(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            CoreCasm::Format(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            CoreCasm::Iter(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            CoreCasm::AssertBool => {
+            CoreAsm::Map(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
+            CoreAsm::String(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
+            CoreAsm::Alloc(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
+            CoreAsm::Thread(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
+            CoreAsm::IO(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
+            CoreAsm::Math(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
+            CoreAsm::Format(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
+            CoreAsm::Iter(value) => {
+                value.execute(program, scheduler, stack, heap, stdio, engine, context)
+            }
+            CoreAsm::AssertBool => {
                 let condition = OpPrimitive::pop_bool(stack)?;
-                program.incr();
+                scheduler.next();
                 if condition {
                     // push NO_ERROR
                     let _ = stack.push_with(&OK_SLICE)?;
@@ -307,9 +331,9 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for CoreCasm {
                     Err(RuntimeError::AssertError)
                 }
             }
-            CoreCasm::AssertErr => {
+            CoreAsm::AssertErr => {
                 let condition = !OpPrimitive::pop_bool(stack)?;
-                program.incr();
+                scheduler.next();
                 if condition {
                     // push NO_ERROR
                     let _ = stack.push_with(&OK_SLICE)?;
@@ -320,14 +344,14 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for CoreCasm {
                     Err(RuntimeError::AssertError)
                 }
             }
-            CoreCasm::Error => {
+            CoreAsm::Error => {
                 let _ = stack.push_with(&ERROR_SLICE)?;
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
-            CoreCasm::Ok => {
+            CoreAsm::Ok => {
                 let _ = stack.push_with(&OK_SLICE)?;
-                program.incr();
+                scheduler.next();
                 Ok(())
             }
         }
@@ -336,60 +360,60 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for CoreCasm {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ast::TryParse, semantic::Resolve, vm::vm::GenerateCode};
+    use crate::{ast::TryParse, semantic::Resolve};
 
-    #[test]
-    fn valid_dynamic_fn() {
-        let mut statement = crate::ast::statements::Statement::parse(
-            r##"
-        {
-            dynamic_fn();
-        }
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+    // #[test]
+    // fn valid_extern_fn() {
+    //     let mut statement = crate::ast::statements::Statement::parse(
+    //         r##"
+    //     {
+    //         dynamic_fn();
+    //     }
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
 
-        let mut engine = crate::vm::vm::TestDynamicGameEngine {
-            dynamic_fn_provider: crate::vm::vm::TestDynamicFnProvider {},
-            out: String::new(),
-        };
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = statement
-            .resolve::<crate::vm::vm::TestDynamicGameEngine>(
-                &mut scope_manager,
-                None,
-                &None,
-                &mut (),
-            )
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let mut instructions = crate::vm::asm::Program::default();
-        statement
-            .gencode(
-                &mut scope_manager,
-                None,
-                &mut instructions,
-                &crate::vm::vm::CodeGenerationContext::default(),
-            )
-            .expect("Code generation should have succeeded");
+    //     let mut engine = crate::vm::vm::TestDynamicGameEngine {
+    //         dynamic_fn_provider: crate::vm::vm::TestDynamicFnProvider {},
+    //         out: String::new(),
+    //     };
+    //     let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+    //     let _ = statement
+    //         .resolve::<crate::vm::vm::TestDynamicGameEngine>(
+    //             &mut scope_manager,
+    //             None,
+    //             &None,
+    //             &mut (),
+    //         )
+    //         .expect("Resolution should have succeeded");
+    //     // Code generation.
+    //     let mut instructions = crate::vm::program::Program::default();
+    //     statement
+    //         .gencode::<E>(
+    //             &mut scope_manager,
+    //             None,
+    //             &mut instructions,
+    //             &crate::vm::CodeGenerationContext::default(),
+    //         )
+    //         .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let (mut runtime, mut heap, mut stdio) = crate::vm::vm::Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
+    //     assert!(instructions.len() > 0, "No instructions generated");
+    //     // Execute the instructions.
+    //     let (mut runtime, mut heap, mut stdio) = crate::vm::vm::Runtime::new();
+    //     let tid = runtime
+    //         .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
+    //         .expect("Thread spawn_with_scopeing should have succeeded");
+    //     let (_, stack, program) = runtime
+    //         .get_mut(crate::vm::vm::Player::P1, tid)
+    //         .expect("Thread should exist");
+    //     program.merge(instructions);
 
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let output = engine.out;
-        assert_eq!(&output, "Hello World from Dynamic function");
-    }
+    //     program
+    //         .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
+    //         .expect("Execution should have succeeded");
+    //     let output = engine.out;
+    //     assert_eq!(&output, "Hello World from Dynamic function");
+    // }
 }
