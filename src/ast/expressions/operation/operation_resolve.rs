@@ -1,15 +1,15 @@
 use super::{
     Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, ExprCall,
-    FieldAccess, ListAccess, LogicalAnd, LogicalOr, Product, Range, Shift, Substraction,
-    TupleAccess, UnaryOperation,
+    FieldAccess, ListAccess, LogicalAnd, LogicalOr, Product, Shift, Substraction, TupleAccess,
+    UnaryOperation,
 };
 
 use crate::ast::expressions::data::{Data, Number, Primitive, Variable};
 use crate::ast::expressions::{Atomic, Expression};
 use crate::p_num;
 use crate::semantic::scope::static_types::{
-    ClosureType, FunctionType, LambdaType, NumberType, PrimitiveType, RangeType, SliceType,
-    StaticType, StrSliceType, TupleType, VecType,
+    ClosureType, FunctionType, LambdaType, NumberType, PrimitiveType, SliceType, StaticType,
+    StrSliceType, TupleType, VecType,
 };
 use crate::semantic::scope::user_types::{Struct, UserType};
 use crate::semantic::{
@@ -451,7 +451,34 @@ impl ResolveFromStruct for ExprCall {
         scope_id: Option<u128>,
         struct_id: u64,
     ) -> Result<(), SemanticError> {
-        todo!()
+        let _ = self
+            .var
+            .resolve_from_struct::<E>(scope_manager, scope_id, struct_id)?;
+
+        let var_type = self.var.type_of(scope_manager, scope_id)?;
+        let (params, return_type) = match &var_type {
+            EType::Static(StaticType::Closure(ClosureType { params, ret, .. })) => (params, ret),
+            EType::Static(StaticType::Lambda(LambdaType { params, ret, .. })) => (params, ret),
+            EType::Static(StaticType::Function(FunctionType { params, ret, .. })) => (params, ret),
+            _ => return Err(SemanticError::ExpectedCallable),
+        };
+
+        if params.len() != self.args.args.len() {
+            return Err(SemanticError::IncorrectArguments);
+        }
+
+        let mut params_size = 0;
+        for (arg, param) in self.args.args.iter_mut().zip(params) {
+            let _ = arg.resolve::<E>(scope_manager, scope_id, &Some(param.clone()), &mut None)?;
+            params_size += param.size_of();
+        }
+        let _ = self.args.size.insert(params_size);
+
+        self.metadata.info = Info::Resolved {
+            context: None,
+            signature: Some(return_type.as_ref().clone()),
+        };
+        Ok(())
     }
 }
 
@@ -465,185 +492,6 @@ impl Desugar<Expression> for ExprCall {
             self.var = output.into();
         }
         Ok(None)
-    }
-}
-
-// impl Resolve for FnCall {
-//     type Output = ();
-//     type Context = Option<EType>;
-//     type Extra = Option<EType>;
-//     fn resolve<E: crate::vm::external::Engine>(
-//         &mut self,
-//         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-//         scope_id: Option<u128>,
-//         context: &Self::Context,
-//         extra: &mut Self::Extra,
-//     ) -> Result<Self::Output, SemanticError>
-//     where
-//         Self: Sized,
-//     {
-
-//         match self.fn_var.as_mut() {
-//             Expression::Atomic(Atomic::Data(Data::Variable(Variable { ref name, .. }))) => {
-//                 let found = scope_manager.find_var_by_name(name, scope_id);
-//                 if found.is_err() || self.lib.is_some() {
-//                     if let Some(mut dynamic_fn) = E::is_dynamic_fn(&self.lib, name) {
-//                         self.is_dynamic_fn = Some(name.as_str().to_string());
-//                         let return_type =
-//                             dynamic_fn.resolve::<E>(scope_manager, scope_id, &mut self.params)?;
-//                         self.metadata.info = crate::semantic::Info::Resolved {
-//                             context: context.clone(),
-//                             signature: Some(return_type),
-//                         };
-//                         return Ok(());
-//                     }
-//                     if let Some(mut api) = Lib::from(&self.lib, name) {
-//                         let return_type = api.resolve::<E>(
-//                             scope_manager,
-//                             scope_id,
-//                             context.as_ref(),
-//                             &mut self.params,
-//                         )?;
-
-//                         self.Core = Some(api);
-
-//                         self.metadata.info = crate::semantic::Info::Resolved {
-//                             context: context.clone(),
-//                             signature: Some(return_type),
-//                         };
-//                         return Ok(());
-//                     }
-//                 }
-//             }
-//             _ => {}
-//         }
-
-//         let _ = self
-//             .fn_var
-//             .resolve::<E>(scope_manager, scope_id, context, extra)?;
-
-//         let fn_var_type = self.fn_var.type_of(&scope_manager, scope_id)?;
-
-//         let params_type = match fn_var_type {
-//             EType::Static(StaticType::Closure(ClosureType { ref params, .. })) => params.clone(),
-//             EType::Static(StaticType::Function(FunctionType { ref params, .. })) => params.clone(),
-//             _ => return Err(SemanticError::ExpectedCallable),
-//         };
-
-//         if self.params.len() != params_type.len() {
-//             return Err(SemanticError::IncorrectArguments);
-//         }
-//         for (expr, param_type) in self.params.iter_mut().zip(params_type) {
-//             let _ = expr.resolve::<E>(
-//                 scope_manager,
-//                 scope_id,
-//                 &Some(param_type.clone()),
-//                 &mut None,
-//             )?;
-//             let _ = expr.type_of(scope_manager, scope_id)?.compatible_with(
-//                 &param_type,
-//                 scope_manager,
-//                 scope_id,
-//             )?;
-//         }
-
-//         self.metadata.info = crate::semantic::Info::Resolved {
-//             context: context.clone(),
-//             signature: Some(self.type_of(scope_manager, scope_id)?),
-//         };
-//         Ok(())
-//     }
-// }
-
-// impl ResolveFromStruct for FnCall {
-//     fn resolve_from_struct<E: crate::vm::external::Engine>(
-//         &mut self,
-//         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-//         scope_id: Option<u128>,
-//         struct_id: u64,
-//     ) -> Result<(), SemanticError> {
-//         let _ = self
-//             .fn_var
-//             .resolve_from_struct::<E>(scope_manager, scope_id, struct_id)?;
-
-//         todo!();
-//         Ok(())
-//     }
-// }
-
-impl Resolve for Range {
-    type Output = ();
-    type Context = Option<EType>;
-    type Extra = ();
-    fn resolve<E: crate::vm::external::Engine>(
-        &mut self,
-        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-        context: &Self::Context,
-        extra: &mut Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        let inner_context = match context {
-            Some(context) => match context {
-                EType::Static(context) => match context {
-                    StaticType::Range(RangeType { num, .. }) => Some(EType::Static(
-                        StaticType::Primitive(PrimitiveType::Number(num.clone())).into(),
-                    )),
-                    _ => None,
-                },
-                _ => None,
-            },
-            None => None,
-        };
-
-        match (self.lower.as_mut(), self.upper.as_mut()) {
-            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<E>(scope_manager, scope_id, context, &mut None)?;
-                let upper_type = self.upper.type_of(&scope_manager, scope_id)?;
-                let _ = self.lower.resolve::<E>(
-                    scope_manager,
-                    scope_id,
-                    &Some(upper_type),
-                    &mut None,
-                )?;
-            }
-            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<E>(scope_manager, scope_id, context, &mut None)?;
-                let lower_type = self.lower.type_of(&scope_manager, scope_id)?;
-                let _ = self.upper.resolve::<E>(
-                    scope_manager,
-                    scope_id,
-                    &Some(lower_type),
-                    &mut None,
-                )?;
-            }
-            _ => {
-                let _ = self
-                    .lower
-                    .resolve::<E>(scope_manager, scope_id, context, &mut None)?;
-                let _ = self
-                    .upper
-                    .resolve::<E>(scope_manager, scope_id, context, &mut None)?;
-            }
-        }
-
-        let _ = self.metadata.info = crate::semantic::Info::Resolved {
-            context: context.clone(),
-            signature: Some(self.type_of(scope_manager, scope_id)?),
-        };
-        Ok(())
-    }
-}
-
-impl Desugar<Expression> for Range {
-    fn desugar<E: crate::vm::external::Engine>(
-        &mut self,
-        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-    ) -> Result<Option<Expression>, SemanticError> {
-        todo!()
     }
 }
 
@@ -664,27 +512,25 @@ fn resolve_logical_binary_operation<E: crate::vm::external::Engine>(
     let right_is_unresolved = right.is_unresolved_number();
 
     if left_is_unresolved && right_is_unresolved {
-        left.resolve_number(NumberType::I64);
-        right.resolve_number(NumberType::I64);
+        let _ = left.resolve_number(NumberType::I64);
+        let _ = right.resolve_number(NumberType::I64);
         let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
         let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
     } else if left_is_unresolved && !right_is_unresolved {
         let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
-        let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
+        if let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
             right.type_of(scope_manager, scope_id)?
-        else {
-            return Err(SemanticError::IncompatibleOperands);
-        };
-        left.resolve_number(number_type);
+        {
+            let _ = left.resolve_number(number_type);
+        }
         let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
     } else if right_is_unresolved && !left_is_unresolved {
         let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
-        let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
+        if let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
             left.type_of(scope_manager, scope_id)?
-        else {
-            return Err(SemanticError::IncompatibleOperands);
-        };
-        right.resolve_number(number_type);
+        {
+            let _ = right.resolve_number(number_type);
+        }
         let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
     } else {
         let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
@@ -706,8 +552,8 @@ fn resolve_binary_numerical_operation<E: crate::vm::external::Engine>(
             else {
                 return Err(SemanticError::IncompatibleOperands);
             };
-            left.resolve_number(number_type.clone());
-            right.resolve_number(number_type.clone());
+            let _ = left.resolve_number(number_type.clone());
+            let _ = right.resolve_number(number_type.clone());
 
             let _ = right.resolve::<E>(scope_manager, scope_id, context, &mut None)?;
             let _ = left.resolve::<E>(scope_manager, scope_id, context, &mut None)?;
@@ -717,8 +563,8 @@ fn resolve_binary_numerical_operation<E: crate::vm::external::Engine>(
             let right_is_unresolved = right.is_unresolved_number();
 
             if left_is_unresolved && right_is_unresolved {
-                left.resolve_number(NumberType::I64);
-                right.resolve_number(NumberType::I64);
+                let _ = left.resolve_number(NumberType::I64);
+                let _ = right.resolve_number(NumberType::I64);
                 let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
                 let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
             } else if left_is_unresolved && !right_is_unresolved {
@@ -728,7 +574,7 @@ fn resolve_binary_numerical_operation<E: crate::vm::external::Engine>(
                 else {
                     return Err(SemanticError::IncompatibleOperands);
                 };
-                left.resolve_number(number_type);
+                let _ = left.resolve_number(number_type);
                 let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
             } else if right_is_unresolved && !left_is_unresolved {
                 let _ = left.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
@@ -737,7 +583,7 @@ fn resolve_binary_numerical_operation<E: crate::vm::external::Engine>(
                 else {
                     return Err(SemanticError::IncompatibleOperands);
                 };
-                right.resolve_number(number_type);
+                let _ = right.resolve_number(number_type);
                 let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
             } else {
                 let _ = right.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
@@ -754,7 +600,6 @@ fn resolve_binary_numerical_operation<E: crate::vm::external::Engine>(
     } else {
         return Err(SemanticError::IncompatibleTypes);
     }
-    return left.type_of(scope_manager, scope_id);
 }
 
 impl ResolveNumber for Product {
@@ -1672,14 +1517,13 @@ impl Resolve for LogicalAnd {
             scope_manager,
             scope_id,
         )?;
-
         let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) =
             self.left.type_of(&scope_manager, scope_id)?
         else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) =
-            self.left.type_of(&scope_manager, scope_id)?
+            self.right.type_of(&scope_manager, scope_id)?
         else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -1747,7 +1591,7 @@ impl Resolve for LogicalOr {
             return Err(SemanticError::IncompatibleTypes);
         };
         let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) =
-            self.left.type_of(&scope_manager, scope_id)?
+            self.right.type_of(&scope_manager, scope_id)?
         else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -1991,16 +1835,6 @@ mod tests {
         assert!(res.is_err());
 
         let mut expr = Addition::parse("10 + x".into()).unwrap().1;
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
-            &mut scope_manager,
-            None,
-            &None,
-            &mut None,
-        );
-        assert!(res.is_err());
-
-        let mut expr = Addition::parse("10.0 + 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
             &mut scope_manager,

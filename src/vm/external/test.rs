@@ -1,14 +1,40 @@
-use crate::vm::{scheduler_v2::Executable, AsmName, AsmWeight};
+use crate::vm::{scheduler::Executable, AsmName, AsmWeight};
 
 use super::{
-    Engine, ExternEnergyDispenser, ExternFunction, ExternIO, ExternPathFinder, ExternThreadHandler,
-    ExternThreadIdentifier,
+    Engine, ExternEnergyDispenser, ExternExecutionContext, ExternFunction, ExternIO,
+    ExternPathFinder, ExternThreadHandler, ExternThreadIdentifier,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct DefaultThreadID(u64);
+pub struct DefaultThreadID(pub u64);
 
-impl ExternThreadIdentifier for DefaultThreadID {}
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefaultExecutionContext {}
+
+impl Default for DefaultExecutionContext {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
+impl Default for DefaultThreadID {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
+impl ExternThreadIdentifier for DefaultThreadID {
+    fn to_u64(&self) -> u64 {
+        self.0
+    }
+
+    fn from_u64(tid: u64) -> Self {
+        Self(tid)
+    }
+    // fn gen<E: ExternThreadHandler>(engine: &mut E) -> Self {
+    //     DefaultThreadID(2)
+    // }
+}
 
 pub struct DefaultExternFunction;
 
@@ -19,26 +45,29 @@ impl<E: Engine> AsmName<E> for DefaultExternFunction {
         program: &crate::vm::program::Program<E>,
         engine: &mut E,
     ) {
-        todo!()
+        unimplemented!()
     }
 }
 
 impl AsmWeight for DefaultExternFunction {}
 
 impl<E: Engine> Executable<E> for DefaultExternFunction {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), crate::vm::runtime::RuntimeError> {
-        todo!()
+        unimplemented!()
     }
 }
+
+impl ExternExecutionContext for DefaultExecutionContext {}
 
 impl<E: Engine> ExternFunction<E> for DefaultExternFunction {}
 
@@ -61,6 +90,7 @@ impl ExternIO for NoopGameEngine {
 
 impl Engine for NoopGameEngine {
     type Function = DefaultExternFunction;
+    type FunctionContext = DefaultExecutionContext;
 }
 
 impl ExternThreadHandler for NoopGameEngine {
@@ -70,18 +100,18 @@ impl ExternThreadHandler for NoopGameEngine {
         Ok(DefaultThreadID(1))
     }
 
-    fn close(&mut self, tid: Self::TID) {
-        todo!()
+    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
     }
 }
 
 impl ExternEnergyDispenser for NoopGameEngine {
     fn get_energy(&self) -> usize {
-        todo!()
+        unimplemented!()
     }
 
     fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
-        todo!()
+        unimplemented!()
     }
 }
 
@@ -90,7 +120,7 @@ impl ExternPathFinder for NoopGameEngine {
     where
         Self: super::Engine,
     {
-        todo!()
+        unimplemented!()
     }
 }
 
@@ -120,15 +150,16 @@ impl ExternIO for StdoutTestGameEngine {
 
 impl Engine for StdoutTestGameEngine {
     type Function = DefaultExternFunction;
+    type FunctionContext = DefaultExecutionContext;
 }
 
 impl ExternEnergyDispenser for StdoutTestGameEngine {
     fn get_energy(&self) -> usize {
-        todo!()
+        unimplemented!()
     }
 
     fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
-        todo!()
+        unimplemented!()
     }
 }
 
@@ -139,8 +170,8 @@ impl ExternThreadHandler for StdoutTestGameEngine {
         Ok(DefaultThreadID(1))
     }
 
-    fn close(&mut self, tid: Self::TID) {
-        todo!()
+    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
     }
 }
 
@@ -149,7 +180,7 @@ impl ExternPathFinder for StdoutTestGameEngine {
     where
         Self: super::Engine,
     {
-        todo!()
+        unimplemented!()
     }
 }
 #[derive(Debug, Clone)]
@@ -183,15 +214,16 @@ impl ExternIO for StdinTestGameEngine {
 
 impl Engine for StdinTestGameEngine {
     type Function = DefaultExternFunction;
+    type FunctionContext = DefaultExecutionContext;
 }
 
 impl ExternEnergyDispenser for StdinTestGameEngine {
     fn get_energy(&self) -> usize {
-        todo!()
+        unimplemented!()
     }
 
     fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
-        todo!()
+        unimplemented!()
     }
 }
 
@@ -199,11 +231,11 @@ impl ExternThreadHandler for StdinTestGameEngine {
     type TID = DefaultThreadID;
 
     fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
-        todo!()
+        unimplemented!()
     }
 
-    fn close(&mut self, tid: Self::TID) {
-        todo!()
+    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
     }
 }
 
@@ -212,7 +244,7 @@ impl ExternPathFinder for StdinTestGameEngine {
     where
         Self: super::Engine,
     {
-        todo!()
+        unimplemented!()
     }
 }
 
@@ -243,15 +275,16 @@ impl ExternIO for DbgGameEngine {
 
 impl Engine for DbgGameEngine {
     type Function = DefaultExternFunction;
+    type FunctionContext = DefaultExecutionContext;
 }
 
 impl ExternEnergyDispenser for DbgGameEngine {
     fn get_energy(&self) -> usize {
-        todo!()
+        unimplemented!()
     }
 
     fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
-        todo!()
+        unimplemented!()
     }
 }
 
@@ -262,8 +295,8 @@ impl ExternThreadHandler for DbgGameEngine {
         Ok(DefaultThreadID(1))
     }
 
-    fn close(&mut self, tid: Self::TID) {
-        todo!()
+    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
     }
 }
 
@@ -272,14 +305,13 @@ impl ExternPathFinder for DbgGameEngine {
     where
         Self: super::Engine,
     {
-        todo!()
+        unimplemented!()
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct ThreadTestGameEngine {
-    pub spawned_thread: usize,
-    pub closed_thread: usize,
+    pub id_auto_increment: u64,
 }
 
 impl ExternIO for ThreadTestGameEngine {
@@ -293,7 +325,46 @@ impl ExternIO for ThreadTestGameEngine {
     }
     fn stdin_request(&mut self) {}
 
-    fn stdasm_print(&mut self, content: String) {}
+    fn stdasm_print(&mut self, content: String) {
+        println!("{}", content);
+    }
+}
+
+impl Engine for ThreadTestGameEngine {
+    type Function = DefaultExternFunction;
+    type FunctionContext = DefaultExecutionContext;
+}
+
+impl ExternEnergyDispenser for ThreadTestGameEngine {
+    fn get_energy(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
+    }
+}
+
+impl ExternThreadHandler for ThreadTestGameEngine {
+    type TID = DefaultThreadID;
+
+    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+        self.id_auto_increment += 1;
+        Ok(DefaultThreadID(self.id_auto_increment))
+    }
+
+    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+        Ok(())
+    }
+}
+
+impl ExternPathFinder for ThreadTestGameEngine {
+    fn find(path: &[String], name: &str) -> Option<<Self as Engine>::Function>
+    where
+        Self: super::Engine,
+    {
+        unimplemented!()
+    }
 }
 
 // #[derive(Debug, Clone)]
@@ -329,15 +400,15 @@ impl ExternIO for ThreadTestGameEngine {
 // }
 
 // impl<E: crate::vm::external::Engine> Executable<E> for TestDynamicFn {
-//     fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+//     fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
 //         &self,
 //         program: &crate::vm::program::Program<E>,
-//         scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+//         scheduler: &mut crate::vm::scheduler::Scheduler<P>,
 //         stack: &mut crate::vm::allocator::stack::Stack,
 //         heap: &mut crate::vm::allocator::heap::Heap,
 //         stdio: &mut crate::vm::stdio::StdIO,
 //         engine: &mut E,
-//         context: &crate::vm::scheduler_v2::ExecutionContext,
+//         context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
 //     ) -> Result<(), RuntimeError> {
 //         stdio.stdout.push("\"Hello World from Dynamic function\"");
 //         stdio.stdout.flush(engine);
@@ -372,7 +443,7 @@ impl ExternIO for ThreadTestGameEngine {
 //         tid: usize,
 //     ) -> Result<(), RuntimeError> {
 //         if let Some(dynamic_fn) = TestDynamicFnProvider::get_dynamic_fn(&None, &fn_id) {
-//             dynamic_fn.execute(program, scheduler, stack, heap, stdio, engine, context)?;
+//             dynamic_fn.execute(program, scheduler, signal_handler, stack, heap, stdio, engine, context)?;
 //         }
 //         Ok(())
 //     }

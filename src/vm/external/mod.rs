@@ -1,4 +1,4 @@
-use std::hash::Hash;
+use std::{fmt::Debug, hash::Hash};
 
 use super::runtime::RuntimeError;
 
@@ -20,7 +20,7 @@ pub trait ExternPathFinder {
 }
 
 pub trait ExternFunction<E: Engine>:
-    super::AsmName<E> + super::AsmWeight + super::scheduler_v2::Executable<E> + Sized
+    super::AsmName<E> + super::AsmWeight + super::scheduler::Executable<E> + Sized
 {
 }
 
@@ -41,13 +41,22 @@ pub trait ExternEnergyDispenser {
 pub trait ExternThreadHandler {
     type TID: ExternThreadIdentifier;
     fn spawn(&mut self) -> Result<Self::TID, RuntimeError>;
-    fn close(&mut self, tid: Self::TID);
+    fn close(&mut self, tid: &Self::TID) -> Result<(), RuntimeError>;
 }
 
 pub trait Engine:
     ExternIO + ExternPathFinder + ExternEnergyDispenser + ExternThreadHandler + Sized
 {
     type Function: ExternFunction<Self>;
+    type FunctionContext: ExternExecutionContext;
 }
 
-pub trait ExternThreadIdentifier: Hash + PartialEq + std::cmp::Eq + Clone + Sized {}
+pub trait ExternExecutionContext: Default {}
+
+pub trait ExternThreadIdentifier:
+    Hash + PartialEq + std::cmp::Eq + Clone + Sized + Debug + Default
+{
+    fn to_u64(&self) -> u64;
+    fn from_u64(tid: u64) -> Self;
+    // fn gen<E: ExternThreadHandler>(engine: &mut E) -> Self;
+}

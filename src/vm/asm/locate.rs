@@ -7,7 +7,7 @@ use crate::vm::{
     asm::operation::OpPrimitive,
     program::Program,
     runtime::RuntimeError,
-    scheduler_v2::Executable,
+    scheduler::Executable,
     stdio::StdIO,
 };
 use num_traits::ToBytes;
@@ -27,15 +27,16 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Locate {
 impl crate::vm::AsmWeight for Locate {}
 
 impl<E: crate::vm::external::Engine> Executable<E> for Locate {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let address: u64 = self.address.into(stack);
 
@@ -57,15 +58,16 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for LocateOffsetFromS
 }
 impl crate::vm::AsmWeight for LocateOffsetFromStackPointer {}
 impl<E: crate::vm::external::Engine> Executable<E> for LocateOffsetFromStackPointer {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let address =
             (stack.top().checked_sub(self.offset)).ok_or(RuntimeError::MemoryViolation)?;
@@ -93,15 +95,16 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for LocateOffset {
 impl crate::vm::AsmWeight for LocateOffset {}
 
 impl<E: crate::vm::external::Engine> Executable<E> for LocateOffset {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
         let new_address = address.add(self.offset);
@@ -134,15 +137,16 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for LocateIndex {
 impl crate::vm::AsmWeight for LocateIndex {}
 
 impl<E: crate::vm::external::Engine> Executable<E> for LocateIndex {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let (mut address, index) = match self.base_address {
             Some(address) => {

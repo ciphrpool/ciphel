@@ -13,7 +13,7 @@ use crate::{
         core::{lexem, CoreAsm},
         program::Program,
         runtime::RuntimeError,
-        scheduler_v2::Executable,
+        scheduler::Executable,
         stdio::StdIO,
         CodeGenerationError, GenerateCode,
     },
@@ -282,18 +282,17 @@ impl GenerateCode for VectorFn {
 
 pub const VEC_HEADER: usize = 16;
 
-impl<E: crate::vm::external::Engine> Executable<E>
-    for VectorAsm
-{
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match *self {
             VectorAsm::Vec { item_size } => todo!(),

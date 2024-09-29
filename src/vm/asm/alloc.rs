@@ -12,7 +12,7 @@ use crate::vm::{
     asm::operation::OpPrimitive,
     program::Program,
     runtime::RuntimeError,
-    scheduler_v2::Executable,
+    scheduler::Executable,
     stdio::StdIO,
 };
 
@@ -89,15 +89,16 @@ impl crate::vm::AsmWeight for Alloc {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Alloc {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self {
             Alloc::Heap { size } => {
@@ -156,15 +157,16 @@ impl crate::vm::AsmWeight for Realloc {
     }
 }
 impl<E: crate::vm::external::Engine> Executable<E> for Realloc {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let size = match self.size {
             Some(size) => size,
@@ -194,15 +196,16 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Free {
 impl crate::vm::AsmWeight for Free {}
 
 impl<E: crate::vm::external::Engine> Executable<E> for Free {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
         heap.free(address)?;
@@ -240,15 +243,16 @@ impl crate::vm::AsmWeight for Access {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Access {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let (address, size) = match self {
             Access::Static { address, size } => (*address, *size),
@@ -319,7 +323,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Access {
 // }
 
 // impl<E: crate::vm::external::Engine> Executable<E> for CheckIndex {
-//     fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+//     fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
 //         &self,
 //         program: &mut crate::vm::program::Program,
 //         stack: &mut Stack,

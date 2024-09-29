@@ -27,8 +27,8 @@ use crate::{
 use std::fmt::Debug;
 
 use super::{
-    Cases, EnumCase, ExprFlow, FCall, FormatItem, IfExpr, MatchExpr, PrimitiveCase, StringCase,
-    TryExpr, UnionCase, UnionPattern,
+    Cases, EnumCase, ExprFlow, FormatItem, IfExpr, MatchExpr, PrimitiveCase, StringCase, TryExpr,
+    UnionCase, UnionPattern,
 };
 
 impl TryParse for ExprFlow {
@@ -50,7 +50,6 @@ impl TryParse for ExprFlow {
                 ),
                 |value| ExprFlow::SizeOf(value, Metadata::default()),
             ),
-            // map(FCall::parse, |value| ExprFlow::FCall(value)),
         ))(input)
     }
 }
@@ -110,6 +109,7 @@ impl TryParse for UnionPattern {
                     vars_names,
                     vars_id: None,
                     variant_value: None,
+                    variant_padding: None,
                 },
             ),
             "Expected a valid pattern",
@@ -285,145 +285,5 @@ impl TryParse for TryExpr {
                 metadata: Metadata::default(),
             },
         )(input)
-    }
-}
-
-impl TryParse for FCall {
-    /*
-     * @desc Parse fn call
-     *
-     * @grammar
-     * Call := f"string{Expression}"
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        todo!();
-        // map(pair(wst("f"), parse_fstring::<Expression>), |(_, items)| {
-        //     FCall {
-        //         value: items
-        //             .into_iter()
-        //             .map(|item| match item {
-        //                 crate::ast::utils::strings::string_parser::FItem::Str(string) => {
-        //                     FormatItem::Str(string)
-        //                 }
-        //                 crate::ast::utils::strings::string_parser::FItem::Expr(expr) => {
-        //                     FormatItem::Expr(Expression::Call(Call {
-        //                         lib: Some(Core::utils::lexem::STD.to_string().into()),
-        //                         fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-        //                             Variable {
-        //                                 name: Core::utils::lexem::TOSTR.to_string().into(),
-        //                                 metadata: Metadata::default(),
-        //                                 state: None,
-        //                             },
-        //                         )))),
-        //                         params: vec![expr],
-        //                         metadata: Metadata::default(),
-        //                         Core: Default::default(),
-        //                         is_dynamic_fn: Default::default(),
-        //                     }))
-        //                 }
-        //             })
-        //             .collect(),
-        //         metadata: Metadata::default(),
-        //     }
-        // })(input)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::{Arc, RwLock};
-
-    use crate::{
-        ast::{
-            expressions::{
-                data::{Data, Number, Primitive, StrSlice, Variable},
-                Atomic, Expression,
-            },
-            statements::{block::Block, return_stat::Return, Statement},
-        },
-        semantic::Metadata,
-        v_num,
-    };
-
-    use super::*;
-
-    #[test]
-    fn valid_if() {
-        let res = IfExpr::parse("if true then 10 else 20".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            IfExpr {
-                condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Bool(true)
-                )))),
-                then_branch: ExprBlock::new(vec![
-                    (Statement::Return(Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
-                            Unresolved, 10
-                        ))))),
-                        metadata: Metadata::default()
-                    }))
-                ]),
-                else_branch: ExprBlock::new(vec![
-                    (Statement::Return(Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
-                            Unresolved, 20
-                        ))))),
-                        metadata: Metadata::default()
-                    }))
-                ]),
-                metadata: Metadata::default(),
-            },
-            value
-        );
-    }
-
-    #[test]
-    fn valid_match() {
-        let res = MatchExpr::parse(
-            r#"
-        match x { 
-            case 10 => true,
-            case "Hello World" => true,
-            case Geo::Point => true,
-            case Geo::Point{y} => true,
-            // case Point{y} => true,
-            // case (y,z) => true,
-            else => true
-        }"#
-            .into(),
-        );
-        assert!(res.is_ok(), "{:?}", res);
-    }
-
-    #[test]
-    fn valid_try() {
-        let res = TryExpr::parse("try 10 else 20".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            TryExpr {
-                try_branch: ExprBlock::new(vec![
-                    (Statement::Return(Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
-                            Unresolved, 10
-                        ))))),
-                        metadata: Metadata::default()
-                    }))
-                ]),
-                else_branch: Some(ExprBlock::new(vec![
-                    (Statement::Return(Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
-                            Unresolved, 20
-                        ))))),
-                        metadata: Metadata::default()
-                    }))
-                ])),
-                pop_last_err: false,
-                metadata: Metadata::default(),
-            },
-            value
-        );
     }
 }

@@ -5,7 +5,7 @@ use crate::vm::{
     asm::operation::GetNumFrom,
     program::Program,
     runtime::RuntimeError,
-    scheduler_v2::Executable,
+    scheduler::Executable,
     stdio::StdIO,
 };
 
@@ -36,15 +36,16 @@ impl crate::vm::AsmWeight for Label {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Label {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         scheduler.next();
         Ok(())
@@ -81,15 +82,16 @@ impl crate::vm::AsmWeight for Call {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Call {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let (caller_data, param_size, function_offset) = match *self {
             Call::From { label, param_size } => {
@@ -142,15 +144,16 @@ impl crate::vm::AsmWeight for Goto {
     }
 }
 impl<E: crate::vm::external::Engine> Executable<E> for Goto {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self.label {
             Some(label) => {
@@ -191,15 +194,16 @@ impl crate::vm::AsmWeight for BranchIf {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for BranchIf {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let condition = OpPrimitive::pop_bool(stack)?;
 
@@ -241,15 +245,16 @@ impl crate::vm::AsmWeight for BranchTry {
     }
 }
 impl<E: crate::vm::external::Engine> Executable<E> for BranchTry {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self {
             BranchTry::StartTry { else_label } => {
@@ -261,34 +266,6 @@ impl<E: crate::vm::external::Engine> Executable<E> for BranchTry {
         }
         scheduler.next();
         Ok(())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Break;
-
-impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Break {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
-        stdio.push_asm(engine, "break")
-    }
-}
-impl crate::vm::AsmWeight for Break {
-    fn weight(&self) -> crate::vm::Weight {
-        crate::vm::Weight::ZERO
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Continue;
-
-impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Continue {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
-        stdio.push_asm(engine, "continue")
-    }
-}
-impl crate::vm::AsmWeight for Continue {
-    fn weight(&self) -> crate::vm::Weight {
-        crate::vm::Weight::ZERO
     }
 }
 
@@ -322,45 +299,17 @@ impl crate::vm::AsmWeight for CloseFrame {
     }
 }
 
-impl<E: crate::vm::external::Engine> Executable<E> for Break {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
-        &self,
-        program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
-        stack: &mut crate::vm::allocator::stack::Stack,
-        heap: &mut crate::vm::allocator::heap::Heap,
-        stdio: &mut crate::vm::stdio::StdIO,
-        engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
-    ) -> Result<(), RuntimeError> {
-        todo!()
-    }
-}
-
-impl<E: crate::vm::external::Engine> Executable<E> for Continue {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
-        &self,
-        program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
-        stack: &mut crate::vm::allocator::stack::Stack,
-        heap: &mut crate::vm::allocator::heap::Heap,
-        stdio: &mut crate::vm::stdio::StdIO,
-        engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
-    ) -> Result<(), RuntimeError> {
-        todo!()
-    }
-}
 impl<E: crate::vm::external::Engine> Executable<E> for Return {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let return_pointer = stack.return_pointer;
         let _ = stack.close_frame(self.size)?;
@@ -369,15 +318,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for Return {
     }
 }
 impl<E: crate::vm::external::Engine> Executable<E> for CloseFrame {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         todo!()
     }

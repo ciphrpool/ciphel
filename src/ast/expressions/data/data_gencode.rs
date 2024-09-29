@@ -29,8 +29,8 @@ use crate::{
 };
 
 use super::{
-    Address, Call, Closure, ClosureReprData, CoreCall, Data, Enum, Lambda, Map, Number, Primitive,
-    Printf, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarCall, Variable, Vector,
+    Address, Call, Closure, ClosureReprData, CoreCall, Data, Enum, Format, Lambda, Map, Number,
+    Primitive, Printf, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarCall, Variable, Vector,
 };
 
 impl GenerateCode for Data {
@@ -81,6 +81,9 @@ impl GenerateCode for Data {
                 value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
             Data::Printf(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Data::Format(value) => {
                 value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
         }
@@ -625,25 +628,18 @@ impl GenerateCode for Union {
             };
 
             let _ = field_expr.gencode::<E>(scope_manager, scope_id, instructions, context)?;
-            // Add padding
-            // let padding = align(field_size) - field_size;
-            // if padding > 0 {
-            //     instructions.push(Asm::Data(data::Data::Serialized {
-            //         data: vec![0; padding].into(),
-            //     }));
-            // }
             total_size += field_size;
         }
 
-        // if total_size < union_size {
-        //     // Add padding
-        //     let padding = union_size - total_size;
-        //     if padding > 0 {
-        //         instructions.push(Asm::Data(data::Data::Serialized {
-        //             data: vec![0; padding].into(),
-        //         }));
-        //     }
-        // }
+        if total_size < union_size {
+            // Add padding
+            let padding = union_size - total_size;
+            if padding > 0 {
+                instructions.push(Asm::Data(data::Data::Serialized {
+                    data: vec![0; padding].into(),
+                }));
+            }
+        }
 
         instructions.push(Asm::Data(data::Data::Serialized {
             data: (idx as u64).to_le_bytes().into(),
@@ -831,6 +827,47 @@ impl GenerateCode for Printf {
         }
 
         instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PrintfEnd)));
+        Ok(())
+    }
+}
+
+impl GenerateCode for Format {
+    fn gencode<E: crate::vm::external::Engine>(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+
+        for segment in self.args.iter() {
+            match segment {
+                super::FormatItem::Str(segment) => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
+                        segment.as_bytes().into(),
+                    ))));
+                }
+                super::FormatItem::Expr(expression) => {
+                    let _ =
+                        expression.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+
+                    let Some(ctype) = expression.signature() else {
+                        return Err(CodeGenerationError::UnresolvedError);
+                    };
+
+                    let _ = crate::vm::core::format::type_printer::build(
+                        &ctype,
+                        scope_manager,
+                        scope_id,
+                        instructions,
+                    )?;
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::Push)));
+                }
+            }
+        }
+
+        instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
         Ok(())
     }
 }

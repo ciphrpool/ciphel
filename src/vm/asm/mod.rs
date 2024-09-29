@@ -11,7 +11,7 @@ use super::{
     core,
     program::Program,
     runtime::RuntimeError,
-    scheduler_v2::Executable,
+    scheduler::Executable,
     stdio::StdIO,
 };
 pub mod alloc;
@@ -26,8 +26,6 @@ pub mod operation;
 pub enum Asm {
     Core(core::CoreAsm),
     Return(branch::Return),
-    Break(branch::Break),
-    Continue(branch::Continue),
     CloseFrame(branch::CloseFrame),
     Alloc(alloc::Alloc),
     Realloc(alloc::Realloc),
@@ -50,90 +48,216 @@ pub enum Asm {
     Pop(usize),
 }
 
-impl<E: crate::vm::external::Engine> Executable<E>
-    for Asm
-{
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+impl<E: crate::vm::external::Engine> Executable<E> for Asm {
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self {
-            Asm::Operation(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Return(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Continue(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::CloseFrame(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Break(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Data(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Access(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            // Asm::AccessIdx(value) => value.execute(program, scheduler, stack, heap, stdio, engine, context),
-            Asm::If(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Label(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Call(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Goto(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Alloc(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Mem(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            // Asm::Switch(value) => value.execute(program, scheduler, stack, heap, stdio, engine, context),
-            Asm::OffsetIdx(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Offset(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::OffsetSP(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Locate(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Core(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
+            Asm::Operation(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Return(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::CloseFrame(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Data(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Access(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            // Asm::AccessIdx(value) => value.execute(program, scheduler, signal_handler, stack, heap, stdio, engine, context),
+            Asm::If(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Label(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Call(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Goto(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Alloc(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Mem(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            // Asm::Switch(value) => value.execute(program, scheduler, signal_handler, stack, heap, stdio, engine, context),
+            Asm::OffsetIdx(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Offset(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::OffsetSP(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Locate(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Core(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
             Asm::Pop(size) => {
                 stack.pop(*size)?;
                 scheduler.next();
                 Ok(())
             }
-            Asm::Realloc(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Free(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Asm::Try(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
+            Asm::Realloc(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Free(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Asm::Try(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
         }
     }
 }
@@ -143,9 +267,7 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Asm {
         match self {
             Asm::Core(value) => value.name(stdio, program, engine),
             Asm::Return(value) => value.name(stdio, program, engine),
-            Asm::Continue(value) => value.name(stdio, program, engine),
             Asm::CloseFrame(value) => value.name(stdio, program, engine),
-            Asm::Break(value) => value.name(stdio, program, engine),
             Asm::Alloc(value) => value.name(stdio, program, engine),
             Asm::Realloc(value) => value.name(stdio, program, engine),
             Asm::Free(value) => value.name(stdio, program, engine),
@@ -173,9 +295,7 @@ impl crate::vm::AsmWeight for Asm {
         match self {
             Asm::Core(value) => value.weight(),
             Asm::Return(value) => value.weight(),
-            Asm::Continue(value) => value.weight(),
             Asm::CloseFrame(value) => value.weight(),
-            Asm::Break(value) => value.weight(),
             Asm::Alloc(value) => value.weight(),
             Asm::Realloc(value) => value.weight(),
             Asm::Free(value) => value.weight(),

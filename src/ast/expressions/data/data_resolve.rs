@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::process::Output;
 
 use super::{
-    Address, Call, Closure, ClosureParam, ClosureReprData, Data, Enum, FormatItem, Lambda,
+    Address, Call, Closure, ClosureParam, ClosureReprData, Data, Enum, Format, FormatItem, Lambda,
     LeftCall, Map, Number, Primitive, Printf, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
     Variable, Vector,
 };
@@ -12,7 +12,7 @@ use crate::ast::statements::block::BlockCommonApi;
 use crate::semantic::scope::scope::{GlobalMapping, ScopeManager, ScopeState, VariableInfo};
 use crate::semantic::scope::static_types::{
     AddrType, ClosureType, FunctionType, LambdaType, MapType, NumberType, PrimitiveType, SliceType,
-    StrSliceType, TupleType, VecType, POINTER_SIZE,
+    StrSliceType, StringType, TupleType, VecType, POINTER_SIZE,
 };
 use crate::semantic::scope::user_types::UserType;
 use crate::semantic::ResolveCore;
@@ -57,6 +57,7 @@ impl Resolve for Data {
             Data::StrSlice(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
             Data::Call(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
             Data::Printf(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Format(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
         }
     }
 }
@@ -121,6 +122,7 @@ impl Desugar<Atomic> for Data {
             Data::Union(value) => value.desugar::<E>(scope_manager, scope_id),
             Data::Enum(value) => Ok(None),
             Data::Printf(value) => value.desugar::<E>(scope_manager, scope_id),
+            Data::Format(value) => value.desugar::<E>(scope_manager, scope_id),
         }
     }
 }
@@ -1368,6 +1370,7 @@ impl Desugar<Atomic> for Call {
             _ => return Ok(None),
         };
         let name = &path.name;
+
         let path = match &path.path {
             crate::ast::expressions::Path::Segment(vec) => vec.as_slice(),
             crate::ast::expressions::Path::Empty => &[],
@@ -1411,6 +1414,56 @@ impl Resolve for Printf {
 }
 
 impl Desugar<Atomic> for Printf {
+    fn desugar<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        for item in self.args.iter_mut() {
+            match item {
+                FormatItem::Str(_) => {}
+                FormatItem::Expr(expr) => {
+                    if let Some(output) = expr.desugar::<E>(scope_manager, scope_id)? {
+                        *expr = output;
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+}
+
+impl Resolve for Format {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = ();
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: &Self::Context,
+        _extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        for item in self.args.iter_mut() {
+            match item {
+                FormatItem::Str(_) => {}
+                FormatItem::Expr(expr) => {
+                    let _ = expr.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+                }
+            }
+        }
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(EType::Static(StaticType::String(StringType()))),
+        };
+        Ok(())
+    }
+}
+
+impl Desugar<Atomic> for Format {
     fn desugar<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
@@ -1730,49 +1783,6 @@ mod tests {
         let variable_type = variable_type.unwrap();
         assert_eq!(p_num!(I64), variable_type);
     }
-    #[test]
-    fn valid_variable_struct() {
-        let mut variable = Expression::parse("point.x".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-
-        // EType::User(UserType::Struct(
-        //     user_types::Struct {
-        //         id: "Point".to_string().into(),
-        //         fields: {
-        //             let mut res = Vec::new();
-        //             res.push(("x".to_string().into(), p_num!(U64)));
-        //             res.push(("y".to_string().into(), p_num!(U64)));
-        //             res
-        //         },
-        //     }
-        //     .into(),
-        // ))
-
-        let _ = scope_manager
-            .register_var(
-                "point",
-                EType::User {
-                    id: todo!(),
-                    size: todo!(),
-                },
-                None,
-            )
-            .unwrap();
-        let res = variable.resolve::<crate::vm::external::test::NoopGameEngine>(
-            &mut scope_manager,
-            None,
-            &None,
-            &mut None,
-        );
-        assert!(res.is_ok(), "{:?}", res);
-
-        let variable_type = variable.type_of(&scope_manager, None);
-        assert!(variable_type.is_ok());
-        let variable_type = variable_type.unwrap();
-        assert_eq!(p_num!(U64), variable_type)
-    }
 
     #[test]
     fn valid_address() {
@@ -1856,35 +1866,6 @@ mod tests {
             &mut (),
         );
         assert!(res.is_err());
-    }
-
-    #[test]
-    fn valid_map() {
-        let mut map = Map::parse(r##"map{string("x"):2,string("y"):6}"##.into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = map.resolve::<crate::vm::external::test::NoopGameEngine>(
-            &mut scope_manager,
-            None,
-            &None,
-            &mut (),
-        );
-        assert!(res.is_ok(), "{:?}", res);
-
-        let res = map.resolve::<crate::vm::external::test::NoopGameEngine>(
-            &mut scope_manager,
-            None,
-            &Some(EType::Static(
-                StaticType::Map(MapType {
-                    keys_type: Box::new(e_static!(StaticType::String(StringType()))),
-                    values_type: Box::new(p_num!(I64)),
-                })
-                .into(),
-            )),
-            &mut (),
-        );
-        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]

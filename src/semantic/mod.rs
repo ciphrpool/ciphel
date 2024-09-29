@@ -58,9 +58,6 @@ pub enum SemanticError {
     #[error("unknown field")]
     UnknownField,
 
-    #[error("cannot have double open range like -∞:+∞")]
-    DoubleInfinitRange,
-
     #[error("incorrect function arguments")]
     IncorrectArguments,
     #[error("invalid arguments for struct {0}")]
@@ -71,8 +68,6 @@ pub enum SemanticError {
     IncorrectVariant(String),
     #[error("invalid pattern")]
     InvalidPattern,
-    #[error("invalid range")]
-    InvalidRange,
 
     #[error("incompatible types")]
     IncompatibleTypes,
@@ -359,7 +354,6 @@ impl EType {
                         .join(","),
                     function_type.ret.name(scope_manager, scope_id)?
                 )),
-                StaticType::Range(range_type) => todo!(),
                 StaticType::Tuple(tuple_type) => Ok(format!(
                     "({0})",
                     tuple_type

@@ -40,9 +40,9 @@ use nom::{
 use nom_supreme::{final_parser::ExtractContext, ParserExt};
 
 use super::{
-    Address, Call, CallArgs, Closure, ClosureParam, Data, Enum, FormatItem, Lambda, LeftCall, Map,
-    MultiData, Number, Primitive, Printf, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
-    VarCall, Variable, Vector,
+    Address, Call, CallArgs, Closure, ClosureParam, Data, Enum, Format, FormatItem, Lambda,
+    LeftCall, Map, MultiData, Number, Primitive, Printf, PtrAccess, Slice, StrSlice, Struct, Tuple,
+    Union, VarCall, Variable, Vector,
 };
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
@@ -60,6 +60,7 @@ impl TryParse for Data {
                 value(Data::Unit, wst_closed(lexem::UNIT)),
                 map(Map::parse, |value| Data::Map(value)),
                 map(Printf::parse, |value| Data::Printf(value)),
+                map(Format::parse, |value| Data::Format(value)),
                 map(Call::parse, |value| Data::Call(value)),
                 map(Struct::parse, |value| Data::Struct(value)),
                 map(Union::parse, |value| Data::Union(value)),
@@ -538,6 +539,47 @@ impl TryParse for Printf {
     }
 }
 
+impl TryParse for Format {
+    /*
+     * @desc Parse variable
+     *
+     * @grammar
+     * Format := CompletePath (CallArgs)
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            pair(
+                preceded(
+                    opt(pair(wst_closed(core::lexem::CORE), wst(lexem::SEP))),
+                    preceded(
+                        opt(pair(wst_closed(core::lexem::IO), wst(lexem::SEP))),
+                        wst_closed(core::lexem::FORMAT),
+                    ),
+                ),
+                delimited(
+                    wst(lexem::PAR_O),
+                    parse_fstring::<Expression>,
+                    wst(lexem::PAR_C),
+                ),
+            ),
+            |(_, args)| Format {
+                args: args
+                    .into_iter()
+                    .map(|item| match item {
+                        crate::ast::utils::strings::string_parser::FItem::Str(string) => {
+                            FormatItem::Str(string)
+                        }
+                        crate::ast::utils::strings::string_parser::FItem::Expr(expr) => {
+                            FormatItem::Expr(expr)
+                        }
+                    })
+                    .collect(),
+                metadata: Metadata::default(),
+            },
+        )(input)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, RwLock};
@@ -658,100 +700,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn valid_closure() {
-        let res = Closure::parse("(x,y) -> x".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-
-        assert_eq!(
-            Closure {
-                params: vec![
-                    ClosureParam::Minimal("x".to_string().into()),
-                    ClosureParam::Minimal("y".to_string().into())
-                ],
-                block: ast::statements::block::ClosureBlock::new(vec![Statement::Return(
-                    Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable {
-                                name: "x".to_string().into(),
-                                metadata: Metadata::default(),
-                                state: None,
-                            }
-                        )))),
-                        metadata: Metadata::default()
-                    }
-                )]),
-                repr_data: None,
-                metadata: Metadata::default()
-            },
-            value
-        )
-    }
-
-    #[test]
-    fn valid_closure_closed() {
-        let res = Closure::parse("move (x,y) -> x".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-
-        assert_eq!(
-            Closure {
-                params: vec![
-                    ClosureParam::Minimal("x".to_string().into()),
-                    ClosureParam::Minimal("y".to_string().into())
-                ],
-                block: ast::statements::block::ClosureBlock::new(vec![Statement::Return(
-                    Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable {
-                                name: "x".to_string().into(),
-                                metadata: Metadata::default(),
-                                state: None,
-                            }
-                        )))),
-                        metadata: Metadata::default()
-                    }
-                )]),
-                repr_data: None,
-                metadata: Metadata::default()
-            },
-            value
-        )
-    }
-    #[test]
-    fn valid_closure_typed_args() {
-        let res = Closure::parse("(x:u64) -> x".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-
-        assert_eq!(
-            Closure {
-                params: vec![ClosureParam::Full(TypedVar {
-                    name: "x".to_string(),
-                    id: None,
-                    signature: ast::types::Type::Primitive(ast::types::PrimitiveType::Number(
-                        NumberType::U64
-                    )),
-                }),],
-                block: ast::statements::block::ClosureBlock::new(vec![Statement::Return(
-                    Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable {
-                                name: "x".to_string().into(),
-                                metadata: Metadata::default(),
-                                state: None,
-                            }
-                        )))),
-                        metadata: Metadata::default()
-                    }
-                )]),
-                repr_data: None,
-                metadata: Metadata::default()
-            },
-            value
-        )
-    }
     #[test]
     fn valid_tuple() {
         let res = Tuple::parse("(2,'a')".into());

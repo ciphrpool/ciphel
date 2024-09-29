@@ -8,7 +8,7 @@ use crate::{
     vm::{
         allocator::{align, heap::Heap, stack::Stack, MemoryAddress},
         runtime::RuntimeError,
-        scheduler_v2::Executable,
+        scheduler::Executable,
         stdio::StdIO,
         CodeGenerationError,
     },
@@ -27,19 +27,27 @@ pub struct Operation {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Operation {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
-        let _ = self
-            .kind
-            .execute(program, scheduler, stack, heap, stdio, engine, context)?;
+        let _ = self.kind.execute(
+            program,
+            scheduler,
+            signal_handler,
+            stack,
+            heap,
+            stdio,
+            engine,
+            context,
+        )?;
         scheduler.next();
         Ok(())
     }
@@ -195,6 +203,22 @@ impl OpPrimitive {
 
     pub fn pop_float(memory: &mut Stack) -> Result<f64, RuntimeError> {
         let data = memory.pop(8)?;
+        let data =
+            TryInto::<&[u8; 8]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
+        Ok(f64::from_le_bytes(*data))
+    }
+
+    pub fn get_float_from(
+        address: MemoryAddress,
+        stack: &Stack,
+        heap: &Heap,
+    ) -> Result<f64, RuntimeError> {
+        let data = match address {
+            MemoryAddress::Heap { .. } => heap.read_slice(address, 8)?,
+            MemoryAddress::Stack { .. } => stack.read(address, 8)?,
+            MemoryAddress::Global { .. } => stack.read_global(address, 8)?,
+            MemoryAddress::Frame { .. } => stack.read_in_frame(address, 8)?,
+        };
         let data =
             TryInto::<&[u8; 8]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
         Ok(f64::from_le_bytes(*data))
@@ -391,80 +415,228 @@ impl GetNumFrom for crate::vm::asm::operation::OpPrimitive {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for OperationKind {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self {
-            OperationKind::Mult(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::Div(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::Mod(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::Addition(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::Substraction(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::ShiftLeft(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::ShiftRight(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::BitwiseAnd(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::BitwiseXOR(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::BitwiseOR(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::Cast(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::Less(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::LessEqual(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::Greater(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::GreaterEqual(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::Equal(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::NotEqual(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::LogicalAnd(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::LogicalOr(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::Minus(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::Not(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
+            OperationKind::Mult(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::Div(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::Mod(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::Addition(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::Substraction(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::ShiftLeft(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::ShiftRight(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::BitwiseAnd(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::BitwiseXOR(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::BitwiseOR(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::Cast(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::Less(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::LessEqual(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::Greater(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::GreaterEqual(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::Equal(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::NotEqual(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::LogicalAnd(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::LogicalOr(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::Minus(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::Not(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
             OperationKind::Align => {
                 let num = OpPrimitive::pop_num::<u64>(stack)?;
                 let aligned_num = align(num as usize) as u64;
@@ -477,12 +649,26 @@ impl<E: crate::vm::external::Engine> Executable<E> for OperationKind {
                 let _ = stack.push_with(chara)?;
                 Ok(stack.push_with(&(chara.len() as u64).to_le_bytes())?)
             }
-            OperationKind::StrEqual(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            OperationKind::StrNotEqual(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
+            OperationKind::StrEqual(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            OperationKind::StrNotEqual(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
         }
     }
 }
@@ -504,15 +690,16 @@ pub struct Mod {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Mult {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -524,15 +711,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for Mult {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Division {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -544,15 +732,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for Division {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Mod {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -576,15 +765,16 @@ pub struct Substraction {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Addition {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -596,15 +786,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for Addition {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Substraction {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -627,15 +818,16 @@ pub struct ShiftRight {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for ShiftLeft {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -647,15 +839,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for ShiftLeft {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for ShiftRight {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -673,15 +866,16 @@ pub struct BitwiseAnd {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for BitwiseAnd {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -699,15 +893,16 @@ pub struct BitwiseXOR {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for BitwiseXOR {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -725,15 +920,16 @@ pub struct BitwiseOR {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for BitwiseOR {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -766,15 +962,16 @@ pub struct GreaterEqual {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Less {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -803,15 +1000,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for Less {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for LessEqual {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -840,15 +1038,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for LessEqual {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Greater {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -877,15 +1076,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for Greater {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for GreaterEqual {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -931,15 +1131,16 @@ pub struct StrEqual;
 pub struct StrNotEqual;
 
 impl<E: crate::vm::external::Engine> Executable<E> for Equal {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let right_data = stack.pop(self.right)?.to_owned();
 
@@ -951,15 +1152,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for Equal {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for StrEqual {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let right_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
         let left_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
@@ -973,15 +1175,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for StrEqual {
     }
 }
 impl<E: crate::vm::external::Engine> Executable<E> for NotEqual {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let right_data = stack.pop(self.right)?.to_owned();
 
@@ -993,15 +1196,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for NotEqual {
     }
 }
 impl<E: crate::vm::external::Engine> Executable<E> for StrNotEqual {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let left_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
         let right_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
@@ -1017,15 +1221,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for StrNotEqual {
 pub struct LogicalAnd();
 
 impl<E: crate::vm::external::Engine> Executable<E> for LogicalAnd {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let right_data = OpPrimitive::pop_bool(stack)?;
         let left_data = OpPrimitive::pop_bool(stack)?;
@@ -1038,15 +1243,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for LogicalAnd {
 pub struct LogicalOr();
 
 impl<E: crate::vm::external::Engine> Executable<E> for LogicalOr {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let right_data = OpPrimitive::pop_bool(stack)?;
         let left_data = OpPrimitive::pop_bool(stack)?;
@@ -1061,15 +1267,16 @@ pub struct Minus {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Minus {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match &self.data_type {
             OpPrimitive::Number(number) => match number {
@@ -1129,15 +1336,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for Minus {
 pub struct Not();
 
 impl<E: crate::vm::external::Engine> Executable<E> for Not {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let data = OpPrimitive::pop_bool(stack)?;
         let data = [(!data) as u8];
@@ -1170,15 +1378,16 @@ macro_rules! push_data_as_type {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Cast {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.from, self.to) {
             (OpPrimitive::Number(number), OpPrimitive::Number(to)) => match number {

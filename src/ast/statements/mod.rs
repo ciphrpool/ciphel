@@ -76,7 +76,7 @@ impl<T: Desugar<()>> Desugar<()> for WithLine<T> {
 }
 
 impl<T: GenerateCode> GenerateCode for WithLine<T> {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -103,7 +103,7 @@ pub fn parse_statements(
     input: Span,
     line_offset: usize,
 ) -> Result<Vec<WithLine<Statement>>, CompilationError> {
-    let mut parser = ws(many1(|input| {
+    let mut parser = ws(many0(|input| {
         let (input, statement) = Statement::parse(input)?;
         let line = input.location_line();
         Ok((
@@ -246,7 +246,7 @@ impl TypeOf for Statement {
 }
 
 impl GenerateCode for Statement {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -258,7 +258,9 @@ impl GenerateCode for Statement {
                 value.gencode::<E>(scope_manager, scope_id, instructions, context)?;
                 Ok(())
             }
-            Statement::Flow(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
+            Statement::Flow(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
             Statement::Assignation(value) => {
                 value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }

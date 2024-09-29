@@ -1,3 +1,4 @@
+use scheduler::SchedulingPolicy;
 use thiserror::Error;
 use ulid::Ulid;
 
@@ -9,7 +10,6 @@ pub mod external;
 pub mod program;
 pub mod runtime;
 pub mod scheduler;
-pub mod scheduler_v2;
 pub mod stdio;
 pub mod vm;
 
@@ -57,38 +57,14 @@ pub enum Weight {
     #[default]
     ZERO,
     MAX,
+
+    END,
     CUSTOM(usize),
 
     LOW,
     MEDIUM,
     HIGH,
     EXTREME,
-}
-
-impl Weight {
-    pub fn mult(&self, c: usize) -> usize {
-        match self {
-            Weight::ZERO => todo!(),
-            Weight::MAX => todo!(),
-            Weight::CUSTOM(_) => todo!(),
-            Weight::LOW => todo!(),
-            Weight::MEDIUM => todo!(),
-            Weight::HIGH => todo!(),
-            Weight::EXTREME => todo!(),
-        }
-    }
-
-    pub fn get(&self) -> usize {
-        match self {
-            Weight::ZERO => 0,
-            Weight::MAX => todo!(), //super::scheduler::INSTRUCTION_MAX_COUNT,
-            Weight::CUSTOM(w) => *w,
-            Weight::LOW => 1,
-            Weight::MEDIUM => 2,
-            Weight::HIGH => 4,
-            Weight::EXTREME => 8,
-        }
-    }
 }
 
 pub trait AsmName<E: crate::vm::external::Engine> {

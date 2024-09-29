@@ -26,7 +26,6 @@ pub enum ExprFlow {
     If(IfExpr),
     Match(MatchExpr),
     Try(TryExpr),
-    FCall(FCall),
     SizeOf(Type, Metadata),
 }
 
@@ -53,6 +52,7 @@ pub struct UnionPattern {
     pub vars_names: Vec<ID>,
     pub vars_id: Option<Vec<u64>>,
     pub variant_value: Option<u64>,
+    pub variant_padding: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -112,12 +112,6 @@ pub enum FormatItem {
     Expr(Expression),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct FCall {
-    pub value: Vec<FormatItem>,
-    pub metadata: Metadata,
-}
-
 impl ExprFlow {
     pub fn metadata(&self) -> Option<&Metadata> {
         match self {
@@ -125,7 +119,6 @@ impl ExprFlow {
             ExprFlow::Match(MatchExpr { metadata, .. }) => Some(metadata),
             ExprFlow::Try(TryExpr { metadata, .. }) => Some(metadata),
             ExprFlow::SizeOf(_, metadata) => Some(metadata),
-            ExprFlow::FCall(FCall { metadata, .. }) => Some(metadata),
         }
     }
     pub fn metadata_mut(&mut self) -> Option<&mut Metadata> {
@@ -134,7 +127,6 @@ impl ExprFlow {
             ExprFlow::Match(MatchExpr { metadata, .. }) => Some(metadata),
             ExprFlow::Try(TryExpr { metadata, .. }) => Some(metadata),
             ExprFlow::SizeOf(_, metadata) => Some(metadata),
-            ExprFlow::FCall(FCall { metadata, .. }) => Some(metadata),
         }
     }
     pub fn signature(&self) -> Option<EType> {
@@ -142,7 +134,6 @@ impl ExprFlow {
             ExprFlow::If(IfExpr { metadata, .. }) => metadata.signature(),
             ExprFlow::Match(MatchExpr { metadata, .. }) => metadata.signature(),
             ExprFlow::Try(TryExpr { metadata, .. }) => metadata.signature(),
-            ExprFlow::FCall(FCall { metadata, .. }) => metadata.signature(),
             ExprFlow::SizeOf(_, metadata) => metadata.signature(),
         }
     }

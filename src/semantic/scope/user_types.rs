@@ -14,12 +14,9 @@ use crate::{
     },
     e_static, e_user,
     semantic::{CompatibleWith, EType, Info, MergeType, Metadata, SemanticError, SizeOf, TypeOf},
-    vm::{
-        allocator::align,
-        asm::{
-            branch::{Goto, Label},
-            Asm,
-        },
+    vm::asm::{
+        branch::{Goto, Label},
+        Asm,
     },
 };
 
@@ -90,22 +87,6 @@ impl BuildUserType for UserType {
             definition::TypeDef::Enum(value) => {
                 Ok(UserType::Enum(Enum::build(value, scope_manager, scope_id)?))
             }
-        }
-    }
-}
-
-impl MergeType for UserType {
-    fn merge(
-        &self,
-        other: &Self,
-        scope_manager: &crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-    ) -> Result<EType, SemanticError> {
-        match (self, other) {
-            (UserType::Struct(x), UserType::Struct(y)) => x.merge(y).map(|res| todo!()),
-            (UserType::Enum(x), UserType::Enum(y)) => x.merge(y).map(|res| todo!()),
-            (UserType::Union(x), UserType::Union(y)) => x.merge(y).map(|res| todo!()),
-            _ => Err(SemanticError::IncompatibleTypes),
         }
     }
 }
@@ -234,10 +215,6 @@ impl Struct {
             fields,
         })
     }
-
-    pub fn merge(&self, _other: &Self) -> Result<Self, SemanticError> {
-        Ok(self.clone())
-    }
 }
 
 impl Union {
@@ -266,9 +243,6 @@ impl Union {
             variants,
         })
     }
-    pub fn merge(&self, _other: &Self) -> Result<Self, SemanticError> {
-        Ok(self.clone())
-    }
 }
 
 impl Enum {
@@ -285,8 +259,5 @@ impl Enum {
             id: from.id.clone(),
             values,
         })
-    }
-    pub fn merge(&self, _other: &Self) -> Result<Self, SemanticError> {
-        Ok(self.clone())
     }
 }

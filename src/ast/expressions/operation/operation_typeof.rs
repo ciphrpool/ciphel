@@ -12,8 +12,8 @@ use crate::{
 
 use super::{
     Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, ExprCall,
-    FieldAccess, ListAccess, LogicalAnd, LogicalOr, Product, Range, Shift, Substraction,
-    TupleAccess, UnaryOperation,
+    FieldAccess, ListAccess, LogicalAnd, LogicalOr, Product, Shift, Substraction, TupleAccess,
+    UnaryOperation,
 };
 use crate::semantic::scope::scope::ScopeManager;
 
@@ -87,62 +87,6 @@ impl TypeOf for ExprCall {
         self.metadata
             .signature()
             .ok_or(SemanticError::NotResolvedYet)
-    }
-}
-// impl TypeOf for Call {
-//     fn type_of(
-//         &self,
-//         scope_manager: &crate::semantic::scope::scope::ScopeManager,
-//         scope_id: Option<u128>,
-//     ) -> Result<EType, SemanticError>
-//     where
-//         Self: Sized + Resolve,
-//     {
-//         if self.is_dynamic_fn.is_some() || self.Core.is_some() {
-//             return self
-//                 .metadata
-//                 .signature()
-//                 .ok_or(SemanticError::NotResolvedYet);
-//         }
-
-//         let fn_var_type = self.fn_var.type_of(&scope_manager, scope_id)?;
-
-//         let return_type = match fn_var_type {
-//             EType::Static(StaticType::Closure(ClosureType { ref ret, .. })) => ret.as_ref().clone(),
-//             EType::Static(StaticType::Function(FunctionType { ref ret, .. })) => ret.as_ref().clone(),
-//             _ => return Err(SemanticError::ExpectedCallable),
-//         };
-
-//         Ok(return_type)
-//     }
-// }
-
-impl TypeOf for Range {
-    fn type_of(
-        &self,
-        scope_manager: &crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-    ) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        let type_sig = match self.lower.type_of(scope_manager, scope_id)?.merge(
-            &self.upper.type_of(scope_manager, scope_id)?,
-            scope_manager,
-            scope_id,
-        )? {
-            EType::Static(value) => match value {
-                StaticType::Primitive(static_types::PrimitiveType::Number(value)) => value.clone(),
-                _ => return Err(SemanticError::IncompatibleTypes),
-            },
-            EType::User { .. } => return Err(SemanticError::IncompatibleTypes),
-        };
-        Ok(EType::Static(static_types::StaticType::Range(
-            static_types::RangeType {
-                num: type_sig,
-                inclusive: self.inclusive,
-            },
-        )))
     }
 }
 

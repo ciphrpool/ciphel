@@ -31,8 +31,8 @@ use crate::{
 
 use self::operation::{
     operation_parse::TryParseOperation, Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast,
-    Comparaison, Equation, FieldAccess, ListAccess, LogicalAnd, Product, Range, Shift,
-    Substraction, TupleAccess, UnaryOperation,
+    Comparaison, Equation, FieldAccess, ListAccess, LogicalAnd, Product, Shift, Substraction,
+    TupleAccess, UnaryOperation,
 };
 
 use super::{
@@ -59,7 +59,6 @@ pub enum Expression {
     Equation(operation::Equation),
     LogicalAnd(operation::LogicalAnd),
     LogicalOr(operation::LogicalOr),
-    Range(operation::Range),
     FieldAccess(operation::FieldAccess),
     ListAccess(operation::ListAccess),
     TupleAccess(operation::TupleAccess),
@@ -240,7 +239,7 @@ impl TryParse for Expression {
      * HighM := Atom (* | / | % ) Atom | Atom
      */
     fn parse(input: Span) -> PResult<Self> {
-        eater::ws::<_, Expression>(Range::parse)(input)
+        eater::ws::<_, Expression>(LogicalOr::parse)(input)
     }
 }
 
@@ -298,9 +297,6 @@ impl Resolve for Expression {
             Expression::Cast(value) => {
                 value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
-            Expression::Range(value) => {
-                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
-            }
             Expression::FieldAccess(value) => {
                 value.resolve::<E>(scope_manager, scope_id, context, extra)
             }
@@ -332,7 +328,6 @@ impl ResolveNumber for Expression {
             Expression::Equation(equation) => equation.is_unresolved_number(),
             Expression::LogicalAnd(logical_and) => logical_and.is_unresolved_number(),
             Expression::LogicalOr(logical_or) => logical_or.is_unresolved_number(),
-            Expression::Range(_) => todo!(),
             Expression::FieldAccess(_) => false,
             Expression::ListAccess(_) => false,
             Expression::TupleAccess(_) => false,
@@ -358,7 +353,6 @@ impl ResolveNumber for Expression {
             Expression::Equation(equation) => equation.resolve_number(to),
             Expression::LogicalAnd(logical_and) => logical_and.resolve_number(to),
             Expression::LogicalOr(logical_or) => logical_or.resolve_number(to),
-            Expression::Range(_) => todo!(),
             Expression::FieldAccess(_) => Ok(()),
             Expression::ListAccess(_) => Ok(()),
             Expression::TupleAccess(_) => Ok(()),
@@ -435,7 +429,6 @@ impl Desugar<Expression> for Expression {
             Expression::Equation(value) => value.desugar::<E>(scope_manager, scope_id)?,
             Expression::LogicalAnd(value) => value.desugar::<E>(scope_manager, scope_id)?,
             Expression::LogicalOr(value) => value.desugar::<E>(scope_manager, scope_id)?,
-            Expression::Range(value) => value.desugar::<E>(scope_manager, scope_id)?,
             Expression::FieldAccess(value) => value.desugar::<E>(scope_manager, scope_id)?,
             Expression::ListAccess(value) => value.desugar::<E>(scope_manager, scope_id)?,
             Expression::TupleAccess(value) => value.desugar::<E>(scope_manager, scope_id)?,
@@ -474,7 +467,6 @@ impl TypeOf for Expression {
             Expression::Equation(value) => value.type_of(&scope_manager, scope_id),
             Expression::Atomic(value) => value.type_of(&scope_manager, scope_id),
             Expression::Cast(value) => value.type_of(&scope_manager, scope_id),
-            Expression::Range(value) => value.type_of(&scope_manager, scope_id),
             Expression::FieldAccess(value) => value.type_of(&scope_manager, scope_id),
             Expression::ListAccess(value) => value.type_of(&scope_manager, scope_id),
             Expression::TupleAccess(value) => value.type_of(&scope_manager, scope_id),
@@ -484,7 +476,7 @@ impl TypeOf for Expression {
 }
 
 impl GenerateCode for Expression {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -531,9 +523,6 @@ impl GenerateCode for Expression {
             Expression::Atomic(value) => {
                 value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
-            Expression::Range(value) => {
-                value.gencode::<E>(scope_manager, scope_id, instructions, context)
-            }
             Expression::FieldAccess(value) => {
                 value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
@@ -551,7 +540,7 @@ impl GenerateCode for Expression {
 }
 
 impl GenerateCode for Atomic {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -597,7 +586,6 @@ impl Expression {
             Expression::Equation(Equation::NotEqual { metadata, .. }) => Some(metadata),
             Expression::LogicalAnd(LogicalAnd { metadata, .. }) => Some(metadata),
             Expression::LogicalOr(LogicalOr { metadata, .. }) => Some(metadata),
-            Expression::Range(Range { metadata, .. }) => Some(metadata),
             Expression::Atomic(value) => value.metadata(),
             Expression::FieldAccess(FieldAccess { metadata, .. }) => Some(metadata),
             Expression::ListAccess(ListAccess { metadata, .. }) => Some(metadata),
@@ -627,7 +615,6 @@ impl Expression {
             Expression::Equation(Equation::NotEqual { metadata, .. }) => Some(metadata),
             Expression::LogicalAnd(LogicalAnd { metadata, .. }) => Some(metadata),
             Expression::LogicalOr(LogicalOr { metadata, .. }) => Some(metadata),
-            Expression::Range(Range { metadata, .. }) => Some(metadata),
             Expression::Atomic(value) => value.metadata_mut(),
             Expression::FieldAccess(FieldAccess { metadata, .. }) => Some(metadata),
             Expression::ListAccess(ListAccess { metadata, .. }) => Some(metadata),
@@ -661,7 +648,6 @@ impl Expression {
             Expression::Equation(Equation::NotEqual { metadata, .. }) => metadata.signature(),
             Expression::LogicalAnd(LogicalAnd { metadata, .. }) => metadata.signature(),
             Expression::LogicalOr(LogicalOr { metadata, .. }) => metadata.signature(),
-            Expression::Range(Range { metadata, .. }) => metadata.signature(),
             Expression::Atomic(value) => value.signature(),
             Expression::FieldAccess(FieldAccess { metadata, .. }) => metadata.signature(),
             Expression::ListAccess(ListAccess { metadata, .. }) => metadata.signature(),

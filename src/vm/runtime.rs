@@ -11,7 +11,7 @@ use super::{
     },
     external::ExternThreadIdentifier,
     program::Program,
-    scheduler_v2::{Scheduler, SchedulingPolicy},
+    scheduler::{Scheduler, SchedulingPolicy},
 };
 
 #[derive(Debug, Clone, Error)]
@@ -23,32 +23,20 @@ pub enum RuntimeError {
 
     #[error("MEMORY VIOLATION")]
     MemoryViolation,
-    // VTableError(VTableError),
     #[error("Deserialization")]
     Deserialization,
     #[error("UnsupportedOperation")]
     UnsupportedOperation,
     #[error("MathError")]
     MathError,
-    #[error("ReturnFlagError")]
-    ReturnFlagError,
-    #[error("InvalidUTF8Char")]
-    InvalidUTF8Char,
     #[error("CodeSegmentation")]
     CodeSegmentation,
-    #[error("IncorrectVariant")]
-    IncorrectVariant,
     #[error("IndexOutOfBound")]
     IndexOutOfBound,
-    #[error("InvalidTID")]
-    InvalidTID(usize),
 
-    // #[error("InvalidThreadStateTransition")]
-    // InvalidThreadStateTransition(ThreadState, ThreadState),
-    // #[error("TooManyThread")]
-    // TooManyThread,
-    // #[error("Signal")]
-    // Signal(Signal),
+    #[error("SignalError")]
+    SignalError,
+
     #[error("AssertError")]
     AssertError,
     #[error("ConcurrencyError")]
@@ -64,11 +52,238 @@ pub enum RuntimeError {
 pub struct ThreadContext<E: crate::vm::external::Engine> {
     pub scope_manager: ScopeManager,
     pub program: Program<E>,
+    pub state: ThreadState<E::TID>,
 }
 
 pub struct Thread<P: SchedulingPolicy> {
     pub scheduler: Scheduler<P>,
     pub stack: Stack,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum ThreadState<TID: ExternThreadIdentifier> {
+    IDLE,
+    RUNNING,
+    SLEEPING(usize),
+    JOINING { target: TID },
+    WAITING,
+}
+
+impl<TID: ExternThreadIdentifier> Default for ThreadState<TID> {
+    fn default() -> Self {
+        Self::RUNNING
+    }
+}
+
+impl<TID: ExternThreadIdentifier> ThreadState<TID> {
+    pub fn init_maf(&mut self, snapshot: &RuntimeSnapshot<TID>) {
+        match self {
+            ThreadState::IDLE => {}
+            ThreadState::RUNNING => {}
+            ThreadState::SLEEPING(time) => match time.checked_sub(1) {
+                Some(0) => *self = ThreadState::RUNNING,
+                Some(time) => *self = ThreadState::SLEEPING(time),
+                None => *self = ThreadState::IDLE, // should never happens
+            },
+            ThreadState::JOINING { ref target } => {
+                //if let Some(ThreadState::)
+                match snapshot.states.get(target) {
+                    Some(ThreadState::IDLE) | None => {
+                        *self = ThreadState::RUNNING;
+                    }
+                    Some(_) => {}
+                }
+            }
+            ThreadState::WAITING => {}
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum Signal<TID: ExternThreadIdentifier> {
+    Spawn,
+    Exit,
+    Close(TID),
+    Sleep { time: usize },
+    Join(TID),
+    Wait,
+    Wake(TID),
+}
+
+#[derive(Clone)]
+pub enum SignalAction<TID: ExternThreadIdentifier> {
+    Spawn(TID),
+    Exit(TID),
+    Close(TID),
+    Sleep { tid: TID, time: usize },
+    Join { caller: TID, target: TID },
+    Wait { caller: TID },
+    Wake { caller: TID, target: TID },
+}
+
+pub enum SignalResult<E: crate::vm::external::Engine> {
+    Ok(SignalAction<E::TID>),
+    Error,
+}
+
+pub struct SignalHandler<E: crate::vm::external::Engine> {
+    snapshot: RuntimeSnapshot<E::TID>,
+    action_buffer: Vec<SignalAction<E::TID>>,
+}
+
+impl<E: crate::vm::external::Engine> Default for SignalHandler<E> {
+    fn default() -> Self {
+        Self {
+            snapshot: RuntimeSnapshot::default(),
+            action_buffer: Vec::default(),
+        }
+    }
+}
+
+impl<E: crate::vm::external::Engine> SignalHandler<E> {
+    pub fn init(&mut self, snapshot: RuntimeSnapshot<E::TID>) {
+        self.snapshot = snapshot;
+        self.action_buffer.clear();
+    }
+
+    fn handle(
+        &mut self,
+        caller: E::TID,
+        signal: Signal<E::TID>,
+        engine: &mut E,
+    ) -> SignalResult<E> {
+        match signal {
+            Signal::Spawn => {
+                let Ok(tid) = engine.spawn() else {
+                    return SignalResult::Error;
+                };
+                let action = SignalAction::Spawn(tid);
+                self.action_buffer.push(action.clone());
+                SignalResult::Ok(action)
+            }
+            Signal::Exit => {
+                if engine.close(&caller).is_err() {
+                    return SignalResult::Error;
+                };
+                let action = SignalAction::Exit(caller);
+                self.action_buffer.push(action.clone());
+                SignalResult::Ok(action)
+            }
+            Signal::Close(tid) => {
+                if !self.snapshot.states.contains_key(&tid) {
+                    return SignalResult::Error;
+                }
+
+                if engine.close(&tid).is_err() {
+                    return SignalResult::Error;
+                };
+                let action = SignalAction::Close(tid);
+                self.action_buffer.push(action.clone());
+                SignalResult::Ok(action)
+            }
+            Signal::Sleep { time } => {
+                let action = SignalAction::Sleep {
+                    tid: caller.clone(),
+                    time,
+                };
+                self.action_buffer.push(action.clone());
+                SignalResult::Ok(action)
+            }
+            Signal::Join(target) => {
+                if !self.snapshot.states.contains_key(&target) {
+                    return SignalResult::Error;
+                }
+
+                let action = SignalAction::Join {
+                    caller: caller.clone(),
+                    target,
+                };
+                self.action_buffer.push(action.clone());
+                SignalResult::Ok(action)
+            }
+            Signal::Wait => {
+                let action = SignalAction::Wait {
+                    caller: caller.clone(),
+                };
+                self.action_buffer.push(action.clone());
+                SignalResult::Ok(action)
+            }
+            Signal::Wake(target) => {
+                if !self.snapshot.states.contains_key(&target) {
+                    return SignalResult::Error;
+                }
+
+                let action = SignalAction::Wake {
+                    caller: caller.clone(),
+                    target,
+                };
+                self.action_buffer.push(action.clone());
+                SignalResult::Ok(action)
+            }
+        }
+    }
+
+    pub fn commit<P: SchedulingPolicy>(
+        &mut self,
+        runtime: &mut Runtime<E, P>,
+    ) -> Result<(), RuntimeError> {
+        for action in self.action_buffer.iter() {
+            // apply action in the runtime
+            match action {
+                SignalAction::Spawn(tid) => {
+                    let _ = runtime.spawn_with_id(tid.clone())?;
+                }
+                SignalAction::Exit(tid) => {
+                    let _ = runtime.close(tid.clone())?;
+                }
+                SignalAction::Close(tid) => {
+                    let _ = runtime.close(tid.clone())?;
+                }
+                SignalAction::Sleep { tid, time } => {
+                    let _ = runtime.put_to_sleep_for(tid.clone(), *time)?;
+                }
+                SignalAction::Join { caller, target } => {
+                    let _ = runtime.join(caller.clone(), target.clone())?;
+                }
+                SignalAction::Wait { caller } => {
+                    let _ = runtime.wait(caller.clone())?;
+                }
+                SignalAction::Wake { caller, target } => {
+                    let _ = runtime.wake(caller.clone(), target.clone())?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn notify(
+        &mut self,
+        signal: Signal<E::TID>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        engine: &mut E,
+        tid: E::TID,
+        callback: fn(
+            SignalResult<E>,
+            &mut crate::vm::allocator::stack::Stack,
+        ) -> Result<(), RuntimeError>,
+    ) -> Result<(), RuntimeError> {
+        let result = self.handle(tid, signal, engine);
+        callback(result, stack)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct RuntimeSnapshot<TID: ExternThreadIdentifier> {
+    pub states: HashMap<TID, ThreadState<TID>>,
+}
+
+impl<TID: ExternThreadIdentifier> Default for RuntimeSnapshot<TID> {
+    fn default() -> Self {
+        Self {
+            states: HashMap::default(),
+        }
+    }
 }
 
 pub struct Runtime<E: crate::vm::external::Engine, P: SchedulingPolicy> {
@@ -86,7 +301,13 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Default for Runtime<E,
 }
 
 impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
-    const INSTRUCTION_MAX_COUNT: usize = 1024;
+    pub fn snapshot(&self) -> RuntimeSnapshot<E::TID> {
+        let mut states = HashMap::with_capacity(self.contexts.len());
+        for (tid, ThreadContext { state, .. }) in self.contexts.iter() {
+            states.insert(tid.clone(), state.clone());
+        }
+        RuntimeSnapshot { states }
+    }
 
     pub fn prepare(&mut self) {
         for Thread { scheduler, .. } in self.threads.values_mut() {
@@ -106,6 +327,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
             ThreadContext {
                 scope_manager,
                 program,
+                state: ThreadState::default(),
             },
         );
         self.threads
@@ -113,10 +335,68 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         Ok(tid)
     }
 
+    pub fn spawn_with_id(&mut self, tid: E::TID) -> Result<(), RuntimeError> {
+        let scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let program = crate::vm::program::Program::default();
+        let scheduler = Scheduler::default();
+        let stack = Stack::default();
+        let state = ThreadState::default();
+
+        self.contexts.insert(
+            tid.clone(),
+            ThreadContext {
+                scope_manager,
+                program,
+                state,
+            },
+        );
+        self.threads
+            .insert(tid.clone(), Thread { scheduler, stack });
+        Ok(())
+    }
+
+    pub fn close(&mut self, tid: E::TID) -> Result<(), RuntimeError> {
+        self.contexts.remove(&tid);
+        self.threads.remove(&tid);
+        Ok(())
+    }
+
+    pub fn put_to_sleep_for(&mut self, tid: E::TID, time: usize) -> Result<(), RuntimeError> {
+        let Some(ThreadContext { state, .. }) = self.contexts.get_mut(&tid) else {
+            return Err(RuntimeError::Default);
+        };
+        *state = ThreadState::SLEEPING(time);
+        Ok(())
+    }
+
+    pub fn join(&mut self, caller: E::TID, target: E::TID) -> Result<(), RuntimeError> {
+        let Some(ThreadContext { state, .. }) = self.contexts.get_mut(&caller) else {
+            return Err(RuntimeError::Default);
+        };
+        *state = ThreadState::JOINING { target };
+        Ok(())
+    }
+
+    pub fn wait(&mut self, caller: E::TID) -> Result<(), RuntimeError> {
+        let Some(ThreadContext { state, .. }) = self.contexts.get_mut(&caller) else {
+            return Err(RuntimeError::Default);
+        };
+        *state = ThreadState::WAITING;
+        Ok(())
+    }
+
+    pub fn wake(&mut self, caller: E::TID, target: E::TID) -> Result<(), RuntimeError> {
+        let Some(ThreadContext { state, .. }) = self.contexts.get_mut(&target) else {
+            return Err(RuntimeError::Default);
+        };
+        if ThreadState::WAITING == *state {
+            *state = ThreadState::RUNNING;
+        }
+        Ok(())
+    }
+
     pub fn context_of(&mut self, tid: &E::TID) -> Result<&mut ThreadContext<E>, RuntimeError> {
-        self.contexts
-            .get_mut(tid)
-            .ok_or(RuntimeError::InvalidTID(0))
+        self.contexts.get_mut(tid).ok_or(RuntimeError::Default)
     }
 
     pub fn thread_with_context_of(
@@ -124,8 +404,8 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         tid: &E::TID,
     ) -> Result<(&Thread<P>, &ThreadContext<E>), RuntimeError> {
         Ok((
-            self.threads.get(tid).ok_or(RuntimeError::InvalidTID(0))?,
-            self.contexts.get(tid).ok_or(RuntimeError::InvalidTID(0))?,
+            self.threads.get(tid).ok_or(RuntimeError::Default)?,
+            self.contexts.get(tid).ok_or(RuntimeError::Default)?,
         ))
     }
 
@@ -135,466 +415,64 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
     ) -> Result<(), RuntimeError> {
-        for (tid, Thread { scheduler, stack }) in P::schedule::<E>(self.threads.iter_mut()) {
-            let Some(ThreadContext { program, .. }) = self.contexts.get(tid) else {
+        let mut signal_handler = SignalHandler::default();
+        let snapshot = self.snapshot();
+        for (tid, ThreadContext { state, .. }) in self.contexts.iter_mut() {
+            state.init_maf(&snapshot);
+        }
+        signal_handler.init(snapshot);
+
+        for (tid, Thread { scheduler, stack }) in self.threads.iter_mut() {
+            let Some(ThreadContext { program, state, .. }) = self.contexts.get(tid) else {
                 return Err(RuntimeError::Default);
             };
-            let mut watchdog = Self::INSTRUCTION_MAX_COUNT;
+            scheduler.policy.init_maf::<E>(tid, state);
+        }
+
+        for (tid, Thread { scheduler, stack }) in P::schedule::<E>(self.threads.iter_mut()) {
+            let Some(ThreadContext {
+                ref program, state, ..
+            }) = self.contexts.get_mut(tid)
+            else {
+                return Err(RuntimeError::Default);
+            };
+            scheduler.cursor.update(program, state);
+
+            if ThreadState::RUNNING != *state {
+                continue;
+            }
+            dbg!((tid, &state));
+
+            scheduler.policy.init_watchdog();
 
             loop {
-                match scheduler.run(program, stack, heap, stdio, engine)? {
-                    std::ops::ControlFlow::Continue(_) => {
-                        watchdog = watchdog.checked_sub(1).unwrap_or(0);
-                        if watchdog == 0 {
+                match scheduler.run(
+                    tid.clone(),
+                    state,
+                    program,
+                    stack,
+                    heap,
+                    stdio,
+                    engine,
+                    &mut signal_handler,
+                )? {
+                    std::ops::ControlFlow::Continue(_) => match scheduler.policy.watchdog() {
+                        std::ops::ControlFlow::Continue(_) => continue,
+                        std::ops::ControlFlow::Break(_) => {
+                            *state = ThreadState::IDLE;
                             break;
                         }
-                        continue;
+                    },
+                    std::ops::ControlFlow::Break(_) => {
+                        *state = ThreadState::IDLE;
+                        break;
                     }
-                    std::ops::ControlFlow::Break(_) => break,
                 }
             }
         }
+
+        let _ = signal_handler.commit(self)?;
+        dbg!("END MAF");
         Ok(())
     }
 }
-
-// pub const MAX_THREAD_COUNT: usize = 4;
-
-// #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-// pub enum Player {
-//     P1,
-//     P2,
-// }
-
-// #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-// pub enum ThreadState {
-//     IDLE,
-//     WAITING,
-//     SLEEPING(usize), // remaining maf until awakening
-//     ACTIVE,
-//     COMPLETED_MAF,
-//     STARVED,
-//     EXITED,
-// }
-
-// impl ThreadState {
-//     pub fn is_noop(&self) -> bool {
-//         match self {
-//             ThreadState::IDLE => true,
-//             ThreadState::WAITING => true,
-//             ThreadState::SLEEPING(_) => true,
-//             ThreadState::ACTIVE => false,
-//             ThreadState::COMPLETED_MAF => true,
-//             ThreadState::STARVED => true,
-//             ThreadState::EXITED => true,
-//         }
-//     }
-
-//     pub fn init_maf<E: crate::vm::external::Engine>(&mut self, engine: &mut E, program: &Program) {
-//         let program_at_end = program.cursor_is_at_end();
-//         match self {
-//             ThreadState::IDLE => {
-//                 if !program_at_end {
-//                     *self = ThreadState::ACTIVE
-//                 }
-//             }
-//             ThreadState::WAITING => {}
-//             ThreadState::SLEEPING(0) => {
-//                 if !program_at_end {
-//                     *self = ThreadState::ACTIVE
-//                 } else {
-//                     *self = ThreadState::IDLE
-//                 }
-//             }
-//             ThreadState::SLEEPING(n) => *n -= 1,
-//             ThreadState::ACTIVE => {
-//                 if program_at_end {
-//                     *self = ThreadState::IDLE
-//                 }
-//             }
-//             ThreadState::COMPLETED_MAF => {
-//                 if !program_at_end {
-//                     *self = ThreadState::ACTIVE
-//                 } else {
-//                     *self = ThreadState::IDLE
-//                 }
-//             }
-//             ThreadState::EXITED => {}
-//             ThreadState::STARVED => {
-//                 let weight = program.current_instruction_weight::<E>();
-//                 if engine.get_player_energy() >= weight {
-//                     *self = ThreadState::ACTIVE
-//                 }
-//             }
-//         }
-//     }
-
-//     pub fn init_mif<E: crate::vm::external::Engine>(&mut self, engine: &mut E, program: &Program) {
-//         let program_at_end = program.cursor_is_at_end();
-//         match self {
-//             ThreadState::IDLE => {
-//                 if !program_at_end {
-//                     *self = ThreadState::ACTIVE
-//                 }
-//             }
-//             ThreadState::WAITING => {}
-//             ThreadState::SLEEPING(0) => {
-//                 if !program_at_end {
-//                     *self = ThreadState::ACTIVE
-//                 } else {
-//                     *self = ThreadState::IDLE
-//                 }
-//             }
-//             ThreadState::SLEEPING(n) => {}
-//             ThreadState::ACTIVE => {
-//                 if program_at_end {
-//                     *self = ThreadState::IDLE
-//                 }
-//             }
-//             ThreadState::COMPLETED_MAF => {}
-//             ThreadState::EXITED => {}
-//             ThreadState::STARVED => {}
-//         }
-//     }
-
-//     pub fn to(&mut self, dest: Self) -> Result<(), RuntimeError> {
-//         let dest = match self {
-//             ThreadState::IDLE => match dest {
-//                 ThreadState::IDLE => dest,
-//                 ThreadState::WAITING => dest,
-//                 ThreadState::SLEEPING(_) => dest,
-//                 ThreadState::ACTIVE => dest,
-//                 ThreadState::COMPLETED_MAF => dest,
-//                 ThreadState::STARVED => dest,
-//                 ThreadState::EXITED => dest,
-//             },
-//             ThreadState::WAITING => match dest {
-//                 ThreadState::IDLE => dest,
-//                 ThreadState::WAITING => dest,
-//                 ThreadState::SLEEPING(_) => {
-//                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
-//                 }
-//                 ThreadState::ACTIVE => dest,
-//                 ThreadState::COMPLETED_MAF => dest,
-//                 ThreadState::STARVED => dest,
-//                 ThreadState::EXITED => dest,
-//             },
-//             ThreadState::SLEEPING(_) => match dest {
-//                 ThreadState::IDLE => dest,
-//                 ThreadState::WAITING => {
-//                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
-//                 }
-//                 ThreadState::SLEEPING(_) => dest,
-//                 ThreadState::ACTIVE => dest,
-//                 ThreadState::COMPLETED_MAF => dest,
-//                 ThreadState::STARVED => dest,
-//                 ThreadState::EXITED => dest,
-//             },
-//             ThreadState::ACTIVE => match dest {
-//                 ThreadState::IDLE => dest,
-//                 ThreadState::WAITING => dest,
-//                 ThreadState::SLEEPING(_) => dest,
-//                 ThreadState::ACTIVE => dest,
-//                 ThreadState::COMPLETED_MAF => dest,
-//                 ThreadState::STARVED => dest,
-//                 ThreadState::EXITED => dest,
-//             },
-//             ThreadState::COMPLETED_MAF => match dest {
-//                 ThreadState::IDLE => dest,
-//                 ThreadState::WAITING => dest,
-//                 ThreadState::SLEEPING(_) => dest,
-//                 ThreadState::ACTIVE => dest,
-//                 ThreadState::COMPLETED_MAF => dest,
-//                 ThreadState::STARVED => dest,
-//                 ThreadState::EXITED => dest,
-//             },
-//             ThreadState::EXITED => match dest {
-//                 ThreadState::IDLE => {
-//                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
-//                 }
-//                 ThreadState::WAITING => {
-//                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
-//                 }
-//                 ThreadState::SLEEPING(_) => {
-//                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
-//                 }
-//                 ThreadState::ACTIVE => {
-//                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
-//                 }
-//                 ThreadState::COMPLETED_MAF => dest,
-//                 ThreadState::EXITED => dest,
-//                 ThreadState::STARVED => {
-//                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
-//                 }
-//             },
-//             ThreadState::STARVED => match dest {
-//                 ThreadState::IDLE => dest,
-//                 ThreadState::WAITING => dest,
-//                 ThreadState::SLEEPING(_) => dest,
-//                 ThreadState::ACTIVE => dest,
-//                 ThreadState::COMPLETED_MAF => dest,
-//                 ThreadState::STARVED => dest,
-//                 ThreadState::EXITED => dest,
-//             },
-//         };
-//         *self = dest;
-//         Ok(())
-//     }
-// }
-
-// #[derive(Debug, Clone)]
-// pub struct Thread {
-//     pub state: ThreadState,
-//     pub scope: ScopeManager,
-//     pub stack: Stack,
-//     pub program: Program,
-//     pub tid: Tid,
-//     pub current_maf_instruction_count: usize,
-// }
-
-// #[derive(Debug, Clone)]
-// pub struct Runtime {
-//     pub p1_manager: PlayerThreadsManager,
-//     pub p2_manager: PlayerThreadsManager,
-// }
-
-// #[derive(Debug, Clone)]
-// pub struct PlayerThreadsManager {
-//     pub threads: [Option<Thread>; MAX_THREAD_COUNT],
-// }
-
-// const THREAD_INIT_VALUE_NONE: Option<Thread> = None;
-// impl PlayerThreadsManager {
-//     pub fn new() -> Self {
-//         Self {
-//             threads: [THREAD_INIT_VALUE_NONE; MAX_THREAD_COUNT],
-//         }
-//     }
-
-//     pub fn info(&self) -> String {
-//         let mut buf = String::new();
-
-//         for thread in self.threads.iter() {
-//             if let Some(Thread {
-//                 ref tid, ref state, ..
-//             }) = thread
-//             {
-//                 buf.push_str(&format!(" Tid {tid} = {:?},", state));
-//             }
-//         }
-//         buf
-//     }
-
-//     pub fn all_noop(&self) -> bool {
-//         let mut noop = true;
-//         for thread in &self.threads {
-//             if let Some(Thread { state, .. }) = thread {
-//                 if !state.is_noop() {
-//                     noop = false
-//                 }
-//             }
-//         }
-//         noop
-//     }
-
-//     pub fn thread_count(&self) -> usize {
-//         self.threads.iter().filter(|t| t.is_some()).count()
-//     }
-
-//     pub fn alive(&self) -> [bool; MAX_THREAD_COUNT] {
-//         let mut buff = [false; MAX_THREAD_COUNT];
-//         for i in 0..MAX_THREAD_COUNT {
-//             buff[i] = self.threads[i].is_some();
-//         }
-//         buff
-//     }
-
-//     pub fn spawn<E: crate::vm::external::Engine>(&mut self, engine: &mut E) -> Result<usize, RuntimeError> {
-//         if self.thread_count() >= MAX_THREAD_COUNT {
-//             return Err(RuntimeError::TooManyThread);
-//         }
-
-//         let scope = ScopeManager::default();
-//         let program = Program::default();
-//         let stack = Stack::new();
-//         let Some((tid, _)) = self.threads.iter().enumerate().find(|(i, t)| t.is_none()) else {
-//             return Err(RuntimeError::TooManyThread);
-//         };
-
-//         self.threads[tid].replace(Thread {
-//             scope,
-//             stack,
-//             program,
-//             tid,
-//             state: ThreadState::IDLE,
-//             current_maf_instruction_count: 0,
-//         });
-//         engine.spawn(tid);
-//         Ok(tid)
-//     }
-
-//     pub fn spawn_with_tid<E: crate::vm::external::Engine>(
-//         &mut self,
-//         tid: Tid,
-//         engine: &mut E,
-//     ) -> Result<(), RuntimeError> {
-//         if self.thread_count() >= MAX_THREAD_COUNT {
-//             return Err(RuntimeError::TooManyThread);
-//         }
-//         if tid >= MAX_THREAD_COUNT {
-//             return Err(RuntimeError::InvalidTID(tid));
-//         }
-//         let scope = ScopeManager::default();
-//         let program = Program::default();
-//         let stack = Stack::new();
-
-//         self.threads[tid].replace(Thread {
-//             scope,
-//             stack,
-//             program,
-//             tid,
-//             state: ThreadState::IDLE,
-//             current_maf_instruction_count: 0,
-//         });
-//         engine.spawn(tid);
-//         Ok(())
-//     }
-
-//     pub fn close<E: crate::vm::external::Engine>(
-//         &mut self,
-//         tid: Tid,
-//         engine: &mut E,
-//     ) -> Result<(), RuntimeError> {
-//         if tid >= MAX_THREAD_COUNT || self.threads[tid].is_none() {
-//             return Err(RuntimeError::InvalidTID(tid));
-//         }
-
-//         let _ = self.threads[tid].take();
-//         engine.close(tid);
-//         Ok(())
-//     }
-
-//     pub fn spawn_with_scope(&mut self, scope: ScopeManager) -> Result<usize, RuntimeError> {
-//         let program = Program::default();
-//         let stack = Stack::new();
-//         let Some((tid, _)) = self.threads.iter().enumerate().find(|(i, t)| t.is_none()) else {
-//             return Err(RuntimeError::TooManyThread);
-//         };
-//         self.threads[tid].replace(Thread {
-//             scope,
-//             stack,
-//             program,
-//             tid,
-//             state: ThreadState::IDLE,
-//             current_maf_instruction_count: 0,
-//         });
-//         Ok(tid)
-//     }
-// }
-
-// impl Runtime {
-//     pub fn new() -> (Self, Heap, StdIO) {
-//         (
-//             Self {
-//                 p1_manager: PlayerThreadsManager::new(),
-//                 p2_manager: PlayerThreadsManager::new(),
-//             },
-//             Heap::new(),
-//             StdIO::default(),
-//         )
-//     }
-
-//     pub fn tid_info(&self) -> String {
-//         let mut buf = String::new();
-//         buf.push_str(&self.p1_manager.info());
-//         buf.push_str(&self.p2_manager.info());
-//         buf
-//     }
-
-//     pub fn spawn<E: crate::vm::external::Engine>(
-//         &mut self,
-//         player: Player,
-//         engine: &mut E,
-//     ) -> Result<Tid, RuntimeError> {
-//         match player {
-//             Player::P1 => self.p1_manager.spawn(engine),
-//             Player::P2 => self.p2_manager.spawn(engine),
-//         }
-//     }
-
-//     pub fn spawn_with_tid<E: crate::vm::external::Engine>(
-//         &mut self,
-//         player: Player,
-//         tid: Tid,
-//         engine: &mut E,
-//     ) -> Result<(), RuntimeError> {
-//         match player {
-//             Player::P1 => self.p1_manager.spawn_with_tid(tid, engine),
-//             Player::P2 => self.p2_manager.spawn_with_tid(tid, engine),
-//         }
-//     }
-//     pub fn close<E: crate::vm::external::Engine>(
-//         &mut self,
-//         player: Player,
-//         tid: Tid,
-//         engine: &mut E,
-//     ) -> Result<(), RuntimeError> {
-//         match player {
-//             Player::P1 => self.p1_manager.close(tid, engine),
-//             Player::P2 => self.p2_manager.close(tid, engine),
-//         }
-//     }
-
-//     pub fn spawn_with_scope(
-//         &mut self,
-//         player: Player,
-//         scope: ScopeManager,
-//     ) -> Result<usize, RuntimeError> {
-//         match player {
-//             Player::P1 => self.p1_manager.spawn_with_scope(scope),
-//             Player::P2 => self.p2_manager.spawn_with_scope(scope),
-//         }
-//     }
-
-//     pub fn get_mut<'runtime>(
-//         &'runtime mut self,
-//         player: Player,
-//         tid: Tid,
-//     ) -> Result<
-//         (
-//             &'runtime mut ScopeManager,
-//             &'runtime mut Stack,
-//             &mut crate::vm::program::Program,
-//         ),
-//         RuntimeError,
-//     > {
-//         match player {
-//             Player::P1 => {
-//                 if tid >= MAX_THREAD_COUNT {
-//                     return Err(RuntimeError::InvalidTID(tid));
-//                 }
-//                 let Some(thread) = &mut self.p1_manager.threads[tid] else {
-//                     return Err(RuntimeError::InvalidTID(tid));
-//                 };
-//                 Ok((&mut thread.scope, &mut thread.stack, &mut thread.program))
-//             }
-//             Player::P2 => {
-//                 if tid >= MAX_THREAD_COUNT {
-//                     return Err(RuntimeError::InvalidTID(tid));
-//                 }
-//                 let Some(thread) = &mut self.p2_manager.threads[tid] else {
-//                     return Err(RuntimeError::InvalidTID(tid));
-//                 };
-//                 Ok((&mut thread.scope, &mut thread.stack, &mut thread.program))
-//             }
-//         }
-//     }
-
-//     pub fn iter_mut(&mut self) -> impl Iterator<Item = (Option<&mut Thread>, Option<&mut Thread>)> {
-//         let p1_iter = self.p1_manager.threads.iter_mut().map(|t| t.as_mut());
-
-//         let p2_iter = self.p2_manager.threads.iter_mut().map(|t| t.as_mut());
-
-//         std::iter::zip(p1_iter, p2_iter)
-//     }
-// }

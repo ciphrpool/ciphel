@@ -318,14 +318,14 @@ mod tests {
                         "start".to_string(),
                         crate::semantic::EType::User {
                             id: point_id,
-                            size: res_type.def.size_of(),
+                            size: 16,
                         },
                     ));
                     res.push((
                         "end".to_string(),
                         crate::semantic::EType::User {
                             id: point_id,
-                            size: res_type.def.size_of(),
+                            size: 16,
                         },
                     ));
                     res
@@ -517,9 +517,13 @@ mod tests {
         );
 
         let function_scope = function.scope;
-        let x_var = scope_manager.find_var_by_name(&"x", None).unwrap();
+        let x_var = scope_manager
+            .find_var_by_name(&"x", function_scope.scope)
+            .unwrap();
         assert_eq!(p_num!(U64), x_var.ctype);
-        let text_var = scope_manager.find_var_by_name(&"text", None).unwrap();
+        let text_var = scope_manager
+            .find_var_by_name(&"text", function_scope.scope)
+            .unwrap();
         assert_eq!(e_static!(StaticType::String(StringType())), text_var.ctype);
     }
 

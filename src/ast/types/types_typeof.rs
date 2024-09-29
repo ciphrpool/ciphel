@@ -1,5 +1,5 @@
 use super::{
-    AddrType, ClosureType, FunctionType, LambdaType, MapType, PrimitiveType, RangeType, SliceType,
+    AddrType, ClosureType, FunctionType, LambdaType, MapType, PrimitiveType, SliceType,
     StrSliceType, StringType, TupleType, Type, VecType,
 };
 use crate::e_static;
@@ -46,7 +46,6 @@ impl TypeOf for Type {
             Type::Address(value) => value.type_of(&scope_manager, scope_id),
             Type::Map(value) => value.type_of(&scope_manager, scope_id),
             Type::String(value) => value.type_of(&scope_manager, scope_id),
-            Type::Range(value) => value.type_of(&scope_manager, scope_id),
             Type::Error => Ok(e_static!(StaticType::Error)),
             Type::Function(value) => value.type_of(&scope_manager, scope_id),
             Type::Lambda(value) => value.type_of(&scope_manager, scope_id),
@@ -363,36 +362,6 @@ impl CompatibleWith for static_types::AddrType {
         scope_id: Option<u128>,
     ) -> Result<(), SemanticError> {
         return self.0.compatible_with(&other.0, scope_manager, scope_id);
-    }
-}
-
-impl TypeOf for RangeType {
-    fn type_of(
-        &self,
-        scope_manager: &crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-    ) -> Result<EType, SemanticError>
-    where
-        Self: Sized,
-    {
-        Ok(EType::Static(static_types::StaticType::Range(
-            static_types::RangeType {
-                num: match self.num {
-                    super::NumberType::U8 => static_types::NumberType::U8,
-                    super::NumberType::U16 => static_types::NumberType::U16,
-                    super::NumberType::U32 => static_types::NumberType::U32,
-                    super::NumberType::U64 => static_types::NumberType::U64,
-                    super::NumberType::U128 => static_types::NumberType::U128,
-                    super::NumberType::I8 => static_types::NumberType::I8,
-                    super::NumberType::I16 => static_types::NumberType::I16,
-                    super::NumberType::I32 => static_types::NumberType::I32,
-                    super::NumberType::I64 => static_types::NumberType::I64,
-                    super::NumberType::I128 => static_types::NumberType::I128,
-                    super::NumberType::F64 => static_types::NumberType::F64,
-                },
-                inclusive: self.inclusive,
-            },
-        )))
     }
 }
 

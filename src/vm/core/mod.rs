@@ -24,7 +24,7 @@ use super::{
     asm::{operation::OpPrimitive, Asm},
     program::Program,
     runtime::RuntimeError,
-    scheduler_v2::Executable,
+    scheduler::Executable,
     stdio::StdIO,
     CodeGenerationError, GenerateCode,
 };
@@ -280,44 +280,108 @@ pub const OK_VALUE: u8 = 0;
 pub const OK_SLICE: [u8; 1] = [OK_VALUE];
 
 impl<E: crate::vm::external::Engine> Executable<E> for CoreAsm {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self {
-            CoreAsm::Vec(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            CoreAsm::Map(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            CoreAsm::String(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            CoreAsm::Alloc(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            CoreAsm::Thread(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            CoreAsm::IO(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            CoreAsm::Math(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            CoreAsm::Format(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            CoreAsm::Iter(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
+            CoreAsm::Vec(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            CoreAsm::Map(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            CoreAsm::String(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            CoreAsm::Alloc(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            CoreAsm::Thread(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            CoreAsm::IO(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            CoreAsm::Math(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            CoreAsm::Format(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            CoreAsm::Iter(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
             CoreAsm::AssertBool => {
                 let condition = OpPrimitive::pop_bool(stack)?;
                 scheduler.next();

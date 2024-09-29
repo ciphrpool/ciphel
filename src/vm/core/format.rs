@@ -5,9 +5,9 @@ use crate::semantic::scope::static_types::{
     NumberType, PrimitiveType, StaticType, StrSliceType, StringType,
 };
 use crate::semantic::{EType, ResolveCore, TypeOf};
-use crate::vm::allocator::align;
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
+use crate::vm::allocator::{align, MemoryAddress};
 use crate::vm::asm::operation::{OpPrimitive, PopNum};
 use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
@@ -15,7 +15,7 @@ use crate::vm::core::CoreAsm;
 
 use crate::vm::program::Program;
 use crate::vm::runtime::RuntimeError;
-use crate::vm::scheduler_v2::Executable;
+use crate::vm::scheduler::Executable;
 use crate::vm::stdio::StdIO;
 use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
@@ -27,9 +27,8 @@ use super::PathFinder;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FormatFn {
-    Format,
-    ITOA,
-    ATOI,
+    ITOA { number_type: NumberType },
+    ATOI { number_type: NumberType },
     FTOA,
     ATOF,
     BTOA,
@@ -45,9 +44,12 @@ impl PathFinder for FormatFn {
     {
         if (path.len() == 1 && path[0] == lexem::FORMAT) || path.len() == 0 {
             return match name {
-                lexem::FORMAT => Some(FormatFn::Format),
-                lexem::ITOA => Some(FormatFn::ITOA),
-                lexem::ATOI => Some(FormatFn::ATOI),
+                lexem::ITOA => Some(FormatFn::ITOA {
+                    number_type: NumberType::I64,
+                }),
+                lexem::ATOI => Some(FormatFn::ATOI {
+                    number_type: NumberType::I64,
+                }),
                 lexem::FTOA => Some(FormatFn::FTOA),
                 lexem::ATOF => Some(FormatFn::ATOF),
                 lexem::BTOA => Some(FormatFn::BTOA),
@@ -70,19 +72,110 @@ impl ResolveCore for FormatFn {
         parameters: &mut Vec<Expression>,
     ) -> Result<EType, SemanticError> {
         match self {
-            FormatFn::Format => {
-                //
-
+            FormatFn::ITOA { number_type } => {
+                if parameters.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let _ = parameters[0].resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+                match parameters[0].type_of(scope_manager, scope_id)? {
+                    EType::Static(StaticType::Primitive(PrimitiveType::Number(nt))) => {
+                        *number_type = nt;
+                    }
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
                 Ok(EType::Static(StaticType::String(StringType())))
             }
-            FormatFn::ITOA => todo!(),
-            FormatFn::ATOI => todo!(),
-            FormatFn::FTOA => todo!(),
-            FormatFn::ATOF => todo!(),
-            FormatFn::BTOA => todo!(),
-            FormatFn::ATOB => todo!(),
-            FormatFn::CTOA => todo!(),
-            FormatFn::ATOC => todo!(),
+            FormatFn::ATOI { number_type } => {
+                if parameters.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let _ = parameters[0].resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+                match parameters[0].type_of(scope_manager, scope_id)? {
+                    EType::Static(StaticType::StrSlice(StrSliceType())) => {}
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+
+                match context {
+                    Some(EType::Static(StaticType::Primitive(PrimitiveType::Number(nt)))) => {
+                        *number_type = nt.clone();
+                    }
+                    None => *number_type = NumberType::I64,
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                Ok(EType::Static(StaticType::Primitive(PrimitiveType::Number(
+                    number_type.to_owned(),
+                ))))
+            }
+            FormatFn::FTOA => {
+                if parameters.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let _ = parameters[0].resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+                match parameters[0].type_of(scope_manager, scope_id)? {
+                    EType::Static(StaticType::Primitive(PrimitiveType::Number(
+                        NumberType::F64,
+                    ))) => {}
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                Ok(EType::Static(StaticType::String(StringType())))
+            }
+            FormatFn::ATOF => {
+                if parameters.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let _ = parameters[0].resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+                match parameters[0].type_of(scope_manager, scope_id)? {
+                    EType::Static(StaticType::StrSlice(StrSliceType())) => {}
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                Ok(EType::Static(StaticType::Primitive(PrimitiveType::Number(
+                    NumberType::F64,
+                ))))
+            }
+            FormatFn::BTOA => {
+                if parameters.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let _ = parameters[0].resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+                match parameters[0].type_of(scope_manager, scope_id)? {
+                    EType::Static(StaticType::Primitive(PrimitiveType::Bool)) => {}
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                Ok(EType::Static(StaticType::String(StringType())))
+            }
+            FormatFn::ATOB => {
+                if parameters.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let _ = parameters[0].resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+                match parameters[0].type_of(scope_manager, scope_id)? {
+                    EType::Static(StaticType::StrSlice(StrSliceType())) => {}
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                Ok(EType::Static(StaticType::Primitive(PrimitiveType::Bool)))
+            }
+            FormatFn::CTOA => {
+                if parameters.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let _ = parameters[0].resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+                match parameters[0].type_of(scope_manager, scope_id)? {
+                    EType::Static(StaticType::Primitive(PrimitiveType::Char)) => {}
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                Ok(EType::Static(StaticType::String(StringType())))
+            }
+            FormatFn::ATOC => {
+                if parameters.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let _ = parameters[0].resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+                match parameters[0].type_of(scope_manager, scope_id)? {
+                    EType::Static(StaticType::StrSlice(StrSliceType())) => {}
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                Ok(EType::Static(StaticType::Primitive(PrimitiveType::Char)))
+            }
         }
     }
 }
@@ -96,17 +189,116 @@ impl GenerateCode for FormatFn {
         context: &crate::vm::CodeGenerationContext,
     ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
-            FormatFn::Format => {
-                //
+            FormatFn::ITOA { number_type } => match number_type {
+                NumberType::U8 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::U8TOA)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+                }
+                NumberType::U16 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::U16TOA)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+                }
+                NumberType::U32 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::U32TOA)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+                }
+                NumberType::U64 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::U64TOA)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+                }
+                NumberType::U128 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::U128TOA)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+                }
+                NumberType::I8 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::I8TOA)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+                }
+                NumberType::I16 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::I16TOA)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+                }
+                NumberType::I32 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::I32TOA)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+                }
+                NumberType::I64 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::I64TOA)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+                }
+                NumberType::I128 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::I128TOA)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+                }
+                NumberType::F64 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FTOA)));
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+                }
+            },
+            FormatFn::ATOI { number_type } => match number_type {
+                NumberType::U8 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOU8)));
+                }
+                NumberType::U16 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOU16)));
+                }
+                NumberType::U32 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOU32)));
+                }
+                NumberType::U64 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOU64)));
+                }
+                NumberType::U128 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOU128)));
+                }
+                NumberType::I8 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOI8)));
+                }
+                NumberType::I16 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOI16)));
+                }
+                NumberType::I32 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOI32)));
+                }
+                NumberType::I64 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOI64)));
+                }
+                NumberType::I128 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOI128)));
+                }
+                NumberType::F64 => {
+                    instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOF)));
+                }
+            },
+            FormatFn::FTOA => {
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FTOA)));
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
             }
-            FormatFn::ITOA => todo!(),
-            FormatFn::ATOI => todo!(),
-            FormatFn::FTOA => todo!(),
-            FormatFn::ATOF => todo!(),
-            FormatFn::BTOA => todo!(),
-            FormatFn::ATOB => todo!(),
-            FormatFn::CTOA => todo!(),
-            FormatFn::ATOC => todo!(),
+            FormatFn::ATOF => instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOF))),
+            FormatFn::BTOA => {
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::BTOA)));
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+            }
+            FormatFn::ATOB => instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOB))),
+            FormatFn::CTOA => {
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatStart)));
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::CTOA)));
+                instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::FormatEnd)));
+            }
+            FormatFn::ATOC => instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::ATOC))),
         }
         Ok(())
     }
@@ -215,7 +407,7 @@ pub mod type_printer {
                 })));
             }
             2.. => {
-                for i in fields.len() - 1..=1 {
+                for i in (1..fields.len()).rev() {
                     let _ = build(&fields[i].1, scope_manager, scope_id, instructions)?;
                     instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStrBefore(
                         format!("{0}: ", fields[i].0).as_bytes().into(),
@@ -324,7 +516,7 @@ pub mod type_printer {
                             })));
                         }
                         2.. => {
-                            for i in tuple_type.0.len() - 1..=1 {
+                            for i in (1..tuple_type.0.len()).rev() {
                                 let _ =
                                     build(&tuple_type.0[i], scope_manager, scope_id, instructions)?;
                                 if i != tuple_type.0.len() - 1 {
@@ -372,7 +564,6 @@ pub mod type_printer {
                             data: 0u64.to_le_bytes().into(),
                         }));
                     }
-                    StaticType::Range(range_type) => todo!(),
                     StaticType::Unit => {
                         instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
                             "unit".as_bytes().into(),
@@ -579,18 +770,17 @@ impl crate::vm::AsmWeight for FormatAsm {
     }
 }
 
-impl<E: crate::vm::external::Engine> Executable<E>
-    for FormatAsm
-{
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+impl<E: crate::vm::external::Engine> Executable<E> for FormatAsm {
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self {
             FormatAsm::U128TOA => {
@@ -599,7 +789,12 @@ impl<E: crate::vm::external::Engine> Executable<E>
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOU128 => todo!(),
+            FormatAsm::ATOU128 => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let number: u128 = string.parse().map_err(|_| RuntimeError::Deserialization)?;
+                let _ = stack.push_with(&number.to_le_bytes())?;
+            }
             FormatAsm::U64TOA => {
                 let data = OpPrimitive::pop_num::<u64>(stack)?;
                 let words = data.to_string();
@@ -612,84 +807,150 @@ impl<E: crate::vm::external::Engine> Executable<E>
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOU64 => todo!(),
+            FormatAsm::ATOU64 => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let number: u64 = string.parse().map_err(|_| RuntimeError::Deserialization)?;
+                let _ = stack.push_with(&number.to_le_bytes())?;
+            }
             FormatAsm::U32TOA => {
                 let data = OpPrimitive::pop_num::<u32>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOU32 => todo!(),
+            FormatAsm::ATOU32 => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let number: u32 = string.parse().map_err(|_| RuntimeError::Deserialization)?;
+                let _ = stack.push_with(&number.to_le_bytes())?;
+            }
             FormatAsm::U16TOA => {
                 let data = OpPrimitive::pop_num::<u16>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOU16 => todo!(),
+            FormatAsm::ATOU16 => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let number: u16 = string.parse().map_err(|_| RuntimeError::Deserialization)?;
+                let _ = stack.push_with(&number.to_le_bytes())?;
+            }
             FormatAsm::U8TOA => {
                 let data = OpPrimitive::pop_num::<u8>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOU8 => todo!(),
+            FormatAsm::ATOU8 => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let number: u8 = string.parse().map_err(|_| RuntimeError::Deserialization)?;
+                let _ = stack.push_with(&number.to_le_bytes())?;
+            }
             FormatAsm::I128TOA => {
                 let data = OpPrimitive::pop_num::<i128>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOI128 => todo!(),
+            FormatAsm::ATOI128 => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let number: i128 = string.parse().map_err(|_| RuntimeError::Deserialization)?;
+                let _ = stack.push_with(&number.to_le_bytes())?;
+            }
             FormatAsm::I64TOA => {
                 let data = OpPrimitive::pop_num::<i64>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOI64 => todo!(),
+            FormatAsm::ATOI64 => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let number: i64 = string.parse().map_err(|_| RuntimeError::Deserialization)?;
+                let _ = stack.push_with(&number.to_le_bytes())?;
+            }
             FormatAsm::I32TOA => {
                 let data = OpPrimitive::pop_num::<i32>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOI32 => todo!(),
+            FormatAsm::ATOI32 => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let number: i32 = string.parse().map_err(|_| RuntimeError::Deserialization)?;
+                let _ = stack.push_with(&number.to_le_bytes())?;
+            }
             FormatAsm::I16TOA => {
                 let data = OpPrimitive::pop_num::<i16>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOI16 => todo!(),
+            FormatAsm::ATOI16 => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let number: i16 = string.parse().map_err(|_| RuntimeError::Deserialization)?;
+                let _ = stack.push_with(&number.to_le_bytes())?;
+            }
             FormatAsm::I8TOA => {
                 let data = OpPrimitive::pop_num::<i8>(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOI8 => todo!(),
+            FormatAsm::ATOI8 => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let number: i8 = string.parse().map_err(|_| RuntimeError::Deserialization)?;
+                let _ = stack.push_with(&number.to_le_bytes())?;
+            }
             FormatAsm::FTOA => {
                 let data = OpPrimitive::pop_float(stack)?;
                 let words = data.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOF => todo!(),
+            FormatAsm::ATOF => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let number: f64 = string.parse().map_err(|_| RuntimeError::Deserialization)?;
+                let _ = stack.push_with(&number.to_le_bytes())?;
+            }
             FormatAsm::BTOA => {
                 let data = OpPrimitive::pop_num::<u8>(stack)?;
                 let words = if data >= 1 { "true" } else { "false" }.to_string();
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOB => todo!(),
+            FormatAsm::ATOB => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let value: bool = string.parse().map_err(|_| RuntimeError::Deserialization)?;
+                if value {
+                    let _ = stack.push_with(&(1u8).to_le_bytes())?;
+                } else {
+                    let _ = stack.push_with(&(0u8).to_le_bytes())?;
+                }
+            }
             FormatAsm::CTOA => {
                 let data = OpPrimitive::pop_char(stack)?;
                 let words = format!("'{0}'", data.to_string());
                 let _ = stack.push_with(words.as_bytes())?;
                 let _ = stack.push_with(&((words.len() as u64).to_le_bytes()))?;
             }
-            FormatAsm::ATOC => todo!(),
+            FormatAsm::ATOC => {
+                let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let string = OpPrimitive::get_string_from(address, stack, heap)?;
+                let value: char = string.chars().next().ok_or(RuntimeError::Deserialization)?;
+                let mut buffer = [0u8; 4];
+                let _ = value.encode_utf8(&mut buffer);
+                let _ = stack.push_with(&buffer)?;
+            }
             FormatAsm::STOA => {
                 let address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let words = OpPrimitive::get_string_from(address, stack, heap)?;
@@ -807,104 +1068,196 @@ impl<E: crate::vm::external::Engine> Executable<E>
 #[cfg(test)]
 mod tests {
 
+    use crate::{
+        test_extract_variable, test_extract_variable_with, test_statements,
+        vm::asm::operation::GetNumFrom,
+    };
+
     use super::*;
 
-    // #[test]
-    // fn valid_format_i64() {
-    //     let mut statement = Statement::parse(
-    //         r##"
-    //     let x = f"Hello {10}";
-    //     "##
-    //         .into(),
-    //     )
-    //     .expect("Parsing should have succeeded")
-    //     .1;
+    #[test]
+    fn valid_format() {
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
-    //     let result = compile_statement_for_string!(statement);
-    //     assert_eq!(result, "Hello 10");
-    // }
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            test_extract_variable_with(
+                "text",
+                |address, stack, heap| {
+                    let address: MemoryAddress =
+                        OpPrimitive::get_num_from::<u64>(address, stack, heap)
+                            .expect("Deserialization should have succeeded")
+                            .try_into()
+                            .unwrap();
+                    let address = address.add(8);
 
-    // #[test]
-    // fn valid_format_u64() {
-    //     let mut statement = Statement::parse(
-    //         r##"
-    //     let x = f"Hello {10u64}";
-    //     "##
-    //         .into(),
-    //     )
-    //     .expect("Parsing should have succeeded")
-    //     .1;
+                    let text = OpPrimitive::get_string_from(address, stack, heap)
+                        .expect("Deserialization should have succeeded");
 
-    //     let result = compile_statement_for_string!(statement);
-    //     assert_eq!(result, "Hello 10");
-    // }
+                    assert_eq!(text, "Hello World from 69");
+                },
+                scope_manager,
+                stack,
+                heap,
+            );
+            true
+        }
 
-    // #[test]
-    // fn valid_format_float() {
-    //     let mut statement = Statement::parse(
-    //         r##"
-    //     let x = f"Hello {20.5}";
-    //     "##
-    //         .into(),
-    //     )
-    //     .expect("Parsing should have succeeded")
-    //     .1;
+        test_statements(
+            r##"
+        let text = format("Hello World from {60 + 9}");
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 
-    //     let result = compile_statement_for_string!(statement);
-    //     assert_eq!(result, "Hello 20.5");
-    // }
+    pub fn test_extract_variable_bool(
+        variable_name: &str,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        stack: &crate::vm::allocator::stack::Stack,
+        heap: &crate::vm::allocator::heap::Heap,
+    ) -> Option<bool> {
+        let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
+            .find_var_by_name(variable_name, None)
+            .expect("The variable should have been found");
 
-    // #[test]
-    // fn valid_format_bool() {
-    //     let mut statement = Statement::parse(
-    //         r##"
-    //     let x = f"Hello {true}";
-    //     "##
-    //         .into(),
-    //     )
-    //     .expect("Parsing should have succeeded")
-    //     .1;
+        let crate::semantic::scope::scope::VariableInfo { address, ctype, .. } = scope_manager
+            .find_var_by_id(id)
+            .expect("The variable should have been found");
 
-    //     let result = compile_statement_for_string!(statement);
-    //     assert_eq!(result, "Hello true");
+        let address: crate::vm::allocator::MemoryAddress = (*address)
+            .try_into()
+            .expect("the address should have been known");
+        let res = crate::vm::asm::operation::OpPrimitive::get_bool_from(address, stack, heap)
+            .expect("Deserialization should have succeeded");
 
-    //     let mut statement = Statement::parse(
-    //         r##"
-    //     let x = f"Hello {false}";
-    //     "##
-    //         .into(),
-    //     )
-    //     .expect("Parsing should have succeeded")
-    //     .1;
+        return Some(res);
+    }
 
-    //     let result = compile_statement_for_string!(statement);
-    //     assert_eq!(result, "Hello false");
+    pub fn test_extract_variable_char(
+        variable_name: &str,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        stack: &crate::vm::allocator::stack::Stack,
+        heap: &crate::vm::allocator::heap::Heap,
+    ) -> Option<char> {
+        let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
+            .find_var_by_name(variable_name, None)
+            .expect("The variable should have been found");
 
-    //     let mut statement = Statement::parse(
-    //         r##"
-    //     let x = f"Hello {false} {true}";
-    //     "##
-    //         .into(),
-    //     )
-    //     .expect("Parsing should have succeeded")
-    //     .1;
+        let crate::semantic::scope::scope::VariableInfo { address, ctype, .. } = scope_manager
+            .find_var_by_id(id)
+            .expect("The variable should have been found");
 
-    //     let result = compile_statement_for_string!(statement);
-    //     assert_eq!(result, "Hello false true");
-    // }
+        let address: crate::vm::allocator::MemoryAddress = (*address)
+            .try_into()
+            .expect("the address should have been known");
+        let res = crate::vm::asm::operation::OpPrimitive::get_char_from(address, stack, heap)
+            .expect("Deserialization should have succeeded");
 
-    // #[test]
-    // fn valid_format_char() {
-    //     let mut statement = Statement::parse(
-    //         r##"
-    //     let x = f"Hello {'a'}";
-    //     "##
-    //         .into(),
-    //     )
-    //     .expect("Parsing should have succeeded")
-    //     .1;
+        return Some(res);
+    }
 
-    //     let result = compile_statement_for_string!(statement);
-    //     assert_eq!(result, "Hello a");
-    // }
+    pub fn test_extract_variable_float(
+        variable_name: &str,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        stack: &crate::vm::allocator::stack::Stack,
+        heap: &crate::vm::allocator::heap::Heap,
+    ) -> Option<f64> {
+        let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
+            .find_var_by_name(variable_name, None)
+            .expect("The variable should have been found");
+
+        let crate::semantic::scope::scope::VariableInfo { address, ctype, .. } = scope_manager
+            .find_var_by_id(id)
+            .expect("The variable should have been found");
+
+        let address: crate::vm::allocator::MemoryAddress = (*address)
+            .try_into()
+            .expect("the address should have been known");
+        let res = crate::vm::asm::operation::OpPrimitive::get_float_from(address, stack, heap)
+            .expect("Deserialization should have succeeded");
+
+        return Some(res);
+    }
+
+    #[test]
+    fn valid_ato_x() {
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<u128>("res2", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<u64>("res3", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, 3);
+            let res = test_extract_variable::<u32>("res4", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, 4);
+            let res = test_extract_variable::<u16>("res5", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, 5);
+            let res = test_extract_variable::<u8>("res6", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, 6);
+            let res = test_extract_variable::<i128>("res7", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, 7);
+            let res = test_extract_variable::<i32>("res8", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, 8);
+            let res = test_extract_variable::<i16>("res9", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, 9);
+            let res = test_extract_variable::<i8>("res10", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, 10);
+            let res = test_extract_variable_bool("res11", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, true);
+            let res = test_extract_variable_bool("res12", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, false);
+            let res = test_extract_variable_char("res13", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, 'a');
+            let res = test_extract_variable_float("res14", scope_manager, stack, heap)
+                .expect("Deserialiresation should have succeeded");
+            assert_eq!(res, 69.420);
+            true
+        }
+
+        test_statements(
+            r##"
+        let res1 = atoi("1");
+        let res2 : u128 = atoi("2");
+        let res3 = atoi("3") as u64;
+        let res4 : u32 = atoi("4");
+        let res5 : u16 = atoi("5");
+        let res6 : u8 = atoi("6");
+        let res7 : i128 = atoi("7");
+        let res8 : i32 = atoi("8");
+        let res9 : i16 = atoi("9");
+        let res10 : i8 = atoi("10");
+        let res11 : bool = atob("true");
+        let res12 = atob("false");
+        let res13 = atoc("a");
+        let res14 = atof("69.420");
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 }

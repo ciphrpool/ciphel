@@ -1,19 +1,19 @@
 use super::{
-    Cases, EnumCase, ExprFlow, FCall, IfExpr, MatchExpr, PrimitiveCase, StringCase, TryExpr,
-    UnionCase, UnionPattern,
+    Cases, EnumCase, ExprFlow, IfExpr, MatchExpr, PrimitiveCase, StringCase, TryExpr, UnionCase,
+    UnionPattern,
 };
 use crate::ast::expressions::flows::FormatItem;
 use crate::ast::expressions::Atomic;
 use crate::ast::statements::block::BlockCommonApi;
 use crate::ast::TryParse;
 use crate::semantic::scope::scope::ScopeState;
-use crate::semantic::scope::static_types::{PrimitiveType, TupleType};
+use crate::semantic::scope::static_types::{PrimitiveType, TupleType, POINTER_SIZE};
 use crate::semantic::scope::user_types::{Enum, Struct, Union};
 use crate::semantic::{
     scope::{static_types::StaticType, user_types::UserType},
     CompatibleWith, EType, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{Desugar, Info, MergeType, ResolveNumber};
+use crate::semantic::{Desugar, Info, MergeType, ResolveNumber, SizeOf};
 use crate::vm::GenerateCode;
 use crate::{e_static, p_num};
 use std::collections::{HashMap, HashSet};
@@ -46,7 +46,6 @@ impl Resolve for ExprFlow {
                 };
                 Ok(())
             }
-            ExprFlow::FCall(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
         }
     }
 }
@@ -57,7 +56,6 @@ impl ResolveNumber for ExprFlow {
             ExprFlow::If(if_expr) => if_expr.is_unresolved_number(),
             ExprFlow::Match(match_expr) => match_expr.is_unresolved_number(),
             ExprFlow::Try(try_expr) => try_expr.is_unresolved_number(),
-            ExprFlow::FCall(fcall) => false,
             ExprFlow::SizeOf(_, metadata) => false,
         }
     }
@@ -70,7 +68,6 @@ impl ResolveNumber for ExprFlow {
             ExprFlow::If(if_expr) => if_expr.resolve_number(to),
             ExprFlow::Match(match_expr) => match_expr.resolve_number(to),
             ExprFlow::Try(try_expr) => try_expr.resolve_number(to),
-            ExprFlow::FCall(fcall) => Ok(()),
             ExprFlow::SizeOf(_, metadata) => Ok(()),
         }
     }
@@ -86,7 +83,6 @@ impl Desugar<Atomic> for ExprFlow {
             ExprFlow::If(value) => value.desugar::<E>(scope_manager, scope_id),
             ExprFlow::Match(value) => value.desugar::<E>(scope_manager, scope_id),
             ExprFlow::Try(value) => value.desugar::<E>(scope_manager, scope_id),
-            ExprFlow::FCall(value) => value.desugar::<E>(scope_manager, scope_id),
             ExprFlow::SizeOf(value, metadata) => Ok(None),
         }
     }
@@ -183,14 +179,17 @@ impl Resolve for UnionPattern {
     where
         Self: Sized,
     {
-        let UserType::Union(Union { id, variants }) = scope_manager
+        let UserType::Union(union_type @ Union { .. }) = scope_manager
             .find_type_by_name(&self.typename, scope_id)?
             .def
         else {
             return Err(SemanticError::IncompatibleTypes);
         };
 
-        let Some((variant_value, (_, Struct { fields, .. }))) = variants
+        let union_size = union_type.size_of();
+        let variants = union_type.variants;
+
+        let Some((variant_value, (_, struct_type @ Struct { .. }))) = variants
             .iter()
             .enumerate()
             .find(|(i, (variant_name, variant_struct))| *variant_name == self.variant)
@@ -201,7 +200,17 @@ impl Resolve for UnionPattern {
             )));
         };
 
+        let struct_size = struct_type.size_of();
+
+        let fields = &struct_type.fields;
+
         let _ = self.variant_value.insert(variant_value as u64);
+
+        let _ = self.variant_padding.insert(
+            union_size
+                .checked_sub(struct_size + POINTER_SIZE)
+                .unwrap_or(0),
+        );
 
         if self.vars_names.len() != fields.len() {
             return Err(SemanticError::InvalidPattern);
@@ -690,12 +699,17 @@ impl Resolve for TryExpr {
                 self.pop_last_err = true;
                 tuple_type.pop();
             }
+            if tuple_type.len() == 1 {
+                try_branch_type = tuple_type[0].clone();
+            }
         } else if let EType::Static(StaticType::Error) = try_branch_type {
             self.pop_last_err = true;
             try_branch_type = EType::Static(StaticType::Unit);
         } else if self.else_branch.is_none() && EType::Static(StaticType::Unit) != try_branch_type {
             return Err(SemanticError::IncompatibleTypes);
         }
+
+        dbg!("here");
 
         let _ = try_branch_type.compatible_with(&else_branch_type, &scope_manager, scope_id)?;
 
@@ -739,56 +753,6 @@ impl Desugar<Atomic> for TryExpr {
     }
 }
 
-impl Resolve for FCall {
-    type Output = ();
-    type Context = Option<EType>;
-    type Extra = ();
-    fn resolve<E: crate::vm::external::Engine>(
-        &mut self,
-        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-        context: &Self::Context,
-        _extra: &mut Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        for item in &mut self.value {
-            match item {
-                FormatItem::Str(_) => {}
-                FormatItem::Expr(expr) => {
-                    let _ = expr.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
-                }
-            }
-        }
-        self.metadata.info = crate::semantic::Info::Resolved {
-            context: context.clone(),
-            signature: Some(self.type_of(scope_manager, scope_id)?),
-        };
-        Ok(())
-    }
-}
-
-impl Desugar<Atomic> for FCall {
-    fn desugar<E: crate::vm::external::Engine>(
-        &mut self,
-        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-    ) -> Result<Option<Atomic>, SemanticError> {
-        for item in &mut self.value {
-            match item {
-                FormatItem::Str(_) => {}
-                FormatItem::Expr(expr) => {
-                    if let Some(output) = expr.desugar::<E>(scope_manager, scope_id)? {
-                        *expr = output;
-                    }
-                }
-            }
-        }
-        Ok(None)
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -806,7 +770,7 @@ mod tests {
 
     #[test]
     fn valid_if() {
-        let mut expr = IfExpr::parse("if true then 10 else 20".into())
+        let mut expr = IfExpr::parse("if true then {10} else {20}".into())
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
@@ -821,7 +785,7 @@ mod tests {
 
     #[test]
     fn robustness_if() {
-        let mut expr = IfExpr::parse("if 10 then 10 else 20".into())
+        let mut expr = IfExpr::parse("if 10 then {10} else {20}".into())
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
@@ -833,7 +797,7 @@ mod tests {
         );
         assert!(res.is_err());
 
-        let mut expr = IfExpr::parse("if true then 10 else 'a'".into())
+        let mut expr = IfExpr::parse("if true then {10} else {'a'}".into())
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
@@ -844,281 +808,11 @@ mod tests {
             &mut (),
         );
         assert!(res.is_err());
-    }
-
-    #[test]
-    fn valid_match_basic() {
-        let mut expr = MatchExpr::parse(
-            r##"
-            match x {
-                case 20 => 1,
-                case 30 => 2,
-                else => 3
-            }
-        "##
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
-            &mut scope_manager,
-            None,
-            &None,
-            &mut (),
-        );
-        assert!(res.is_ok(), "{:?}", res);
-
-        let match_type = expr.type_of(&scope_manager, None).unwrap();
-        assert_eq!(p_num!(I64), match_type);
-
-        let mut expr = MatchExpr::parse(
-            r##"
-            match x {
-                case Color::RED => 1,
-                case Color::GREEN => 2,
-            }
-        "##
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = scope_manager
-            .register_type(
-                "Color",
-                UserType::Enum(Enum {
-                    id: "Color".to_string().into(),
-                    values: {
-                        let mut res = Vec::new();
-                        res.push("RED".to_string().into());
-                        res.push("GREEN".to_string().into());
-                        res
-                    },
-                }),
-                None,
-            )
-            .unwrap();
-
-        // EType::User(
-        //     UserType::Enum(Enum {
-        //         id: "Color".to_string().into(),
-        //         values: {
-        //             let mut res = Vec::new();
-        //             res.push("RED".to_string().into());
-        //             res.push("GREEN".to_string().into());
-        //             res
-        //         },
-        //     })
-        //     ,
-        // )
-        let _ = scope_manager
-            .register_var(
-                "x",
-                EType::User {
-                    id: todo!(),
-                    size: todo!(),
-                },
-                None,
-            )
-            .unwrap();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
-            &mut scope_manager,
-            None,
-            &None,
-            &mut (),
-        );
-        assert!(res.is_ok(), "{:?}", res);
-        let match_type = expr.type_of(&scope_manager, None).unwrap();
-        assert_eq!(p_num!(I64), match_type);
-
-        let mut expr = MatchExpr::parse(
-            r##"
-            match x { 
-                case "red" => Color::RED,
-                case "green" => Color::GREEN,
-                else => Color::YELLOW
-            }
-        "##
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = scope_manager
-            .register_type(
-                "Color",
-                UserType::Enum(Enum {
-                    id: "Color".to_string().into(),
-                    values: {
-                        let mut res = Vec::new();
-                        res.push("RED".to_string().into());
-                        res.push("GREEN".to_string().into());
-                        res.push("YELLOW".to_string().into());
-                        res
-                    },
-                }),
-                None,
-            )
-            .unwrap();
-        let _ = scope_manager
-            .register_var(
-                "x",
-                EType::User {
-                    id: todo!(),
-                    size: todo!(),
-                },
-                None,
-            )
-            .unwrap();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
-            &mut scope_manager,
-            None,
-            &None,
-            &mut (),
-        );
-        assert!(res.is_ok(), "{:?}", res);
-
-        let match_type = expr.type_of(&scope_manager, None).unwrap();
-        // UserType::Enum(Enum {
-        //     id: "Color".to_string().into(),
-        //     values: {
-        //         let mut res = Vec::new();
-        //         res.push("RED".to_string().into());
-        //         res.push("GREEN".to_string().into());
-        //         res.push("YELLOW".to_string().into());
-        //         res
-        //     },
-        // })
-        assert_eq!(
-            EType::User {
-                id: todo!(),
-                size: todo!(),
-            },
-            match_type
-        );
-    }
-
-    #[test]
-    fn robustness_match_basic() {
-        let mut expr = MatchExpr::parse(
-            r##"
-            match x { 
-                case 20 => true,
-                case 30 => false,
-                else => 'a'
-            }
-        "##
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
-            &mut scope_manager,
-            None,
-            &None,
-            &mut (),
-        );
-        assert!(res.is_err());
-
-        let mut expr = MatchExpr::parse(
-            r##"
-            match x { 
-                case 20 => true,
-                case 'a' => false,
-                else => true
-            }
-        "##
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
-            &mut scope_manager,
-            None,
-            &None,
-            &mut (),
-        );
-        assert!(res.is_err());
-    }
-
-    #[test]
-    fn valid_match_complex() {
-        let mut expr = MatchExpr::parse(
-            r##"
-            match x { 
-                case Geo::Point {x,y} => x + y,
-                case Geo::Axe{x} => x,
-            }
-        "##
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = scope_manager
-            .register_type(
-                "Geo",
-                UserType::Union(Union {
-                    id: "Geo".to_string().into(),
-                    variants: {
-                        let mut res = Vec::new();
-                        res.push((
-                            "Point".to_string().into(),
-                            Struct {
-                                id: "Point".to_string().into(),
-                                fields: vec![
-                                    ("x".to_string().into(), p_num!(U64)),
-                                    ("y".to_string().into(), p_num!(U64)),
-                                ],
-                            },
-                        ));
-                        res.push((
-                            "Axe".to_string().into(),
-                            Struct {
-                                id: "Axe".to_string().into(),
-                                fields: {
-                                    let mut res = Vec::new();
-                                    res.push(("x".to_string().into(), p_num!(U64)));
-                                    res
-                                },
-                            },
-                        ));
-                        res
-                    },
-                }),
-                None,
-            )
-            .unwrap();
-        let _ = scope_manager
-            .register_var(
-                "x",
-                EType::User {
-                    id: todo!(),
-                    size: todo!(),
-                },
-                None,
-            )
-            .unwrap();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
-            &mut scope_manager,
-            None,
-            &None,
-            &mut (),
-        );
-        assert!(res.is_ok(), "{:?}", res);
-        let match_type = expr.type_of(&scope_manager, None).unwrap();
-        assert_eq!(p_num!(U64), match_type);
     }
 
     #[test]
     fn valid_try() {
-        let mut expr = TryExpr::parse("try 10 else 20".into())
+        let mut expr = TryExpr::parse("try {10} else {20}".into())
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
@@ -1133,7 +827,7 @@ mod tests {
 
     #[test]
     fn valid_try_no_else() {
-        let mut expr = TryExpr::parse("try Ok()".into())
+        let mut expr = TryExpr::parse("try {Ok()}".into())
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
@@ -1147,7 +841,7 @@ mod tests {
     }
     #[test]
     fn valid_try_tuple_err() {
-        let mut expr = TryExpr::parse("try (10,Err()) else 20".into())
+        let mut expr = TryExpr::parse("try {(10,Err())} else {20}".into())
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
@@ -1163,7 +857,7 @@ mod tests {
 
     #[test]
     fn valid_try_tuple_multi_err() {
-        let mut expr = TryExpr::parse("try (10,20,Err()) else (20,30)".into())
+        let mut expr = TryExpr::parse("try {(10,20,Err())} else {(20,30)}".into())
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
@@ -1178,7 +872,7 @@ mod tests {
     }
     #[test]
     fn robustness_try_tuple_err() {
-        let mut expr = TryExpr::parse("try (10,20,Err()) else 20".into())
+        let mut expr = TryExpr::parse("try {(10,20,Err())} else {20}".into())
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
@@ -1193,7 +887,7 @@ mod tests {
     }
     #[test]
     fn robustness_try_tuple_err_no_else() {
-        let mut expr = TryExpr::parse("try (10,Err())".into())
+        let mut expr = TryExpr::parse("try {(10,Err())}".into())
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();

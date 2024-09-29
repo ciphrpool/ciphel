@@ -1,5 +1,5 @@
 use super::{
-    AddrType, ClosureType, FunctionType, LambdaType, MapType, PrimitiveType, RangeType, SliceType,
+    AddrType, ClosureType, FunctionType, LambdaType, MapType, PrimitiveType, SliceType,
     StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
 use crate::semantic::scope::scope::ScopeManager;
@@ -38,7 +38,6 @@ impl Resolve for Type {
             Type::Address(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Type::Map(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Type::String(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
-            Type::Range(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Type::Error => Ok(()),
         }
     }
@@ -262,24 +261,6 @@ impl Resolve for AddrType {
         Self: Sized,
     {
         self.0.resolve::<E>(scope_manager, scope_id, context, extra)
-    }
-}
-impl Resolve for RangeType {
-    type Output = ();
-    type Context = ();
-
-    type Extra = ();
-    fn resolve<E: crate::vm::external::Engine>(
-        &mut self,
-        _scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-        _context: &Self::Context,
-        _extra: &mut Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        Ok(())
     }
 }
 

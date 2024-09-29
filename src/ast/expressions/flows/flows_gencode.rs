@@ -30,9 +30,7 @@ use crate::{
     },
 };
 
-use super::{
-    EnumCase, ExprFlow, FCall, IfExpr, MatchExpr, PrimitiveCase, StringCase, TryExpr, UnionCase,
-};
+use super::{EnumCase, ExprFlow, IfExpr, MatchExpr, PrimitiveCase, StringCase, TryExpr, UnionCase};
 
 impl GenerateCode for ExprFlow {
     fn gencode<E: crate::vm::external::Engine>(
@@ -61,9 +59,6 @@ impl GenerateCode for ExprFlow {
                     data: (value.size_of() as u64).to_le_bytes().into(),
                 }));
                 Ok(())
-            }
-            ExprFlow::FCall(value) => {
-                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
         }
     }
@@ -270,7 +265,10 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         }));
 
         instructions.push(Asm::If(BranchIf { else_label }));
-        instructions.push(Asm::Pop(POINTER_SIZE));
+        // clean up padding + variant_value
+        instructions.push(Asm::Pop(
+            POINTER_SIZE + self.pattern.variant_padding.unwrap_or(0),
+        ));
 
         instructions.push_label_by_id(block_label, "match_block".to_string());
 
@@ -471,41 +469,6 @@ impl GenerateCode for TryExpr {
     }
 }
 
-impl GenerateCode for FCall {
-    fn gencode<E: crate::vm::external::Engine>(
-        &self,
-        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-        instructions: &mut crate::vm::program::Program<E>,
-        context: &crate::vm::CodeGenerationContext,
-    ) -> Result<(), crate::vm::CodeGenerationError> {
-        todo!();
-
-        // for item in &self.value {
-        //     match item {
-        //         super::FormatItem::Str(string) => {
-        //             let str_bytes: Box<[u8]> = string.as_bytes().into();
-        //             let size = (&str_bytes).len() as u64;
-        //             instructions.push(Asm::Data(data::Data::Serialized { data: str_bytes }));
-        //             instructions.push(Asm::Data(data::Data::Serialized {
-        //                 data: size.to_le_bytes().into(),
-        //             }));
-        //             instructions.push(Asm::Core(CoreAsm::Std(StdAsm::Strings(
-        //                 StringsAsm::ToStr(ToStrAsm::ToStrStrSlice),
-        //             ))));
-        //         }
-        //         super::FormatItem::Expr(expr) => {
-        //             let _ = expr.gencode::<E>(scope_manager, scope_id, instructions, context)?;
-        //         }
-        //     }
-        // }
-        // instructions.push(Asm::Core(CoreAsm::Std(StdAsm::Strings(
-        //     StringsAsm::Join(JoinAsm::NoSepFromSlice(Some(self.value.len()))),
-        // ))));
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -658,7 +621,7 @@ mod tests {
 
     #[test]
     fn valid_match() {
-        let mut engine = crate::vm::external::test::DbgGameEngine {};
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -715,12 +678,12 @@ mod tests {
             res3
         };
 
-        let res4 = {  
+        let res4 = { 
             let var4 = Test::Point2 { x : 1, y : 5 };
             let res4 = match var4 {
-                case Test::Point { x, y } => { y },
+                case Test::Point { x, y } => { y as u32 },
                 case Test::Point2 { x, y } => { x },
-                else => { 10 }
+                else => { 10u32 }
             };
             res4
         };

@@ -267,6 +267,7 @@ pub fn test_extract_variable<N: num_traits::PrimInt>(
     let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
         .find_var_by_name(variable_name, None)
         .expect("The variable should have been found");
+
     let crate::semantic::scope::scope::VariableInfo { address, ctype, .. } = scope_manager
         .find_var_by_id(id)
         .expect("The variable should have been found");
@@ -274,7 +275,6 @@ pub fn test_extract_variable<N: num_traits::PrimInt>(
     let address: vm::allocator::MemoryAddress = (*address)
         .try_into()
         .expect("the address should have been known");
-
     let res =
         <vm::asm::operation::OpPrimitive as vm::asm::operation::GetNumFrom>::get_num_from::<N>(
             address, stack, heap,
@@ -297,7 +297,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 
     let mut heap = Heap::new();
     let mut stdio = StdIO::default();
-    let mut runtime: Runtime<E, vm::scheduler_v2::ToCompletion> = Runtime::default();
+    let mut runtime: Runtime<E, vm::scheduler::ToCompletion> = Runtime::default();
 
     let tid = runtime
         .spawn(engine)
@@ -306,6 +306,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
         let vm::runtime::ThreadContext {
             scope_manager,
             program,
+            ..
         } = runtime
             .context_of(&tid)
             .expect("Thread should have been found");

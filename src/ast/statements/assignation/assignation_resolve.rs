@@ -133,7 +133,7 @@ mod tests {
             r##"
             x = { 
                 let y = 10;
-                return y;
+                y
             };
         "##
             .into(),

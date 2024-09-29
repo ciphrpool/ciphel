@@ -363,8 +363,12 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            expr.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = IfStat::parse(
@@ -378,8 +382,12 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            expr.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -398,8 +406,12 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            expr.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -418,8 +430,12 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            expr.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -430,7 +446,7 @@ mod tests {
             match x {
                 case 20 => {
                     let x = 1;
-                }
+                },
                 case 30 => {
                     let x = 1;
                 }
@@ -442,8 +458,12 @@ mod tests {
         .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res =
-            expr.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -460,8 +480,12 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res =
-            expr.resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
+        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 }

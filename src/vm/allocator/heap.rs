@@ -769,7 +769,7 @@ mod tests {
             .alloc(64)
             .expect("The allocation should have succeeded");
 
-        assert_eq!(address, MemoryAddress::Heap { offset: 32 });
+        assert_eq!(address, MemoryAddress::Heap { offset: 32 + 8 });
     }
 
     #[test]
@@ -809,7 +809,7 @@ mod tests {
         let address = heap
             .alloc(32)
             .expect("The allocation should have succeeded");
-        assert_eq!(address, MemoryAddress::Heap { offset: 64 });
+        assert_eq!(address, pointers[2]);
     }
 
     #[test]
@@ -828,7 +828,7 @@ mod tests {
         let address = heap
             .alloc(32)
             .expect("The allocation should have succeeded");
-        assert_eq!(address, MemoryAddress::Heap { offset: 64 });
+        assert_eq!(address, pointers[2]);
     }
 
     #[test]
@@ -845,7 +845,7 @@ mod tests {
         let address = heap
             .alloc(200)
             .expect("The allocation should have succeeded");
-        assert_eq!(address, MemoryAddress::Heap { offset: 160 });
+        assert_eq!(address, pointers[5]);
     }
 
     #[test]

@@ -17,7 +17,7 @@ use crate::vm::core::lexem;
 use crate::vm::core::CoreAsm;
 use crate::vm::program::Program;
 use crate::vm::runtime::RuntimeError;
-use crate::vm::scheduler_v2::Executable;
+use crate::vm::scheduler::Executable;
 use crate::vm::stdio::StdIO;
 use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
@@ -182,15 +182,16 @@ impl GenerateCode for IOFn {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self {
             IOAsm::PrintStr => {

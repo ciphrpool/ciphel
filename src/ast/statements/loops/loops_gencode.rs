@@ -234,7 +234,6 @@ mod tests {
             res1 = res1 + i;
         }
 
-
         let res2 = 0;
         for ( let i = 0; i < 10; i = i + 1) {
             res2 = res2 + i;
@@ -252,8 +251,6 @@ mod tests {
             }
         }
 
-
-                
         let res4 = 0;
         for ( let i = 0; i < 10; i = i + 1) {
             for ( let j = 0; j < 10; j = j + 1) {

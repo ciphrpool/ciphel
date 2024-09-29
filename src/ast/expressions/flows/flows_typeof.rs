@@ -6,7 +6,7 @@ use crate::{
     semantic::{scope::static_types::StaticType, EType, MergeType, Resolve, SemanticError, TypeOf},
 };
 
-use super::{ExprFlow, FCall, IfExpr, MatchExpr, TryExpr};
+use super::{ExprFlow, IfExpr, MatchExpr, TryExpr};
 
 impl TypeOf for ExprFlow {
     fn type_of(
@@ -21,7 +21,6 @@ impl TypeOf for ExprFlow {
             ExprFlow::If(value) => value.type_of(&scope_manager, scope_id),
             ExprFlow::Match(value) => value.type_of(&scope_manager, scope_id),
             ExprFlow::Try(value) => value.type_of(&scope_manager, scope_id),
-            ExprFlow::FCall(value) => value.type_of(&scope_manager, scope_id),
             ExprFlow::SizeOf(..) => Ok(p_num!(U64)),
         }
     }
@@ -87,18 +86,5 @@ impl TypeOf for TryExpr {
         self.metadata
             .signature()
             .ok_or(SemanticError::NotResolvedYet)
-    }
-}
-
-impl TypeOf for FCall {
-    fn type_of(
-        &self,
-        scope_manager: &crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-    ) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        Ok(e_static!(StaticType::StrSlice(StrSliceType())))
     }
 }

@@ -8,9 +8,10 @@ use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
 use crate::vm::core::CoreAsm;
 use crate::vm::core::{ERROR_SLICE, ERROR_VALUE, OK_SLICE, OK_VALUE};
+use crate::vm::external::ExternThreadIdentifier;
 use crate::vm::program::Program;
-use crate::vm::runtime::RuntimeError;
-use crate::vm::scheduler_v2::Executable;
+use crate::vm::runtime::{RuntimeError, SignalAction, SignalResult};
+use crate::vm::scheduler::Executable;
 use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
     ast::expressions::Expression,
@@ -64,13 +65,13 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for ThreadAsm {
 impl crate::vm::AsmWeight for ThreadAsm {
     fn weight(&self) -> crate::vm::Weight {
         match self {
-            ThreadAsm::Spawn => crate::vm::Weight::MAX,
+            ThreadAsm::Spawn => crate::vm::Weight::END,
             ThreadAsm::Close => crate::vm::Weight::HIGH,
-            ThreadAsm::Exit => crate::vm::Weight::ZERO,
-            ThreadAsm::Wait => crate::vm::Weight::HIGH,
+            ThreadAsm::Exit => crate::vm::Weight::END,
+            ThreadAsm::Wait => crate::vm::Weight::END,
             ThreadAsm::Wake => crate::vm::Weight::HIGH,
-            ThreadAsm::Sleep => crate::vm::Weight::HIGH,
-            ThreadAsm::Join => crate::vm::Weight::HIGH,
+            ThreadAsm::Sleep => crate::vm::Weight::END,
+            ThreadAsm::Join => crate::vm::Weight::END,
         }
     }
 }
@@ -140,25 +141,25 @@ impl ResolveCore for ThreadFn {
                 Ok(e_static!(StaticType::Unit))
             }
             ThreadFn::Close => {
-                expect_one_u64::<E>(parameters, scope_manager, scope_id);
+                let _ = expect_one_u64::<E>(parameters, scope_manager, scope_id);
                 Ok(e_static!(StaticType::Error))
             }
             ThreadFn::Wait => {
                 if parameters.len() != 0 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                Ok(e_static!(StaticType::Error))
+                Ok(e_static!(StaticType::Unit))
             }
             ThreadFn::Wake => {
-                expect_one_u64::<E>(parameters, scope_manager, scope_id);
+                let _ = expect_one_u64::<E>(parameters, scope_manager, scope_id);
                 Ok(e_static!(StaticType::Error))
             }
             ThreadFn::Sleep => {
-                expect_one_u64::<E>(parameters, scope_manager, scope_id);
+                let _ = expect_one_u64::<E>(parameters, scope_manager, scope_id);
                 Ok(e_static!(StaticType::Unit))
             }
             ThreadFn::Join => {
-                expect_one_u64::<E>(parameters, scope_manager, scope_id);
+                let _ = expect_one_u64::<E>(parameters, scope_manager, scope_id);
                 Ok(e_static!(StaticType::Error))
             }
         }
@@ -340,38 +341,203 @@ impl GenerateCode for ThreadFn {
 // }
 
 impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
-        todo!()
-        // match self {
-        //     ThreadAsm::Spawn => Err(RuntimeError::Signal(Signal::SPAWN)),
-        //     ThreadAsm::Exit => Err(RuntimeError::Signal(Signal::EXIT)),
-        //     ThreadAsm::Close => {
-        //         let tid = OpPrimitive::pop_num::<u64>(stack)?;
-        //         Err(RuntimeError::Signal(Signal::CLOSE(tid as usize)))
-        //     }
-        //     ThreadAsm::Wait => Err(RuntimeError::Signal(Signal::WAIT)),
-        //     ThreadAsm::Wake => {
-        //         let tid = OpPrimitive::pop_num::<u64>(stack)?;
-        //         Err(RuntimeError::Signal(Signal::WAKE(tid as usize)))
-        //     }
-        //     ThreadAsm::Sleep => {
-        //         let nb_maf = OpPrimitive::pop_num::<u64>(stack)?;
-        //         Err(RuntimeError::Signal(Signal::SLEEP(nb_maf as usize)))
-        //     }
-        //     ThreadAsm::Join => {
-        //         let tid = OpPrimitive::pop_num::<u64>(stack)?;
-        //         Err(RuntimeError::Signal(Signal::JOIN(tid as usize)))
-        //     }
-        // }
+        match self {
+            ThreadAsm::Spawn => {
+                // request spawn of an other another thread
+                fn spawn_callback<E: crate::vm::external::Engine>(
+                    response: crate::vm::runtime::SignalResult<E>,
+                    stack: &mut crate::vm::allocator::stack::Stack,
+                ) -> Result<(), RuntimeError> {
+                    match response {
+                        SignalResult::Ok(SignalAction::Spawn(tid)) => {
+                            stack.push_with(&tid.to_u64().to_le_bytes())?;
+                            stack.push_with(&OK_SLICE)?;
+                        }
+                        SignalResult::Error => {
+                            stack.push_with(&0u64.to_le_bytes())?;
+                            stack.push_with(&ERROR_SLICE)?;
+                        }
+                        SignalResult::Ok(_) => {} // Unreachable
+                    }
+                    Ok(())
+                }
+                let _ = signal_handler.notify(
+                    crate::vm::runtime::Signal::Spawn,
+                    stack,
+                    engine,
+                    context.tid.clone(),
+                    spawn_callback::<E>,
+                )?;
+                scheduler.next();
+                Ok(())
+            }
+            ThreadAsm::Close => {
+                // request close of an other another thread
+                fn close_callback<E: crate::vm::external::Engine>(
+                    response: crate::vm::runtime::SignalResult<E>,
+                    stack: &mut crate::vm::allocator::stack::Stack,
+                ) -> Result<(), RuntimeError> {
+                    match response {
+                        SignalResult::Ok(SignalAction::Close(_)) => {
+                            stack.push_with(&OK_SLICE)?;
+                        }
+                        SignalResult::Error => {
+                            stack.push_with(&ERROR_SLICE)?;
+                        }
+                        SignalResult::Ok(_) => {} // Unreachable
+                    }
+                    Ok(())
+                }
+                let tid = E::TID::from_u64(OpPrimitive::pop_num::<u64>(stack)?);
+                let _ = signal_handler.notify(
+                    crate::vm::runtime::Signal::Close(tid),
+                    stack,
+                    engine,
+                    context.tid.clone(),
+                    close_callback::<E>,
+                )?;
+                scheduler.next();
+                Ok(())
+            }
+            ThreadAsm::Exit => {
+                // request exit of an other another thread
+                fn exit_callback<E: crate::vm::external::Engine>(
+                    response: crate::vm::runtime::SignalResult<E>,
+                    stack: &mut crate::vm::allocator::stack::Stack,
+                ) -> Result<(), RuntimeError> {
+                    match response {
+                        SignalResult::Ok(SignalAction::Exit(_)) => {}
+                        SignalResult::Error => return Err(RuntimeError::SignalError),
+                        SignalResult::Ok(_) => {} // Unreachable
+                    }
+                    Ok(())
+                }
+                let _ = signal_handler.notify(
+                    crate::vm::runtime::Signal::Exit,
+                    stack,
+                    engine,
+                    context.tid.clone(),
+                    exit_callback::<E>,
+                )?;
+                scheduler.next();
+                Ok(())
+            }
+            ThreadAsm::Wait => {
+                // request wait of an other another thread
+                fn wait_callback<E: crate::vm::external::Engine>(
+                    response: crate::vm::runtime::SignalResult<E>,
+                    stack: &mut crate::vm::allocator::stack::Stack,
+                ) -> Result<(), RuntimeError> {
+                    match response {
+                        SignalResult::Ok(SignalAction::Wait { caller }) => {}
+                        SignalResult::Error => return Err(RuntimeError::SignalError),
+                        SignalResult::Ok(_) => {} // Unreachable
+                    }
+                    Ok(())
+                }
+                let _ = signal_handler.notify(
+                    crate::vm::runtime::Signal::Wait,
+                    stack,
+                    engine,
+                    context.tid.clone(),
+                    wait_callback::<E>,
+                )?;
+                scheduler.next();
+                Ok(())
+            }
+            ThreadAsm::Wake => {
+                // request wake of an other another thread
+                fn wake_callback<E: crate::vm::external::Engine>(
+                    response: crate::vm::runtime::SignalResult<E>,
+                    stack: &mut crate::vm::allocator::stack::Stack,
+                ) -> Result<(), RuntimeError> {
+                    match response {
+                        SignalResult::Ok(SignalAction::Wake { .. }) => {
+                            stack.push_with(&OK_SLICE)?;
+                        }
+                        SignalResult::Error => {
+                            stack.push_with(&ERROR_SLICE)?;
+                        }
+                        SignalResult::Ok(_) => {} // Unreachable
+                    }
+                    Ok(())
+                }
+                let target = E::TID::from_u64(OpPrimitive::pop_num::<u64>(stack)?);
+                let _ = signal_handler.notify(
+                    crate::vm::runtime::Signal::Wake(target),
+                    stack,
+                    engine,
+                    context.tid.clone(),
+                    wake_callback::<E>,
+                )?;
+                scheduler.next();
+                Ok(())
+            }
+            ThreadAsm::Sleep => {
+                // request sleep of an other another thread
+                fn sleep_callback<E: crate::vm::external::Engine>(
+                    response: crate::vm::runtime::SignalResult<E>,
+                    stack: &mut crate::vm::allocator::stack::Stack,
+                ) -> Result<(), RuntimeError> {
+                    match response {
+                        SignalResult::Ok(SignalAction::Sleep { .. }) => {}
+                        SignalResult::Error => return Err(RuntimeError::SignalError),
+                        SignalResult::Ok(_) => {} // Unreachable
+                    }
+                    Ok(())
+                }
+                let time = OpPrimitive::pop_num::<u64>(stack)? as usize;
+                let _ = signal_handler.notify(
+                    crate::vm::runtime::Signal::Sleep { time },
+                    stack,
+                    engine,
+                    context.tid.clone(),
+                    sleep_callback::<E>,
+                )?;
+                scheduler.next();
+                Ok(())
+            }
+            ThreadAsm::Join => {
+                // request join of an other another thread
+                fn join_callback<E: crate::vm::external::Engine>(
+                    response: crate::vm::runtime::SignalResult<E>,
+                    stack: &mut crate::vm::allocator::stack::Stack,
+                ) -> Result<(), RuntimeError> {
+                    match response {
+                        SignalResult::Ok(SignalAction::Join { .. }) => {
+                            stack.push_with(&OK_SLICE)?;
+                        }
+                        SignalResult::Error => {
+                            stack.push_with(&ERROR_SLICE)?;
+                        }
+                        SignalResult::Ok(_) => {} // Unreachable
+                    }
+                    Ok(())
+                }
+
+                let target = E::TID::from_u64(OpPrimitive::pop_num::<u64>(stack)?);
+                let _ = signal_handler.notify(
+                    crate::vm::runtime::Signal::Join(target),
+                    stack,
+                    engine,
+                    context.tid.clone(),
+                    join_callback::<E>,
+                )?;
+                scheduler.next();
+                Ok(())
+            }
+        }
     }
 }
 
@@ -381,6 +547,526 @@ mod tests {
     //     vm::vm::{NoopGameEngine, StdoutTestGameEngine, ThreadTestGameEngine, MAX_THREAD_COUNT},
     //     Ciphel,
     // };
+
+    use crate::{
+        ast::statements::parse_statements,
+        semantic::Resolve,
+        test_extract_variable,
+        vm::{
+            allocator::heap::Heap,
+            external::test::DefaultThreadID,
+            runtime::{self, Runtime, Thread, ThreadContext, ThreadState},
+            scheduler::QueuePolicy,
+            stdio::StdIO,
+            GenerateCode,
+        },
+    };
+
+    pub fn compile_for<E: crate::vm::external::Engine>(
+        input: &str,
+        tid: &E::TID,
+        runtime: &mut Runtime<E, QueuePolicy>,
+    ) {
+        let mut statements =
+            parse_statements(input.into(), 0).expect("Parsing should have succeeded");
+
+        let ThreadContext {
+            scope_manager,
+            program,
+            ..
+        } = runtime
+            .context_of(&tid)
+            .expect("Thread should have been found");
+
+        for statement in statements.iter_mut() {
+            statement
+                .resolve::<E>(scope_manager, None, &None, &mut ())
+                .expect(&format!("Resulotion should have succeeded {:?}", statement));
+        }
+
+        for statement in statements {
+            statement
+                .gencode::<E>(
+                    scope_manager,
+                    None,
+                    program,
+                    &crate::vm::CodeGenerationContext::default(),
+                )
+                .expect(&format!(
+                    "Code generation should have succeeded {:?}",
+                    statement
+                ));
+        }
+    }
+
+    #[test]
+    fn valid_spawn() {
+        let mut engine = crate::vm::external::test::ThreadTestGameEngine {
+            id_auto_increment: 0,
+        };
+
+        let mut heap = Heap::new();
+        let mut stdio = StdIO::default();
+        let mut runtime = Runtime::default();
+
+        let tid_1 = runtime
+            .spawn(&mut engine)
+            .expect("Spawning should have succeeded");
+
+        compile_for(
+            r##"
+        let (tid,err) = spawn();
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        assert_eq!(runtime.snapshot().states.len(), 2);
+
+        let tid_2 = {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_1)
+                .expect("Thread should have been found");
+
+            let id = test_extract_variable::<u64>("tid", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+            DefaultThreadID(id)
+        };
+
+        compile_for(
+            r##"
+        let x = 1;
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+        compile_for(
+            r##"
+        let x = 2;
+        "##,
+            &tid_2,
+            &mut runtime,
+        );
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+        {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_1)
+                .expect("Thread should have been found");
+
+            let x_t1 = test_extract_variable::<i64>("x", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_2)
+                .expect("Thread should have been found");
+            let x_t2 = test_extract_variable::<i64>("x", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+
+            assert_eq!(x_t1, 1);
+            assert_eq!(x_t2, 2);
+        }
+    }
+
+    #[test]
+    fn valid_exit() {
+        let mut engine = crate::vm::external::test::ThreadTestGameEngine {
+            id_auto_increment: 0,
+        };
+
+        let mut heap = Heap::new();
+        let mut stdio = StdIO::default();
+        let mut runtime = Runtime::default();
+
+        let tid_1 = runtime
+            .spawn(&mut engine)
+            .expect("Spawning should have succeeded");
+
+        compile_for(
+            r##"
+        exit();
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+        assert_eq!(runtime.snapshot().states.len(), 0);
+    }
+
+    #[test]
+    fn valid_close() {
+        let mut engine = crate::vm::external::test::ThreadTestGameEngine {
+            id_auto_increment: 0,
+        };
+
+        let mut heap = Heap::new();
+        let mut stdio = StdIO::default();
+        let mut runtime = Runtime::default();
+
+        let tid_1 = runtime
+            .spawn(&mut engine)
+            .expect("Spawning should have succeeded");
+
+        compile_for(
+            r##"
+        let (tid,err) = spawn();
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        assert_eq!(runtime.snapshot().states.len(), 2);
+
+        let tid_2 = {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_1)
+                .expect("Thread should have been found");
+
+            let id = test_extract_variable::<u64>("tid", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+            DefaultThreadID(id)
+        };
+
+        compile_for(
+            &format!(
+                r##"
+        let err = close({});
+        "##,
+                tid_2.0
+            ),
+            &tid_1,
+            &mut runtime,
+        );
+        compile_for(
+            r##"
+        let x = 2;
+        "##,
+            &tid_2,
+            &mut runtime,
+        );
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+        assert_eq!(runtime.snapshot().states.len(), 1);
+    }
+
+    #[test]
+    fn valid_sleep() {
+        let mut engine = crate::vm::external::test::ThreadTestGameEngine {
+            id_auto_increment: 0,
+        };
+
+        let mut heap = Heap::new();
+        let mut stdio = StdIO::default();
+        let mut runtime = Runtime::default();
+
+        let tid_1 = runtime
+            .spawn(&mut engine)
+            .expect("Spawning should have succeeded");
+
+        compile_for(
+            r##"
+        sleep(4);
+        let x = 2;
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+
+        {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_1)
+                .expect("Thread should have been found");
+
+            let x = test_extract_variable::<u64>("x", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+            assert_ne!(x, 2);
+        }
+
+        for i in (1..=4).rev() {
+            let _ = runtime
+                .run(&mut heap, &mut stdio, &mut engine)
+                .expect("Execution should have succeeded");
+            if ThreadState::SLEEPING(i)
+                != *runtime
+                    .snapshot()
+                    .states
+                    .get(&tid_1)
+                    .expect("Thread should exist")
+            {
+                panic!("Thread should have been sleeping {}", i);
+            }
+        }
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        if ThreadState::IDLE
+            != *runtime
+                .snapshot()
+                .states
+                .get(&tid_1)
+                .expect("Thread should exist")
+        {
+            panic!("Thread should have been idle");
+        }
+        {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_1)
+                .expect("Thread should have been found");
+
+            let x = test_extract_variable::<u64>("x", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+            assert_eq!(x, 2);
+        }
+    }
+
+    #[test]
+    fn valid_join() {
+        let mut engine = crate::vm::external::test::ThreadTestGameEngine {
+            id_auto_increment: 0,
+        };
+
+        let mut heap = Heap::new();
+        let mut stdio = StdIO::default();
+        let mut runtime = Runtime::default();
+
+        let tid_1 = runtime
+            .spawn(&mut engine)
+            .expect("Spawning should have succeeded");
+
+        compile_for(
+            r##"
+        let (tid,err) = spawn();
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        assert_eq!(runtime.snapshot().states.len(), 2);
+
+        let tid_2 = {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_1)
+                .expect("Thread should have been found");
+
+            let id = test_extract_variable::<u64>("tid", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+            DefaultThreadID(id)
+        };
+
+        compile_for(
+            &format!(
+                r##"
+        let err = join({});
+        "##,
+                tid_2.0
+            ),
+            &tid_1,
+            &mut runtime,
+        );
+        compile_for(
+            r##"
+        let x = 2;
+        "##,
+            &tid_2,
+            &mut runtime,
+        );
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+        if (ThreadState::JOINING {
+            target: tid_2.clone(),
+        }) != *runtime
+            .snapshot()
+            .states
+            .get(&tid_1)
+            .expect("Thread should exist")
+        {
+            panic!("Thread should have been sleeping");
+        }
+        {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_2)
+                .expect("Thread should have been found");
+            let x_t2 = test_extract_variable::<i64>("x", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+
+            assert_eq!(x_t2, 2);
+        }
+        compile_for(
+            r##"
+        let x = 1;
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+        {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_1)
+                .expect("Thread should have been found");
+            let x_t1 = test_extract_variable::<i64>("x", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+
+            assert_eq!(x_t1, 1);
+        }
+    }
+
+    #[test]
+    fn valid_wait_wake() {
+        let mut engine = crate::vm::external::test::ThreadTestGameEngine {
+            id_auto_increment: 0,
+        };
+
+        let mut heap = Heap::new();
+        let mut stdio = StdIO::default();
+        let mut runtime = Runtime::default();
+
+        let tid_1 = runtime
+            .spawn(&mut engine)
+            .expect("Spawning should have succeeded");
+
+        compile_for(
+            r##"
+        let (tid,err) = spawn();
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        assert_eq!(runtime.snapshot().states.len(), 2);
+
+        let tid_2 = {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_1)
+                .expect("Thread should have been found");
+
+            let id = test_extract_variable::<u64>("tid", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+            DefaultThreadID(id)
+        };
+
+        compile_for(
+            r##"
+        wait();
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+        compile_for(
+            r##"
+        let x = 2;
+        "##,
+            &tid_2,
+            &mut runtime,
+        );
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        if ThreadState::WAITING
+            != *runtime
+                .snapshot()
+                .states
+                .get(&tid_1)
+                .expect("Thread should exist")
+        {
+            panic!("Thread should have been waiting");
+        }
+        {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_2)
+                .expect("Thread should have been found");
+            let x_t2 = test_extract_variable::<i64>("x", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+
+            assert_eq!(x_t2, 2);
+        }
+        compile_for(
+            r##"
+        let x = 1;
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+        compile_for(
+            r##"
+        x = 3;
+        "##,
+            &tid_2,
+            &mut runtime,
+        );
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+        if ThreadState::WAITING
+            != *runtime
+                .snapshot()
+                .states
+                .get(&tid_1)
+                .expect("Thread should exist")
+        {
+            panic!("Thread should have been waiting");
+        }
+        {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_2)
+                .expect("Thread should have been found");
+            let x_t2 = test_extract_variable::<i64>("x", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+
+            assert_eq!(x_t2, 3);
+        }
+        compile_for(
+            &format!(
+                r##"
+        let err = wake({});
+        "##,
+                tid_1.0
+            ),
+            &tid_2,
+            &mut runtime,
+        );
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+        {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_1)
+                .expect("Thread should have been found");
+            let x_t1 = test_extract_variable::<i64>("x", scope_manager, stack, &heap)
+                .expect("Variable should have been found");
+
+            assert_eq!(x_t1, 1);
+        }
+    }
 
     // #[test]
     // fn valid_spawn() {

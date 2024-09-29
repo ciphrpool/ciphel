@@ -12,7 +12,6 @@ pub enum Type {
     Slice(SliceType),
     String(StringType),
     StrSlice(StrSliceType),
-    Range(RangeType),
     UserType(ID),
     Vec(VecType),
     Function(FunctionType),
@@ -87,12 +86,6 @@ pub struct TupleType(pub Types);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AddrType(pub SubType);
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RangeType {
-    pub num: NumberType,
-    pub inclusive: bool,
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapType {

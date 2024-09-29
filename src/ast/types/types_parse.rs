@@ -16,8 +16,8 @@ use crate::ast::utils::{
 use crate::ast::TryParse;
 
 use super::{
-    AddrType, ClosureType, FunctionType, LambdaType, MapType, NumberType, PrimitiveType, RangeType,
-    SliceType, StrSliceType, StringType, TupleType, Type, Types, VecType,
+    AddrType, ClosureType, FunctionType, LambdaType, MapType, NumberType, PrimitiveType, SliceType,
+    StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
 
 impl TryParse for Type {
@@ -41,7 +41,6 @@ impl TryParse for Type {
                 map(FunctionType::parse, |value| Type::Function(value)),
                 map(ClosureType::parse, |value| Type::Closure(value)),
                 map(LambdaType::parse, |value| Type::Lambda(value)),
-                map(RangeType::parse, |value| Type::Range(value)),
                 map(TupleType::parse, |value| Type::Tuple(value)),
                 map(AddrType::parse, |value| Type::Address(value)),
                 map(MapType::parse, |value| Type::Map(value)),
@@ -252,39 +251,6 @@ impl TryParse for TupleType {
     }
 }
 
-impl TryParse for RangeType {
-    /*
-     * @desc Parse Primitive types
-     *
-     * @grammar
-     * RangeType := RangeE<Number> | RangeI<Number>
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
-                preceded(
-                    wst_closed(lexem::RANGE_E),
-                    delimited(wst(lexem::LE), NumberType::parse, wst(lexem::GE)),
-                ),
-                |num| RangeType {
-                    num,
-                    inclusive: false,
-                },
-            ),
-            map(
-                preceded(
-                    wst_closed(lexem::RANGE_I),
-                    delimited(wst(lexem::LE), NumberType::parse, wst(lexem::GE)),
-                ),
-                |num| RangeType {
-                    num,
-                    inclusive: true,
-                },
-            ),
-        ))(input)
-    }
-}
-
 impl TryParse for AddrType {
     /*
      * @desc Parse Address Type
@@ -311,7 +277,7 @@ impl TryParse for MapType {
             preceded(
                 wst_closed(lexem::UMAP),
                 pair(
-                    delimited(wst(lexem::SQ_BRA_O), Type::parse, wst(lexem::GREATER)),
+                    delimited(wst(lexem::SQ_BRA_O), Type::parse, wst(lexem::SQ_BRA_C)),
                     Type::parse,
                 ),
             ),
@@ -413,11 +379,11 @@ mod tests {
 
     #[test]
     fn valid_fn_type() {
-        let res = ClosureType::parse("fn(u16) -> bool".into());
+        let res = FunctionType::parse("fn(u16) -> bool".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
-            ClosureType {
+            FunctionType {
                 params: vec![Type::Primitive(PrimitiveType::Number(NumberType::U16))],
                 ret: Box::new(Type::Primitive(PrimitiveType::Bool)),
             },
@@ -429,6 +395,17 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             ClosureType {
+                params: vec![Type::Primitive(PrimitiveType::Number(NumberType::U16))],
+                ret: Box::new(Type::Primitive(PrimitiveType::Bool)),
+            },
+            value
+        );
+
+        let res = LambdaType::parse("(u16) -> bool".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            LambdaType {
                 params: vec![Type::Primitive(PrimitiveType::Number(NumberType::U16))],
                 ret: Box::new(Type::Primitive(PrimitiveType::Bool)),
             },

@@ -53,15 +53,6 @@ pub struct ExprCall {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Range {
-    pub lower: Box<Expression>,
-    pub upper: Box<Expression>,
-    pub incr: Option<Number>,
-    pub inclusive: bool,
-    pub metadata: Metadata,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum Product {
     Mult {
         left: Box<Expression>,

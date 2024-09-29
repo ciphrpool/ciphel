@@ -12,7 +12,7 @@ use crate::vm::{
     },
     program::Program,
     runtime::RuntimeError,
-    scheduler_v2::Executable,
+    scheduler::Executable,
     stdio::StdIO,
 };
 
@@ -54,15 +54,16 @@ impl crate::vm::AsmWeight for Mem {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Mem {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self {
             Mem::Take { size } => {
@@ -107,6 +108,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Mem {
             }
             Mem::Store { size, address } => {
                 let data = stack.pop(*size)?.to_vec();
+
                 match address {
                     MemoryAddress::Heap { .. } => {
                         let _ = heap.write(*address, &data)?;

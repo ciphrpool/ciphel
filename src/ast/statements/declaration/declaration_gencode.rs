@@ -72,43 +72,6 @@ impl GenerateCode for Declaration {
                     return Err(CodeGenerationError::UnresolvedError);
                 }
             }
-
-            // let first_variable_id = match left {
-            //     DeclaredVar::Id { id: Some(id), .. }
-            //     | DeclaredVar::Typed(TypedVar { id: Some(id), .. }) => vec![*id],
-            //     DeclaredVar::Pattern(PatternVar::StructFields { ids: Some(ids), .. })
-            //     | DeclaredVar::Pattern(PatternVar::Tuple { ids: Some(ids), .. }) => ids.clone(),
-            //     _ => {
-            //         return Err(CodeGenerationError::UnresolvedError);
-            //     }
-            // };
-
-            // let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
-
-            // let Some(right_type) = (match right {
-            //     crate::ast::statements::assignation::AssignValue::Block(value) => {
-            //         value.metadata.signature()
-            //     }
-            //     crate::ast::statements::assignation::AssignValue::Expr(value) => value.signature(),
-            // }) else {
-            //     return Err(CodeGenerationError::UnresolvedError);
-            // };
-
-            // // memcopy the right side at the address of the first varairable offset
-            // // if there is multiple variable ( in the case of destructuring ) the variables are aligned and in order
-            // // and the right side is packed
-            // let Some(VariableInfo { address, .. }) =
-            //     scope_manager.find_var_by_id(first_variable_id).ok()
-            // else {
-            //     return Err(CodeGenerationError::UnresolvedError);
-            // };
-
-            // instructions.push(Asm::Mem(Mem::Store {
-            //     size: right_type.size_of(),
-            //     address: (*address)
-            //         .try_into()
-            //         .map_err(|_| CodeGenerationError::UnresolvedError)?,
-            // }));
             Ok(())
         }
 

@@ -14,7 +14,6 @@ pub enum StaticType {
     Closure(ClosureType),
     Lambda(LambdaType),
     Function(FunctionType),
-    Range(RangeType),
     Tuple(TupleType),
     Unit,
     Any,
@@ -80,12 +79,6 @@ pub struct LambdaType {
 pub type Types = Vec<EType>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct RangeType {
-    pub num: NumberType,
-    pub inclusive: bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct TupleType(pub Types);
 
 #[derive(Debug, Clone, PartialEq)]
@@ -115,7 +108,6 @@ impl SizeOf for StaticType {
             StaticType::Map(value) => value.size_of(),
             StaticType::String(value) => value.size_of(),
             StaticType::StrSlice(value) => value.size_of(),
-            StaticType::Range(value) => value.size_of(),
             StaticType::Lambda(value) => value.size_of(),
         }
     }
@@ -162,12 +154,6 @@ impl SizeOf for StringType {
 impl SizeOf for StrSliceType {
     fn size_of(&self) -> usize {
         POINTER_SIZE
-    }
-}
-
-impl SizeOf for RangeType {
-    fn size_of(&self) -> usize {
-        self.num.size_of() * 3
     }
 }
 
@@ -245,9 +231,6 @@ impl CompatibleWith for StaticType {
                 (x == y).then(|| ()).ok_or(SemanticError::IncompatibleTypes)
             }
             (StaticType::Vec(x), StaticType::Vec(y)) => {
-                (x == y).then(|| ()).ok_or(SemanticError::IncompatibleTypes)
-            }
-            (StaticType::Range(x), StaticType::Range(y)) => {
                 (x == y).then(|| ()).ok_or(SemanticError::IncompatibleTypes)
             }
             (StaticType::String(x), StaticType::String(y)) => {

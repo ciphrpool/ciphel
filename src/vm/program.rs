@@ -6,7 +6,7 @@ use super::{
     asm::{branch::Label, Asm},
     external::{Engine, ExternFunction},
     runtime::RuntimeError,
-    scheduler_v2::Executable,
+    scheduler::Executable,
     AsmName, AsmWeight,
 };
 
@@ -42,23 +42,38 @@ impl<E: Engine> AsmName<E> for Instruction<E> {
 }
 
 impl<E: crate::vm::external::Engine> Executable<E> for Instruction<E> {
-    fn execute<P: crate::vm::scheduler_v2::SchedulingPolicy>(
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
-        scheduler: &mut crate::vm::scheduler_v2::Scheduler<P>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler_v2::ExecutionContext,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), super::runtime::RuntimeError> {
         match self {
-            Instruction::Extern(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
-            Instruction::Asm(value) => {
-                value.execute(program, scheduler, stack, heap, stdio, engine, context)
-            }
+            Instruction::Extern(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
+            Instruction::Asm(value) => value.execute(
+                program,
+                scheduler,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            ),
         }
     }
 }

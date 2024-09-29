@@ -10,7 +10,7 @@ use crate::vm::asm::mem::Mem;
 use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
     semantic::{
-        scope::static_types::{NumberType, RangeType, StaticType},
+        scope::static_types::{NumberType, StaticType},
         EType, SizeOf, TypeOf,
     },
     vm::asm::{
@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-use super::{ExprCall, FieldAccess, ListAccess, Range, TupleAccess};
+use super::{ExprCall, FieldAccess, ListAccess, TupleAccess};
 
 impl GenerateCode for super::UnaryOperation {
     fn gencode<E: crate::vm::external::Engine>(
@@ -215,52 +215,6 @@ impl GenerateCode for ExprCall {
             _ => return Err(CodeGenerationError::UnresolvedError),
         }
 
-        Ok(())
-    }
-}
-
-impl GenerateCode for Range {
-    fn gencode<E: crate::vm::external::Engine>(
-        &self,
-        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-        instructions: &mut crate::vm::program::Program<E>,
-        context: &crate::vm::CodeGenerationContext,
-    ) -> Result<(), crate::vm::CodeGenerationError> {
-        let Some(signature) = self.metadata.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-
-        let (_num_type, incr_data) = match signature {
-            EType::Static(value) => match value {
-                StaticType::Range(RangeType { num, .. }) => (
-                    num.size_of(),
-                    match num {
-                        NumberType::U8 => (1u8).to_le_bytes().into(),
-                        NumberType::U16 => (1u16).to_le_bytes().into(),
-                        NumberType::U32 => (1u32).to_le_bytes().into(),
-                        NumberType::U64 => (1u64).to_le_bytes().into(),
-                        NumberType::U128 => (1u128).to_le_bytes().into(),
-                        NumberType::I8 => (1i8).to_le_bytes().into(),
-                        NumberType::I16 => (1i16).to_le_bytes().into(),
-                        NumberType::I32 => (1i32).to_le_bytes().into(),
-                        NumberType::I64 => (1i64).to_le_bytes().into(),
-                        NumberType::I128 => (1i128).to_le_bytes().into(),
-                        NumberType::F64 => (1f64).to_le_bytes().into(),
-                    },
-                ),
-                _ => return Err(CodeGenerationError::UnresolvedError),
-            },
-            _ => return Err(CodeGenerationError::UnresolvedError),
-        };
-
-        let _ = self
-            .lower
-            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
-        let _ = self
-            .upper
-            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
-        instructions.push(Asm::Data(Data::Serialized { data: incr_data }));
         Ok(())
     }
 }
@@ -1354,11 +1308,6 @@ mod tests {
             assert_fn,
         );
     }
-
-    // #[test]
-    // fn valid_cast() {
-    //    todo!()
-    // }
 
     #[test]
     fn valid_tuple_access() {
