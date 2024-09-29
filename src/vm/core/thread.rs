@@ -1,18 +1,14 @@
-use crate::ast::utils::strings::ID;
-use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
 use crate::semantic::{EType, ResolveCore, TypeOf};
-use crate::vm::allocator::stack::Stack;
 use crate::vm::asm::operation::{OpPrimitive, PopNum};
 use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
 use crate::vm::core::CoreAsm;
-use crate::vm::core::{ERROR_SLICE, ERROR_VALUE, OK_SLICE, OK_VALUE};
+use crate::vm::core::{ERROR_SLICE, OK_SLICE};
 use crate::vm::external::ExternThreadIdentifier;
-use crate::vm::program::Program;
 use crate::vm::runtime::{RuntimeError, SignalAction, SignalResult};
 use crate::vm::scheduler::Executable;
-use crate::vm::{CodeGenerationError, GenerateCode};
+use crate::vm::GenerateCode;
 use crate::{
     ast::expressions::Expression,
     semantic::{Resolve, SemanticError},
@@ -555,7 +551,7 @@ mod tests {
         vm::{
             allocator::heap::Heap,
             external::test::DefaultThreadID,
-            runtime::{self, Runtime, Thread, ThreadContext, ThreadState},
+            runtime::{Runtime, Thread, ThreadContext, ThreadState},
             scheduler::QueuePolicy,
             stdio::StdIO,
             GenerateCode,

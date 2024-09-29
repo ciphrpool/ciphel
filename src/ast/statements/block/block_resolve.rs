@@ -1,12 +1,10 @@
-use std::sync::atomic::Ordering;
-
 use super::{Block, ClosureBlock, ExprBlock, FunctionBlock, LambdaBlock};
 
-use crate::ast::statements::{self, Statement};
-use crate::semantic::scope::scope::{ScopeManager, ScopeState};
+use crate::ast::statements::Statement;
+use crate::semantic::scope::scope::ScopeState;
 use crate::semantic::scope::static_types::StaticType;
 
-use crate::semantic::{CompatibleWith, Desugar, EType, TypeOf};
+use crate::semantic::{CompatibleWith, Desugar, EType};
 use crate::semantic::{Resolve, SemanticError};
 
 impl Resolve for Block {

@@ -1,14 +1,10 @@
 use crate::ast::statements::assignation::AssignValue;
-use crate::ast::utils::lexem;
-use crate::semantic::scope::scope::{ScopeManager, Variable, VariableInfo};
+use crate::semantic::scope::scope::VariableInfo;
 use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
     ast::statements::declaration::{DeclaredVar, PatternVar},
     semantic::SizeOf,
-    vm::{
-        allocator::MemoryAddress,
-        asm::{alloc::Alloc, locate::Locate, mem::Mem, Asm},
-    },
+    vm::asm::{mem::Mem, Asm},
 };
 
 use super::{Declaration, TypedVar};
@@ -118,23 +114,7 @@ impl GenerateCode for Declaration {
 #[cfg(test)]
 mod tests {
 
-    use num_traits::Zero;
-
-    use crate::{
-        ast::{statements::Statement, TryParse},
-        p_num,
-        semantic::{
-            scope::{
-                scope::ScopeManager,
-                static_types::{NumberType, PrimitiveType},
-                user_types::{self, UserType},
-            },
-            Resolve,
-        },
-        test_extract_variable, test_statements, v_num,
-    };
-
-    use super::*;
+    use crate::{test_extract_variable, test_statements};
 
     #[test]
     fn valid_declaration() {

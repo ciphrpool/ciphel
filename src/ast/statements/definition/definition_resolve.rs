@@ -7,7 +7,6 @@ use crate::semantic::scope::static_types::FunctionType;
 use crate::semantic::scope::BuildUserType;
 use crate::semantic::Desugar;
 use crate::semantic::EType;
-use crate::semantic::SizeOf;
 use crate::semantic::{
     scope::{static_types::StaticType, user_types::UserType},
     Resolve, SemanticError, TypeOf,

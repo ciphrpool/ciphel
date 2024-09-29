@@ -1,6 +1,6 @@
 use crate::ast::expressions::Expression;
 
-use super::block::{Block, ExprBlock};
+use super::block::ExprBlock;
 pub mod assignation_gencode;
 pub mod assignation_parse;
 pub mod assignation_resolve;

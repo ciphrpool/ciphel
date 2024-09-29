@@ -2,10 +2,7 @@ use heap::HEAP_SIZE;
 use stack::GLOBAL_SIZE;
 use stack::STACK_SIZE;
 
-use self::{
-    heap::{Heap, ALIGNMENT},
-    stack::Stack,
-};
+use self::{heap::ALIGNMENT, stack::Stack};
 
 pub mod heap;
 pub mod stack;

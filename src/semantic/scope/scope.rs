@@ -1,15 +1,13 @@
 use std::{
-    any::Any,
     collections::{HashMap, HashSet},
     hash::{DefaultHasher, Hash, Hasher},
 };
 
-use nom::branch;
 use ulid::Ulid;
 
 use crate::{
     semantic::{EType, SemanticError, SizeOf},
-    vm::{allocator::MemoryAddress, asm::mem::Mem, CodeGenerationError},
+    vm::{allocator::MemoryAddress, CodeGenerationError},
     CompilationError,
 };
 
@@ -721,8 +719,6 @@ impl ScopeManager {
 #[cfg(test)]
 mod tests {
     use std::hash::{DefaultHasher, Hash, Hasher};
-
-    use super::*;
 
     #[test]
     fn valid_hash() {

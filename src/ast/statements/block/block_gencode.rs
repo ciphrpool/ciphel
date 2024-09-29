@@ -1,8 +1,5 @@
-use crate::semantic::scope::scope::{
-    ScopeManager, ScopeState, Variable, VariableAddress, VariableInfo,
-};
-use crate::semantic::scope::static_types::POINTER_SIZE;
-use crate::vm::asm::branch::{BranchTry, Return};
+use crate::semantic::scope::scope::{ScopeState, VariableAddress, VariableInfo};
+use crate::vm::asm::branch::Return;
 use crate::vm::{CodeGenerationContext, CodeGenerationError, GenerateCode};
 use crate::{
     semantic::SizeOf,
@@ -16,7 +13,7 @@ use crate::{
 use super::{Block, ClosureBlock, ExprBlock, FunctionBlock, LambdaBlock};
 
 impl GenerateCode for Block {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -31,7 +28,7 @@ impl GenerateCode for Block {
 }
 
 impl GenerateCode for FunctionBlock {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -94,7 +91,7 @@ impl GenerateCode for FunctionBlock {
 }
 
 impl GenerateCode for ClosureBlock {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -157,7 +154,7 @@ impl GenerateCode for ClosureBlock {
 }
 
 impl GenerateCode for LambdaBlock {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -220,7 +217,7 @@ impl GenerateCode for LambdaBlock {
 }
 
 impl GenerateCode for ExprBlock {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,

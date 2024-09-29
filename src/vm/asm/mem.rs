@@ -1,19 +1,10 @@
-use nom::combinator::into;
-use num_traits::{CheckedSub, ToBytes};
+use num_traits::ToBytes;
 use ulid::Ulid;
 
 use super::operation::{OpPrimitive, PopNum};
 
 use crate::vm::{
-    allocator::{
-        heap::Heap,
-        stack::{Stack, STACK_SIZE},
-        MemoryAddress,
-    },
-    program::Program,
-    runtime::RuntimeError,
-    scheduler::Executable,
-    stdio::StdIO,
+    allocator::MemoryAddress, runtime::RuntimeError, scheduler::Executable, stdio::StdIO,
 };
 
 #[derive(Debug, Clone)]

@@ -4,17 +4,14 @@ use super::{
     UnaryOperation,
 };
 
-use crate::ast::expressions::data::{Data, Number, Primitive, Variable};
 use crate::ast::expressions::{Atomic, Expression};
 use crate::p_num;
 use crate::semantic::scope::static_types::{
     ClosureType, FunctionType, LambdaType, NumberType, PrimitiveType, SliceType, StaticType,
-    StrSliceType, TupleType, VecType,
+    TupleType, VecType,
 };
 use crate::semantic::scope::user_types::{Struct, UserType};
-use crate::semantic::{
-    CompatibleWith, Desugar, EType, Resolve, ResolveCore, ResolveNumber, SemanticError, TypeOf,
-};
+use crate::semantic::{Desugar, EType, Resolve, ResolveCore, ResolveNumber, SemanticError, TypeOf};
 use crate::semantic::{Info, ResolveFromStruct, SizeOf};
 
 impl Resolve for UnaryOperation {
@@ -1626,7 +1623,6 @@ mod tests {
             TryParse,
         },
         p_num,
-        semantic::scope::static_types::{FunctionType, StaticType},
     };
 
     use super::*;

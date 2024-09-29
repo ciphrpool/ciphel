@@ -1,35 +1,24 @@
-use std::sync::{Arc, RwLock};
-
 use nom::{
     branch::alt,
     combinator::{cut, map, opt},
-    multi::{many0, many1, separated_list0},
+    multi::separated_list0,
     sequence::{delimited, pair, preceded, tuple},
 };
 use nom_supreme::ParserExt;
 
 use crate::ast::{
-    expressions::{
-        data::{Data, Primitive},
-        Atomic, Expression,
-    },
-    statements::{
-        self,
-        assignation::Assignation,
-        block::Block,
-        declaration::{Declaration, PatternVar},
-        Statement,
-    },
+    expressions::Expression,
+    statements::{assignation::Assignation, block::Block, declaration::Declaration},
     utils::{
         error::squash,
         io::{PResult, Span},
         lexem,
-        strings::{parse_id, wst, wst_closed},
+        strings::{wst, wst_closed},
     },
     TryParse,
 };
 
-use super::{ForInit, ForInits, ForLoop, Loop, WhileLoop};
+use super::{ForInit, ForLoop, Loop, WhileLoop};
 
 impl TryParse for Loop {
     /*

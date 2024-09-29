@@ -1,31 +1,23 @@
-use ulid::Ulid;
-
-use crate::ast::utils::strings::ID;
 use crate::e_static;
-use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{StaticType, StringType, POINTER_SIZE};
 use crate::semantic::{ResolveCore, TypeOf};
 
-use crate::vm::allocator::heap::Heap;
-use crate::vm::allocator::stack::Stack;
 use crate::vm::allocator::{align, MemoryAddress};
-use crate::vm::asm::branch::Label;
 use crate::vm::asm::operation::{OpPrimitive, PopNum};
 use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
 
 use crate::vm::core::CoreAsm;
-use crate::vm::program::Program;
 use crate::vm::runtime::RuntimeError;
 use crate::vm::scheduler::Executable;
 use crate::vm::stdio::StdIO;
-use crate::vm::{CodeGenerationError, GenerateCode};
+use crate::vm::GenerateCode;
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, Resolve, SemanticError},
 };
 
-use super::{PathFinder, ERROR_VALUE, OK_VALUE};
+use super::PathFinder;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IOFn {
@@ -286,8 +278,6 @@ impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
 mod tests {
 
     use crate::test_statements;
-
-    use super::*;
 
     fn nil(
         scope_manager: &crate::semantic::scope::scope::ScopeManager,

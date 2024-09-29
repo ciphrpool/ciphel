@@ -1,8 +1,8 @@
 use nom::{
     branch::alt,
-    combinator::{map, opt, value},
+    combinator::{map, value},
     multi::separated_list1,
-    sequence::{delimited, pair, preceded, separated_pair, tuple},
+    sequence::{delimited, pair, preceded, tuple},
 };
 
 use crate::ast::utils::{

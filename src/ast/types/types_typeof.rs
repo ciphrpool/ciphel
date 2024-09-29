@@ -3,7 +3,6 @@ use super::{
     StrSliceType, StringType, TupleType, Type, VecType,
 };
 use crate::e_static;
-use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{self, StaticType};
 
 use crate::semantic::SizeOf;

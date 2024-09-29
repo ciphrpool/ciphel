@@ -1,16 +1,6 @@
-use std::sync::atomic::Ordering;
-
-use num_traits::ToBytes;
-use ulid::Ulid;
-
 use crate::vm::{
-    allocator::{
-        heap::Heap,
-        stack::{Stack, STACK_SIZE},
-        MemoryAddress,
-    },
+    allocator::{stack::STACK_SIZE, MemoryAddress},
     asm::operation::OpPrimitive,
-    program::Program,
     runtime::RuntimeError,
     scheduler::Executable,
     stdio::StdIO,
@@ -77,7 +67,7 @@ impl crate::vm::AsmWeight for Alloc {
                     crate::vm::Weight::MEDIUM
                 }
             }
-            Alloc::GlobalFromStack { address, size } => {
+            Alloc::GlobalFromStack { size, .. } => {
                 if *size > ALLOC_SIZE_THRESHOLD {
                     crate::vm::Weight::EXTREME
                 } else {
@@ -189,7 +179,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Realloc {
 #[derive(Debug, Clone)]
 pub struct Free();
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Free {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, _program: &crate::vm::program::Program<E>, engine: &mut E) {
         stdio.push_asm(engine, "free");
     }
 }
@@ -236,8 +226,8 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Access {
 impl crate::vm::AsmWeight for Access {
     fn weight(&self) -> crate::vm::Weight {
         match self {
-            Access::Static { address, size } => crate::vm::Weight::LOW,
-            Access::Runtime { size } => crate::vm::Weight::LOW,
+            Access::Static { .. } => crate::vm::Weight::LOW,
+            Access::Runtime { .. } => crate::vm::Weight::LOW,
         }
     }
 }

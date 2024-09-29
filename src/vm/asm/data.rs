@@ -2,13 +2,7 @@ use std::fmt;
 
 use ulid::Ulid;
 
-use crate::vm::{
-    allocator::{heap::Heap, stack::Stack},
-    program::Program,
-    runtime::RuntimeError,
-    scheduler::Executable,
-    stdio::StdIO,
-};
+use crate::vm::{runtime::RuntimeError, scheduler::Executable, stdio::StdIO};
 
 use super::alloc::ALLOC_SIZE_THRESHOLD;
 pub struct HexSlice<'a>(pub &'a [u8]);

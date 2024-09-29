@@ -2,7 +2,6 @@ use super::{
     Address, Call, Closure, ClosureParam, Data, Enum, Format, Lambda, Map, Number, Primitive,
     Printf, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
-use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{self, StaticType, StringType};
 
 use crate::semantic::SizeOf;

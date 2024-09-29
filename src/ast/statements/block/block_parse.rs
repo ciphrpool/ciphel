@@ -1,5 +1,3 @@
-use std::sync::{Arc, RwLock};
-
 use nom::{
     branch::alt,
     combinator::{cut, map},
@@ -10,7 +8,7 @@ use nom::{
 use crate::{
     ast::{
         expressions::Expression,
-        statements::{self, return_stat::Return, Statement},
+        statements::{return_stat::Return, Statement},
         utils::{
             io::{PResult, Span},
             lexem,

@@ -1,27 +1,23 @@
 use num_traits::ToBytes;
 
 use crate::{
-    ast::{expressions::Expression, utils::strings::ID},
+    ast::expressions::Expression,
     e_static,
     semantic::{
-        scope::{
-            scope::ScopeManager,
-            static_types::{AddrType, MapType, StaticType, TupleType, VecType},
-        },
-        EType, Info, Metadata, Resolve, ResolveCore, SemanticError, SizeOf, TypeOf,
+        scope::static_types::{AddrType, MapType, StaticType, TupleType, VecType},
+        EType, Resolve, ResolveCore, SemanticError, SizeOf, TypeOf,
     },
     vm::{
-        allocator::{align, heap::Heap, stack::Stack, MemoryAddress},
+        allocator::{align, MemoryAddress},
         asm::{
             operation::{OpPrimitive, PopNum},
             Asm,
         },
-        core::{lexem, map::map_layout, CoreAsm},
-        program::Program,
+        core::{lexem, map::map_layout},
         runtime::RuntimeError,
         scheduler::Executable,
         stdio::StdIO,
-        CodeGenerationError, GenerateCode,
+        GenerateCode,
     },
 };
 
@@ -379,13 +375,6 @@ impl<E: crate::vm::external::Engine> Executable<E> for IterAsm {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        ast::{statements::Statement, TryParse},
-        semantic::scope::static_types::{NumberType, PrimitiveType},
-        v_num,
-    };
-
-    use super::*;
 
     // #[test]
     // fn valid_values() {

@@ -1,10 +1,6 @@
-use std::{
-    collections::HashSet,
-    sync::{Arc, Mutex, RwLock},
-};
+use std::collections::HashSet;
 
-use crate::semantic::scope::scope::ScopeManager;
-use crate::{ast::utils::strings::ID, vm::CodeGenerationError};
+use crate::vm::CodeGenerationError;
 
 use self::scope::{static_types::StaticType, user_types::UserType};
 

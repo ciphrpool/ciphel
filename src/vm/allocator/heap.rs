@@ -4,7 +4,7 @@ use num_traits::ToBytes;
 
 use thiserror::Error;
 
-use super::{align, stack::STACK_SIZE, MemoryAddress};
+use super::{align, MemoryAddress};
 
 pub const ALIGNMENT: usize = 8;
 pub const HEAP_SIZE: usize = 2048;

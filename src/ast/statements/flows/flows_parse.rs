@@ -11,8 +11,8 @@ use crate::ast::{
 use nom::{
     branch::alt,
     combinator::{cut, map, opt},
-    multi::{many0, many1, separated_list1},
-    sequence::{delimited, pair, preceded, separated_pair, terminated},
+    multi::many0,
+    sequence::{delimited, pair, preceded, terminated},
 };
 use nom_supreme::ParserExt;
 
@@ -164,22 +164,8 @@ impl TryParse for CallStat {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, RwLock};
 
-    use crate::{
-        ast::{
-            expressions::{
-                data::{Data, Primitive, Variable},
-                Atomic, Expression,
-            },
-            statements::{
-                block::Block,
-                flows::{CallStat, Flow, IfStat, TryStat},
-                Statement,
-            },
-        },
-        v_num,
-    };
+    use crate::ast::statements::flows::{IfStat, TryStat};
 
     use super::*;
 

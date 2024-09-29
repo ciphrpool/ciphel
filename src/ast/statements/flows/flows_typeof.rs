@@ -1,7 +1,6 @@
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
-use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::EType;
-use crate::semantic::{scope::static_types::StaticType, MergeType, Resolve, SemanticError, TypeOf};
+use crate::semantic::{scope::static_types::StaticType, Resolve, SemanticError, TypeOf};
 
 impl TypeOf for Flow {
     fn type_of(

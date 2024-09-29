@@ -1,15 +1,8 @@
-use nom::{
-    branch::alt,
-    combinator::{eof, map},
-    multi::{many0, many1},
-    sequence::{delimited, terminated},
-    Finish, Parser,
-};
-use nom_supreme::error::{BaseErrorKind, ErrorTree, Expectation, GenericErrorTree, StackContext};
+use nom::{branch::alt, combinator::map, multi::many0, Finish, Parser};
 
 use self::return_stat::Return;
 use crate::{
-    semantic::{scope::scope::ScopeManager, Desugar, Metadata},
+    semantic::{Desugar, Metadata},
     vm::GenerateCode,
     CompilationError,
 };
@@ -25,10 +18,6 @@ use super::{
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{scope::static_types::StaticType, EType, Resolve, SemanticError, TypeOf},
-    vm::asm::{
-        branch::{Call, Goto, Label},
-        Asm,
-    },
 };
 
 pub mod assignation;

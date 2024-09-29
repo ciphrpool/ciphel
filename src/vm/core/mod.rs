@@ -9,7 +9,7 @@ use thread::{ThreadAsm, ThreadFn};
 use vector::{VectorAsm, VectorFn};
 
 use crate::{
-    ast::{expressions::Expression, utils::strings::ID},
+    ast::expressions::Expression,
     e_static,
     semantic::{
         scope::static_types::{PrimitiveType, StaticType},
@@ -17,16 +17,12 @@ use crate::{
     },
 };
 
-use crate::semantic::scope::scope::ScopeManager;
-
 use super::{
-    allocator::{heap::Heap, stack::Stack},
     asm::{operation::OpPrimitive, Asm},
-    program::Program,
     runtime::RuntimeError,
     scheduler::Executable,
     stdio::StdIO,
-    CodeGenerationError, GenerateCode,
+    GenerateCode,
 };
 
 pub mod alloc;
@@ -424,7 +420,6 @@ impl<E: crate::vm::external::Engine> Executable<E> for CoreAsm {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ast::TryParse, semantic::Resolve};
 
     // #[test]
     // fn valid_extern_fn() {

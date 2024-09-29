@@ -6,10 +6,7 @@ use nom::{
 };
 
 use crate::ast::{
-    statements::{
-        block::{Block, FunctionBlock},
-        declaration::TypedVar,
-    },
+    statements::{block::FunctionBlock, declaration::TypedVar},
     types::Type,
     utils::{
         error::squash,
@@ -167,8 +164,6 @@ impl TryParse for FnDef {
 
 #[cfg(test)]
 mod tests {
-
-    use std::sync::{Arc, RwLock};
 
     use crate::{
         ast::{

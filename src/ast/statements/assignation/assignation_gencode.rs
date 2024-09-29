@@ -1,21 +1,13 @@
 use crate::{
-    ast::{
-        expressions::{locate::Locatable, operation::ListAccess},
-        statements::assignation::AssignValue,
-    },
+    ast::{expressions::locate::Locatable, statements::assignation::AssignValue},
     semantic::SizeOf,
     vm::{
-        asm::{
-            branch::{Call, Goto, Label},
-            mem::Mem,
-            Asm,
-        },
+        asm::{mem::Mem, Asm},
         CodeGenerationError, GenerateCode,
     },
 };
 
 use super::Assignation;
-use crate::semantic::scope::scope::ScopeManager;
 
 impl GenerateCode for Assignation {
     fn gencode<E: crate::vm::external::Engine>(
@@ -76,36 +68,14 @@ impl GenerateCode for AssignValue {
 }
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use num_traits::Zero;
 
     use crate::{
-        ast::{
-            expressions::{
-                data::{Data, Number, Primitive, Slice, Struct, Tuple},
-                Atomic, Expression,
-            },
-            statements::Statement,
-            TryParse,
-        },
-        p_num,
-        semantic::{
-            scope::{
-                scope::ScopeManager,
-                static_types::{NumberType, PrimitiveType, SliceType, StaticType, TupleType},
-                user_types::{self, UserType},
-            },
-            EType, Resolve,
-        },
-        test_extract_variable, test_extract_variable_with, test_statements, v_num,
+        test_extract_variable_with, test_statements,
         vm::{
             allocator::MemoryAddress,
             asm::operation::{GetNumFrom, OpPrimitive},
         },
     };
-
-    use super::*;
 
     #[test]
     fn valid_assignation() {

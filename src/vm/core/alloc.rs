@@ -1,23 +1,15 @@
 use std::{ops::Add, vec};
 
 use crate::{
-    ast::utils::strings::ID,
     err_tuple,
-    semantic::{
-        scope::{
-            scope::ScopeManager,
-            static_types::{MapType, SliceType},
-        },
-        ResolveCore,
-    },
+    semantic::ResolveCore,
     vm::{
-        allocator::{heap::Heap, stack::Stack, MemoryAddress},
+        allocator::MemoryAddress,
         asm::operation::{GetNumFrom, PopNum},
-        program::Program,
         runtime::RuntimeError,
         scheduler::Executable,
         stdio::StdIO,
-        CodeGenerationError, GenerateCode,
+        GenerateCode,
     },
 };
 
@@ -27,24 +19,13 @@ use crate::{
     ast::expressions::Expression,
     e_static, p_num,
     semantic::{
-        scope::static_types::{
-            AddrType, NumberType, PrimitiveType, StaticType, StringType, VecType,
-        },
-        EType, Info, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
+        scope::static_types::{AddrType, StaticType},
+        EType, Resolve, SemanticError, SizeOf, TypeOf,
     },
-    vm::{
-        allocator::align,
-        asm::{
-            alloc::{Access, Alloc, Free},
-            data::Data,
-            mem::Mem,
-            operation::OpPrimitive,
-            Asm,
-        },
-    },
+    vm::asm::{data::Data, operation::OpPrimitive, Asm},
 };
 
-use super::{lexem, CoreAsm, PathFinder, ERROR_SLICE, OK_SLICE};
+use super::{lexem, PathFinder, ERROR_SLICE, OK_SLICE};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AllocFn {

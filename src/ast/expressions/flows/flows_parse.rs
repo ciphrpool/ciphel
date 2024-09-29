@@ -1,15 +1,15 @@
 use nom::{
     branch::alt,
     combinator::{cut, map, opt},
-    multi::{many1, separated_list1},
+    multi::separated_list1,
     sequence::{delimited, pair, preceded, separated_pair},
 };
 
 use crate::{
     ast::{
         expressions::{
-            data::{Data, Primitive, StrSlice, Variable},
-            Atomic, Expression,
+            data::{Primitive, StrSlice},
+            Expression,
         },
         statements::block::{BlockCommonApi, ExprBlock},
         types::Type,
@@ -17,7 +17,7 @@ use crate::{
             error::squash,
             io::{PResult, Span},
             lexem,
-            strings::{parse_id, string_parser::parse_fstring, wst, wst_closed},
+            strings::{parse_id, wst, wst_closed},
         },
         TryParse,
     },
@@ -27,8 +27,8 @@ use crate::{
 use std::fmt::Debug;
 
 use super::{
-    Cases, EnumCase, ExprFlow, FormatItem, IfExpr, MatchExpr, PrimitiveCase, StringCase, TryExpr,
-    UnionCase, UnionPattern,
+    Cases, EnumCase, ExprFlow, IfExpr, MatchExpr, PrimitiveCase, StringCase, TryExpr, UnionCase,
+    UnionPattern,
 };
 
 impl TryParse for ExprFlow {

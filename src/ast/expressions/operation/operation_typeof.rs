@@ -1,13 +1,6 @@
-use crate::{
-    ast::expressions::{
-        data::{Data, Variable},
-        Atomic, Expression,
-    },
-    e_static,
-    semantic::{
-        scope::static_types::{self, ClosureType, FunctionType, StaticType},
-        EType, MergeType, Resolve, SemanticError, TypeOf,
-    },
+use crate::semantic::{
+    scope::static_types::{self, StaticType},
+    EType, Resolve, SemanticError, TypeOf,
 };
 
 use super::{
@@ -15,7 +8,6 @@ use super::{
     FieldAccess, ListAccess, LogicalAnd, LogicalOr, Product, Shift, Substraction, TupleAccess,
     UnaryOperation,
 };
-use crate::semantic::scope::scope::ScopeManager;
 
 impl TypeOf for UnaryOperation {
     fn type_of(

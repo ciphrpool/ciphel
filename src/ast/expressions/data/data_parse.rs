@@ -1,14 +1,9 @@
-use std::sync::{Arc, RwLock};
-
 use crate::{
     ast::{
-        self,
         expressions::{Atomic, CompletePath, Expression},
         statements::{
             block::{ClosureBlock, LambdaBlock},
             declaration::TypedVar,
-            return_stat::Return,
-            Statement,
         },
         types::NumberType,
         utils::{
@@ -25,19 +20,15 @@ use crate::{
         TryParse,
     },
     semantic::Metadata,
-    vm::{
-        allocator::{align, MemoryAddress},
-        core,
-    },
+    vm::{allocator::align, core},
 };
 use nom::{
     branch::alt,
     combinator::{cut, map, opt, value},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair},
-    Parser,
 };
-use nom_supreme::{final_parser::ExtractContext, ParserExt};
+use nom_supreme::ParserExt;
 
 use super::{
     Address, Call, CallArgs, Closure, ClosureParam, Data, Enum, Format, FormatItem, Lambda,
@@ -582,12 +573,11 @@ impl TryParse for Format {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, RwLock};
 
     use crate::{
         ast::expressions::{
             data::Number,
-            operation::{FieldAccess, ListAccess, TupleAccess},
+            operation::{FieldAccess, ListAccess},
             Atomic,
         },
         v_num,

@@ -1,14 +1,6 @@
 use crate::vm::{
-    allocator::{
-        heap::Heap,
-        stack::{Stack, STACK_SIZE},
-        MemoryAddress,
-    },
-    asm::operation::OpPrimitive,
-    program::Program,
-    runtime::RuntimeError,
-    scheduler::Executable,
-    stdio::StdIO,
+    allocator::MemoryAddress, asm::operation::OpPrimitive, runtime::RuntimeError,
+    scheduler::Executable, stdio::StdIO,
 };
 use num_traits::ToBytes;
 

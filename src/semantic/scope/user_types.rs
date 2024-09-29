@@ -1,23 +1,6 @@
-use std::{arch::x86_64, sync::Arc};
-
-use crate::{semantic::scope::scope::ScopeManager, vm::asm};
-use ulid::Ulid;
-
 use crate::{
-    ast::{
-        expressions::{
-            data::{self, Data},
-            Atomic, Expression,
-        },
-        statements::definition,
-        utils::{lexem, strings::ID},
-    },
-    e_static, e_user,
-    semantic::{CompatibleWith, EType, Info, MergeType, Metadata, SemanticError, SizeOf, TypeOf},
-    vm::asm::{
-        branch::{Goto, Label},
-        Asm,
-    },
+    ast::{statements::definition, utils::strings::ID},
+    semantic::{CompatibleWith, EType, SemanticError, SizeOf, TypeOf},
 };
 
 use super::{static_types::POINTER_SIZE, BuildUserType};

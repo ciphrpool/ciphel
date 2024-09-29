@@ -1,10 +1,6 @@
 use super::{Block, ClosureBlock, ExprBlock, FunctionBlock, LambdaBlock};
-use crate::ast::statements::Statement;
-use crate::e_static;
-use crate::semantic::scope::scope::ScopeManager;
-use crate::semantic::scope::static_types::StaticType;
 
-use crate::semantic::{EType, MergeType};
+use crate::semantic::EType;
 use crate::semantic::{Resolve, SemanticError, TypeOf};
 
 impl TypeOf for Block {

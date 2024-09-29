@@ -1,15 +1,6 @@
-use std::{
-    marker::PhantomData,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-};
-
 use crate::semantic::{Metadata, SemanticError};
 
 use super::Statement;
-use crate::semantic::scope::scope::ScopeManager;
 
 pub mod block_gencode;
 pub mod block_parse;

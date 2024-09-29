@@ -1,14 +1,8 @@
-use std::fmt::Debug;
+use crate::ast::statements::definition;
 
-use crate::ast::{statements::definition, types, utils::strings::ID};
+use self::{static_types::NumberType, user_types::UserType};
 
-use self::{
-    static_types::{NumberType, StaticType},
-    user_types::UserType,
-};
-use crate::semantic::scope::scope::ScopeManager;
-
-use super::{EType, SemanticError};
+use super::SemanticError;
 pub mod scope;
 pub mod static_types;
 pub mod user_types;

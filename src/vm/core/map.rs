@@ -2,7 +2,7 @@ use crate::{
     ast::expressions::Expression,
     semantic::{
         scope::static_types::{MapType, StaticType, VecType},
-        CompatibleWith, EType, Metadata, Resolve, ResolveCore, SemanticError, SizeOf, TypeOf,
+        CompatibleWith, EType, Resolve, ResolveCore, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         allocator::{heap::Heap, stack::Stack, MemoryAddress},
@@ -11,11 +11,10 @@ use crate::{
             Asm,
         },
         core::{lexem, CoreAsm, ERROR_SLICE, OK_SLICE},
-        program::Program,
         runtime::RuntimeError,
         scheduler::Executable,
         stdio::StdIO,
-        CodeGenerationError, GenerateCode,
+        GenerateCode,
     },
 };
 
@@ -469,7 +468,7 @@ struct AssignResult {
 }
 
 impl BucketLayout {
-    pub fn assign(
+    fn assign(
         &self,
         top_hash: u8,
         key: &[u8],

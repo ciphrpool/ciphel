@@ -1,13 +1,10 @@
-use std::process::Output;
-
-use super::{ForIncrements, ForLoop, Loop, WhileLoop};
+use super::{ForLoop, Loop, WhileLoop};
 use crate::ast::statements::block::{Block, BlockCommonApi};
 use crate::ast::statements::loops::ForInit;
-use crate::ast::statements::{self, Statement};
-use crate::e_static;
-use crate::semantic::scope::scope::{ScopeManager, ScopeState};
+use crate::ast::statements::Statement;
+use crate::semantic::scope::scope::ScopeState;
 use crate::semantic::scope::static_types::{PrimitiveType, StaticType};
-use crate::semantic::{Desugar, EType, Metadata};
+use crate::semantic::{Desugar, EType};
 use crate::semantic::{Resolve, SemanticError, TypeOf};
 
 impl Resolve for Loop {

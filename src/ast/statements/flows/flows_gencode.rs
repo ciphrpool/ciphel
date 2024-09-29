@@ -1,27 +1,7 @@
-use crate::{
-    semantic::scope::scope::ScopeManager,
-    vm::{
-        asm::{branch::BranchTry, data::Data, mem::Mem},
-        CodeGenerationContext, CodeGenerationError, GenerateCode,
-    },
-};
-use ulid::Ulid;
+use crate::vm::{asm::branch::BranchTry, CodeGenerationContext, CodeGenerationError, GenerateCode};
 
 use crate::{
-    ast::{
-        expressions::{
-            data::{Number, Primitive},
-            Expression,
-        },
-        statements::block::Block,
-    },
-    semantic::{
-        scope::{
-            static_types::StaticType,
-            user_types::{Enum, Union, UserType},
-        },
-        EType, SizeOf,
-    },
+    semantic::SizeOf,
     vm::asm::{
         branch::{BranchIf, Goto, Label},
         Asm,
@@ -31,7 +11,7 @@ use crate::{
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 
 impl GenerateCode for Flow {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -40,16 +20,20 @@ impl GenerateCode for Flow {
     ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             Flow::If(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
-            Flow::Match(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
+            Flow::Match(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
             Flow::Try(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
-            Flow::Printf(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
+            Flow::Printf(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
             Flow::Call(value) => value.gencode::<E>(scope_manager, scope_id, instructions, context),
         }
     }
 }
 
 impl GenerateCode for CallStat {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -72,7 +56,7 @@ impl GenerateCode for CallStat {
 }
 
 impl GenerateCode for IfStat {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -80,7 +64,7 @@ impl GenerateCode for IfStat {
         context: &crate::vm::CodeGenerationContext,
     ) -> Result<(), crate::vm::CodeGenerationError> {
         let mut else_label = Label::gen();
-        let mut end_label = Label::gen();
+        let end_label = Label::gen();
 
         let _ = self
             .condition
@@ -123,7 +107,7 @@ impl GenerateCode for IfStat {
 }
 
 impl GenerateCode for MatchStat {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -206,7 +190,7 @@ impl GenerateCode for MatchStat {
 }
 
 impl GenerateCode for TryStat {
-    fn gencode<E:crate::vm::external::Engine>(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
@@ -246,13 +230,7 @@ impl GenerateCode for TryStat {
 #[cfg(test)]
 mod tests {
 
-    use super::*;
-
-    use crate::ast::TryParse;
-    use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
-    use crate::semantic::Resolve;
-    use crate::{ast::statements::Statement, semantic::scope::scope::ScopeManager};
-    use crate::{test_extract_variable, test_statements, v_num};
+    use crate::{test_extract_variable, test_statements};
 
     #[test]
     fn valid_if() {

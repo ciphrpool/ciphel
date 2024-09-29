@@ -7,7 +7,7 @@ use nom_supreme::ParserExt;
 
 use crate::ast::{
     expressions::Expression,
-    statements::block::{Block, ExprBlock},
+    statements::block::ExprBlock,
     utils::{
         io::{PResult, Span},
         lexem,

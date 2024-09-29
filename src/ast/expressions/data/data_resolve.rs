@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::process::Output;
 
 use super::{
     Address, Call, Closure, ClosureParam, ClosureReprData, Data, Enum, Format, FormatItem, Lambda,
@@ -9,7 +8,7 @@ use super::{
 use crate::ast::expressions::data::{CoreCall, ExternCall, VarCall};
 use crate::ast::expressions::{Atomic, CompletePath, Expression, Path};
 use crate::ast::statements::block::BlockCommonApi;
-use crate::semantic::scope::scope::{GlobalMapping, ScopeManager, ScopeState, VariableInfo};
+use crate::semantic::scope::scope::{ScopeState, VariableInfo};
 use crate::semantic::scope::static_types::{
     AddrType, ClosureType, FunctionType, LambdaType, MapType, NumberType, PrimitiveType, SliceType,
     StrSliceType, StringType, TupleType, VecType, POINTER_SIZE,
@@ -19,8 +18,8 @@ use crate::semantic::ResolveCore;
 use crate::semantic::{
     scope::static_types::StaticType, CompatibleWith, EType, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{Desugar, Info, MergeType, ResolveFromStruct, ResolveNumber, SizeOf};
-use crate::vm::allocator::{align, MemoryAddress};
+use crate::semantic::{Desugar, Info, ResolveFromStruct, ResolveNumber, SizeOf};
+use crate::vm::allocator::align;
 use crate::vm::asm::branch::Label;
 use crate::vm::core::{Core, PathFinder};
 use crate::{e_static, semantic};
@@ -1490,7 +1489,6 @@ mod tests {
         ast::{expressions::Expression, TryParse},
         p_num,
         semantic::scope::{
-            scope::ScopeManager,
             static_types::{
                 AddrType, MapType, PrimitiveType, SliceType, StaticType, StrSliceType, StringType,
                 TupleType, VecType,

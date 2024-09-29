@@ -2,17 +2,16 @@ use std::collections::HashMap;
 
 use ulid::Ulid;
 
-use crate::ast::statements::block::{Block, ClosureBlock, LambdaBlock};
-use crate::semantic::scope::scope::ScopeManager;
+use crate::ast::statements::block::{ClosureBlock, LambdaBlock};
 use crate::semantic::SizeOf;
 use crate::vm::allocator::MemoryAddress;
 use crate::vm::core::Core;
 use crate::{
-    ast::{self, statements::declaration::TypedVar, utils::strings::ID},
+    ast::{statements::declaration::TypedVar, utils::strings::ID},
     e_static, p_num,
     semantic::{
         scope::static_types::{PrimitiveType, StaticType},
-        EType, Metadata, SemanticError,
+        EType, Metadata,
     },
 };
 

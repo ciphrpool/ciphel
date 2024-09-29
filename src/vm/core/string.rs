@@ -5,17 +5,13 @@ use crate::vm::asm::operation::{GetNumFrom, OpPrimitive, PopNum};
 use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
 use crate::vm::core::CoreAsm;
-use crate::vm::program::Program;
 use crate::vm::runtime::RuntimeError;
 use crate::vm::scheduler::Executable;
-use crate::vm::{CodeGenerationError, GenerateCode};
+use crate::vm::GenerateCode;
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, Metadata, Resolve, ResolveCore, SemanticError},
-    vm::{
-        allocator::{heap::Heap, stack::Stack},
-        stdio::StdIO,
-    },
+    semantic::{EType, Resolve, ResolveCore, SemanticError},
+    vm::stdio::StdIO,
 };
 
 use super::PathFinder;

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use nom::{
     branch::alt,
     character::complete::{alpha1, alphanumeric1, anychar},

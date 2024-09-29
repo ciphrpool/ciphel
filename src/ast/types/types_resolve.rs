@@ -2,7 +2,6 @@ use super::{
     AddrType, ClosureType, FunctionType, LambdaType, MapType, PrimitiveType, SliceType,
     StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
-use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::{Resolve, SemanticError};
 
 impl Resolve for Type {

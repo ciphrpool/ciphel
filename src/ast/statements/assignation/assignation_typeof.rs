@@ -1,5 +1,4 @@
 use super::{AssignValue, Assignation};
-use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::EType;
 use crate::semantic::{scope::static_types::StaticType, Resolve, SemanticError, TypeOf};
 

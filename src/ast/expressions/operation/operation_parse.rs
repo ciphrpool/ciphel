@@ -3,19 +3,18 @@ use nom::{
     bytes::complete::take_while_m_n,
     character::complete::digit1,
     combinator::{cut, map, opt, peek, value},
-    multi::separated_list0,
-    sequence::{delimited, pair, preceded, terminated, tuple},
+    sequence::{delimited, preceded, tuple},
 };
 use nom_supreme::{error::ErrorTree, ParserExt};
 
 use crate::{
     ast::{
-        expressions::data::{CallArgs, Data, Variable},
+        expressions::data::CallArgs,
         types::Type,
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::{parse_id, wst, wst_closed},
+            strings::{wst, wst_closed},
         },
         TryParse,
     },
@@ -763,7 +762,7 @@ impl TryParseOperation for LogicalOr {
 mod tests {
 
     use crate::{
-        ast::expressions::data::{Data, Number, Primitive},
+        ast::expressions::data::{Data, Primitive},
         v_num,
     };
 

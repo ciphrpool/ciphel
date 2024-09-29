@@ -1,6 +1,4 @@
-use std::sync::Arc;
-
-use crate::semantic::{CompatibleWith, EType, MergeType, SemanticError, SizeOf, TypeOf};
+use crate::semantic::{CompatibleWith, EType, MergeType, SemanticError, SizeOf};
 
 type SubType = Box<EType>;
 

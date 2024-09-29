@@ -1,15 +1,9 @@
 use super::operation::{OpPrimitive, PopNum};
 
 use crate::vm::{
-    allocator::{heap::Heap, stack::Stack},
-    asm::operation::GetNumFrom,
-    program::Program,
-    runtime::RuntimeError,
-    scheduler::Executable,
-    stdio::StdIO,
+    asm::operation::GetNumFrom, runtime::RuntimeError, scheduler::Executable, stdio::StdIO,
 };
 
-use num_traits::ToBytes;
 use ulid::Ulid;
 
 #[derive(Debug, Clone)]

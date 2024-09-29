@@ -1,20 +1,11 @@
 use crate::ast::expressions::locate::Locatable;
-use crate::semantic::scope::scope::ScopeManager;
-use crate::semantic::scope::static_types::{ClosureType, SliceType, StrSliceType, POINTER_SIZE};
-use crate::vm::allocator::MemoryAddress;
+use crate::semantic::scope::static_types::POINTER_SIZE;
 use crate::vm::asm::alloc::Access;
-use crate::vm::asm::branch::Call;
-use crate::vm::asm::data;
-use crate::vm::asm::locate::{Locate, LocateIndex, LocateOffset};
-use crate::vm::asm::mem::Mem;
+use crate::vm::asm::locate::{LocateIndex, LocateOffset};
 use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
-    semantic::{
-        scope::static_types::{NumberType, StaticType},
-        EType, SizeOf, TypeOf,
-    },
+    semantic::{scope::static_types::StaticType, EType, SizeOf, TypeOf},
     vm::asm::{
-        data::Data,
         operation::{
             Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Division, Equal, Greater,
             GreaterEqual, Less, LessEqual, LogicalAnd, LogicalOr, Minus, Mod, Mult, Not, NotEqual,
@@ -768,26 +759,7 @@ impl GenerateCode for super::LogicalOr {
 #[cfg(test)]
 mod tests {
 
-    use crate::{
-        ast::{
-            expressions::{
-                data::{Number, Primitive, StrSlice},
-                Expression,
-            },
-            statements::Statement,
-            TryParse,
-        },
-        semantic::{
-            scope::{
-                scope::ScopeManager,
-                static_types::{PrimitiveType, StrSliceType},
-            },
-            Resolve,
-        },
-        test_extract_variable, test_statements, v_num,
-    };
-
-    use super::*;
+    use crate::{test_extract_variable, test_statements};
 
     #[test]
     fn valid_addition() {

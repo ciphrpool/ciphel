@@ -1,12 +1,6 @@
-use crate::{
-    ast::{types::Type, utils::strings::ID},
-    semantic::Metadata,
-};
+use crate::{ast::types::Type, semantic::Metadata};
 
-use super::{
-    data::{CallArgs, Number},
-    Atomic, CompletePath, Expression,
-};
+use super::{data::CallArgs, Atomic, Expression};
 pub mod operation_gencode;
 pub mod operation_parse;
 pub mod operation_resolve;

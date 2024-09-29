@@ -2,20 +2,19 @@ use crate::{
     ast::expressions::Expression,
     semantic::{
         scope::static_types::{StaticType, VecType},
-        CompatibleWith, EType, Metadata, Resolve, ResolveCore, SemanticError, SizeOf, TypeOf,
+        CompatibleWith, EType, Resolve, ResolveCore, SemanticError, SizeOf, TypeOf,
     },
     vm::{
-        allocator::{align, heap::Heap, stack::Stack},
+        allocator::align,
         asm::{
             operation::{GetNumFrom, OpPrimitive, PopNum},
             Asm,
         },
         core::{lexem, CoreAsm},
-        program::Program,
         runtime::RuntimeError,
         scheduler::Executable,
         stdio::StdIO,
-        CodeGenerationError, GenerateCode,
+        GenerateCode,
     },
 };
 
@@ -329,9 +328,9 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
                 stack.push_with(&address.to_le_bytes())?;
             }
             VectorAsm::Pop { item_size } => {
-                let mut address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
-                let mut cap = OpPrimitive::get_num_from::<u64>(address, stack, heap)? as usize;
+                let cap = OpPrimitive::get_num_from::<u64>(address, stack, heap)? as usize;
                 let mut len =
                     OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)? as usize;
 
@@ -353,7 +352,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
             }
             VectorAsm::Extend { item_size } => todo!(),
             VectorAsm::Delete { item_size } => {
-                let mut index = OpPrimitive::pop_num::<u64>(stack)? as usize;
+                let index = OpPrimitive::pop_num::<u64>(stack)? as usize;
                 let mut address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
                 let mut cap = OpPrimitive::get_num_from::<u64>(address, stack, heap)? as usize;
@@ -394,11 +393,10 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
                 stack.push_with(&item_data)?;
             }
             VectorAsm::Clear { item_size } => {
-                let mut address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
-                let mut cap = OpPrimitive::get_num_from::<u64>(address, stack, heap)? as usize;
-                let mut len =
-                    OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)? as usize;
+                let cap = OpPrimitive::get_num_from::<u64>(address, stack, heap)? as usize;
+                let len = OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)? as usize;
 
                 /* Write capacity */
                 let _ = heap.write(address, &(cap as u64).to_le_bytes())?;

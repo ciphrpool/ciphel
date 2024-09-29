@@ -4,7 +4,7 @@ use crate::ast::expressions::{
     Expression,
 };
 
-use super::block::{Block, ClosureBlock, ExprBlock};
+use super::block::{Block, ExprBlock};
 
 pub mod flows_gencode;
 pub mod flows_parse;

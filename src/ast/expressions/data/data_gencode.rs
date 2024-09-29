@@ -4,16 +4,14 @@ use crate::ast::expressions::locate::Locatable;
 use crate::ast::expressions::{CompletePath, Path};
 use crate::semantic::scope::scope::GlobalMapping;
 use crate::semantic::scope::static_types::POINTER_SIZE;
-use crate::semantic::scope::static_types::{MapType, SliceType, StaticType, TupleType};
-use crate::semantic::{self, TypeOf};
+use crate::semantic::scope::static_types::{MapType, StaticType, TupleType};
 use crate::vm::asm::locate::LocateOffset;
 use crate::vm::core::format::FormatAsm;
 use crate::vm::core::map::MapAsm;
 use crate::vm::core::vector::VEC_HEADER;
 use crate::vm::core::CoreAsm;
-use crate::vm::{CodeGenerationContext, CodeGenerationError, GenerateCode};
+use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
-    ast::utils::strings::ID,
     semantic::{scope::user_types::UserType, EType, SizeOf},
     vm::{
         allocator::{align, MemoryAddress},
@@ -875,14 +873,12 @@ impl GenerateCode for Format {
 #[cfg(test)]
 mod tests {
 
-    use num_traits::Zero;
-
     use super::*;
     use crate::{
         test_extract_variable, test_extract_variable_with, test_statements,
         vm::{
             asm::operation::{GetNumFrom, OpPrimitive},
-            core::{string::STRING_HEADER, vector::VEC_HEADER},
+            core::vector::VEC_HEADER,
         },
     };
 

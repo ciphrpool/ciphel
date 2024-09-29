@@ -1,6 +1,6 @@
-use crate::ast::{expressions::Expression, utils::strings::ID};
+use crate::ast::expressions::Expression;
 
-use super::{block::Block, declaration::PatternVar, Statement};
+use super::block::Block;
 
 pub mod loops_gencode;
 pub mod loops_parse;

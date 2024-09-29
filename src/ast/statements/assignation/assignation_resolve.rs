@@ -111,7 +111,7 @@ impl Desugar<AssignValue> for AssignValue {
 #[cfg(test)]
 mod tests {
 
-    use crate::{ast::TryParse, p_num, semantic::scope::scope::ScopeManager};
+    use crate::{ast::TryParse, p_num};
 
     use super::*;
 

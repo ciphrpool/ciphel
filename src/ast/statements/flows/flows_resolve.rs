@@ -1,7 +1,6 @@
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 use crate::ast::statements::block::Block;
 use crate::ast::statements::Statement;
-use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::PrimitiveType;
 use crate::semantic::Desugar;
 use crate::semantic::{
@@ -11,7 +10,7 @@ use crate::semantic::{
     },
     EType, Resolve, SemanticError, TypeOf,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 impl Resolve for Flow {
     type Output = ();
@@ -348,7 +347,6 @@ mod tests {
     use super::*;
     use crate::ast::TryParse;
     use crate::p_num;
-    use crate::semantic::scope::scope::ScopeManager;
 
     #[test]
     fn valid_if() {

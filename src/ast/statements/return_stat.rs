@@ -1,6 +1,6 @@
 use crate::ast::utils::error::squash;
 use crate::ast::utils::strings::wst_closed;
-use crate::semantic::scope::scope::{ScopeManager, ScopeState};
+use crate::semantic::scope::scope::ScopeState;
 use crate::semantic::{Desugar, Info};
 
 use crate::vm::asm::branch::Goto;
@@ -17,7 +17,7 @@ use crate::{
     },
     semantic::{
         scope::static_types::StaticType, CompatibleWith, EType, Metadata, Resolve, SemanticError,
-        SizeOf, TypeOf,
+        TypeOf,
     },
     vm::asm::Asm,
 };
@@ -28,7 +28,6 @@ use nom::{
     combinator::{map, opt},
     sequence::delimited,
 };
-use nom_supreme::context;
 
 use super::Statement;
 

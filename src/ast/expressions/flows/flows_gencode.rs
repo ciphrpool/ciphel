@@ -1,30 +1,21 @@
 use num_traits::ToBytes;
 
 use std::fmt::Debug;
-use ulid::Ulid;
 
 use crate::ast::statements::block::BlockCommonApi;
 use crate::ast::TryParse;
-use crate::semantic::scope::scope::{ScopeManager, ScopeState, VariableInfo};
+use crate::semantic::scope::scope::{ScopeState, VariableInfo};
 use crate::semantic::scope::static_types::POINTER_SIZE;
-use crate::semantic::{EType, Resolve, SemanticError};
+use crate::semantic::Resolve;
 use crate::vm::asm::branch::{BranchTry, CloseFrame, Return};
-use crate::vm::asm::data;
 use crate::vm::asm::mem::Mem;
 use crate::vm::asm::operation::{Equal, Operation, StrEqual};
 use crate::vm::core::ERROR_VALUE;
 use crate::vm::{CodeGenerationContext, CodeGenerationError, GenerateCode};
 use crate::{
-    ast::expressions::data::{Number, Primitive},
-    semantic::{
-        scope::{
-            static_types::StaticType,
-            user_types::{Enum, Union, UserType},
-        },
-        SizeOf, TypeOf,
-    },
+    semantic::{SizeOf, TypeOf},
     vm::asm::{
-        branch::{BranchIf, Call, Goto, Label},
+        branch::{BranchIf, Goto, Label},
         data::Data,
         Asm,
     },
@@ -472,29 +463,7 @@ impl GenerateCode for TryExpr {
 #[cfg(test)]
 mod tests {
 
-    use crate::{
-        ast::{
-            expressions::{
-                data::{Data, Number, Primitive, Struct},
-                Atomic, Expression,
-            },
-            statements::Statement,
-            TryParse,
-        },
-        clear_stack, p_num,
-        semantic::{
-            scope::{
-                scope::ScopeManager,
-                static_types::{NumberType, PrimitiveType},
-                user_types::{self, UserType},
-            },
-            Resolve,
-        },
-        test_extract_variable, test_extract_variable_with, test_statements, v_num,
-        vm::asm::operation::OpPrimitive,
-    };
-
-    use super::*;
+    use crate::{test_extract_variable, test_statements};
 
     #[test]
     fn valid_if() {

@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    combinator::{cut, map},
+    combinator::map,
     multi::many0,
     sequence::{delimited, pair, terminated},
 };
@@ -15,17 +15,10 @@ use crate::{
             strings::{eater, wst},
         },
     },
-    semantic::{EType, Metadata, Resolve, ResolveFromStruct, SemanticError, SizeOf, TypeOf},
-    vm::{
-        allocator::MemoryAddress,
-        asm::{
-            locate::{Locate, LocateOffsetFromStackPointer},
-            Asm,
-        },
-    },
+    semantic::{EType, Metadata, Resolve, ResolveFromStruct, SemanticError, TypeOf},
 };
 use crate::{
-    semantic::{scope::scope::ScopeManager, Desugar, ResolveNumber},
+    semantic::{Desugar, ResolveNumber},
     vm::GenerateCode,
 };
 

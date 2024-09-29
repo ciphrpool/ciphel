@@ -4,8 +4,7 @@ use ulid::Ulid;
 
 use super::{
     asm::{branch::Label, Asm},
-    external::{Engine, ExternFunction},
-    runtime::RuntimeError,
+    external::Engine,
     scheduler::Executable,
     AsmName, AsmWeight,
 };

@@ -1,23 +1,17 @@
-use crate::ast::utils::strings::ID;
-use crate::e_static;
-use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{
     NumberType, PrimitiveType, StaticType, StrSliceType, StringType,
 };
 use crate::semantic::{EType, ResolveCore, TypeOf};
-use crate::vm::allocator::heap::Heap;
-use crate::vm::allocator::stack::Stack;
-use crate::vm::allocator::{align, MemoryAddress};
+use crate::vm::allocator::MemoryAddress;
 use crate::vm::asm::operation::{OpPrimitive, PopNum};
 use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
 use crate::vm::core::CoreAsm;
 
-use crate::vm::program::Program;
 use crate::vm::runtime::RuntimeError;
 use crate::vm::scheduler::Executable;
 use crate::vm::stdio::StdIO;
-use crate::vm::{CodeGenerationError, GenerateCode};
+use crate::vm::GenerateCode;
 use crate::{
     ast::expressions::Expression,
     semantic::{Resolve, SemanticError},
@@ -366,10 +360,9 @@ pub mod type_printer {
                 static_types::{NumberType, PrimitiveType, StaticType, POINTER_SIZE},
                 user_types::{Enum, Struct, Union, UserType},
             },
-            EType, SizeOf,
+            SizeOf,
         },
         vm::{
-            allocator::MemoryAddress,
             asm::{
                 branch::{BranchIf, Goto, Label},
                 data::Data,
@@ -1126,7 +1119,7 @@ mod tests {
             .find_var_by_name(variable_name, None)
             .expect("The variable should have been found");
 
-        let crate::semantic::scope::scope::VariableInfo { address, ctype, .. } = scope_manager
+        let crate::semantic::scope::scope::VariableInfo { address, .. } = scope_manager
             .find_var_by_id(id)
             .expect("The variable should have been found");
 
@@ -1149,7 +1142,7 @@ mod tests {
             .find_var_by_name(variable_name, None)
             .expect("The variable should have been found");
 
-        let crate::semantic::scope::scope::VariableInfo { address, ctype, .. } = scope_manager
+        let crate::semantic::scope::scope::VariableInfo { address, .. } = scope_manager
             .find_var_by_id(id)
             .expect("The variable should have been found");
 
@@ -1172,7 +1165,7 @@ mod tests {
             .find_var_by_name(variable_name, None)
             .expect("The variable should have been found");
 
-        let crate::semantic::scope::scope::VariableInfo { address, ctype, .. } = scope_manager
+        let crate::semantic::scope::scope::VariableInfo { address, .. } = scope_manager
             .find_var_by_id(id)
             .expect("The variable should have been found");
 

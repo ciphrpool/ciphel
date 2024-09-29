@@ -16,9 +16,8 @@ use crate::{
 use nom::AsBytes;
 use num_traits::{FromBytes, PrimInt, ToBytes};
 
-use super::{
-    math_operation::{comparaison_operator, math_operator, ComparaisonOperator, MathOperator},
-    Program,
+use super::math_operation::{
+    comparaison_operator, math_operator, ComparaisonOperator, MathOperator,
 };
 
 #[derive(Debug, Clone)]
@@ -171,7 +170,7 @@ impl TryInto<OpPrimitive> for EType {
                     PrimitiveType::Char => Ok(OpPrimitive::Char),
                     PrimitiveType::Bool => Ok(OpPrimitive::Bool),
                 },
-                StaticType::StrSlice(StrSliceType) => Ok(OpPrimitive::String),
+                StaticType::StrSlice(_) => Ok(OpPrimitive::String),
                 _ => Err(CodeGenerationError::UnresolvedError),
             },
             EType::User { .. } => Err(CodeGenerationError::UnresolvedError),

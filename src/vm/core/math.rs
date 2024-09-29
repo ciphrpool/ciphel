@@ -5,23 +5,16 @@ use std::f64::NEG_INFINITY;
 
 use num_traits::ToBytes;
 
-use crate::ast::utils::strings::ID;
-use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
 use crate::semantic::ResolveCore;
 use crate::semantic::{EType, TypeOf};
-use crate::vm::allocator::heap::Heap;
-use crate::vm::allocator::stack::Stack;
 use crate::vm::asm::operation::OpPrimitive;
 use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
-use crate::vm::core::CoreAsm;
 
-use crate::vm::program::Program;
 use crate::vm::runtime::RuntimeError;
 use crate::vm::scheduler::Executable;
 use crate::vm::stdio::StdIO;
-use crate::vm::CodeGenerationError;
 use crate::vm::GenerateCode;
 use crate::{
     ast::expressions::Expression,
@@ -579,18 +572,6 @@ impl<E: crate::vm::external::Engine> Executable<E> for MathAsm {
 
 #[cfg(test)]
 mod tests {
-    use std::f64::{
-        consts::{E, PI},
-        NEG_INFINITY,
-    };
-
-    use crate::{
-        ast::{expressions::data::Primitive, statements::Statement, TryParse},
-        semantic::scope::scope::ScopeManager,
-        v_num,
-    };
-
-    use super::*;
 
     // #[test]
     // fn valid_nan() {

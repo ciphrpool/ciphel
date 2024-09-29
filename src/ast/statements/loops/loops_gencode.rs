@@ -1,10 +1,7 @@
-use crate::semantic::scope::scope::ScopeManager;
-use crate::semantic::SizeOf;
 use crate::vm::asm::branch::BranchIf;
 
 use crate::vm::asm::{
     branch::{Goto, Label},
-    mem::Mem,
     Asm,
 };
 use crate::vm::{CodeGenerationContext, GenerateCode};
@@ -190,17 +187,7 @@ impl GenerateCode for WhileLoop {
 #[cfg(test)]
 mod tests {
 
-    use super::*;
-    use crate::ast::TryParse;
-    use crate::semantic::Resolve;
-    use crate::{
-        ast::{expressions::data::Primitive, statements::Statement},
-        semantic::scope::{
-            scope::ScopeManager,
-            static_types::{NumberType, PrimitiveType},
-        },
-    };
-    use crate::{test_extract_variable, test_statements, v_num};
+    use crate::{test_extract_variable, test_statements};
 
     #[test]
     fn valid_for() {

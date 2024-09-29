@@ -7,7 +7,7 @@ use std::fmt::Debug;
 
 use crate::{
     ast::{
-        statements::block::{BlockCommonApi, ClosureBlock, ExprBlock},
+        statements::block::{BlockCommonApi, ExprBlock},
         types::Type,
         utils::strings::ID,
         TryParse,

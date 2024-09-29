@@ -1,11 +1,6 @@
 use super::{Definition, FnDef, TypeDef};
-use crate::semantic::scope::scope::{ScopeManager, Variable, VariableInfo};
-use crate::semantic::SizeOf;
-use crate::vm::allocator::MemoryAddress;
-use crate::vm::{CodeGenerationContext, CodeGenerationError, GenerateCode};
-
-use crate::vm::asm::alloc::Alloc;
-use crate::vm::asm::locate::Locate;
+use crate::semantic::scope::scope::VariableInfo;
+use crate::vm::{CodeGenerationError, GenerateCode};
 
 use crate::vm::asm::{
     branch::{Goto, Label},
@@ -104,13 +99,7 @@ impl GenerateCode for FnDef {
 #[cfg(test)]
 mod tests {
 
-    use super::*;
-
-    use crate::ast::TryParse;
-    use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
-    use crate::semantic::Resolve;
-    use crate::{ast::statements::Statement, semantic::scope::scope::ScopeManager};
-    use crate::{clear_stack, test_extract_variable, test_statements, v_num};
+    use crate::{test_extract_variable, test_statements};
 
     #[test]
     fn valid_fn() {

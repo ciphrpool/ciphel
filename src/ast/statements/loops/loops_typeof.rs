@@ -1,7 +1,6 @@
 use crate::semantic::{EType, Resolve, SemanticError, TypeOf};
 
 use super::{ForLoop, Loop, WhileLoop};
-use crate::semantic::scope::scope::ScopeManager;
 
 impl TypeOf for Loop {
     fn type_of(

@@ -2,10 +2,10 @@ use super::{
     Cases, EnumCase, ExprFlow, IfExpr, MatchExpr, PrimitiveCase, StringCase, TryExpr, UnionCase,
     UnionPattern,
 };
-use crate::ast::expressions::flows::FormatItem;
 use crate::ast::expressions::Atomic;
 use crate::ast::statements::block::BlockCommonApi;
 use crate::ast::TryParse;
+use crate::p_num;
 use crate::semantic::scope::scope::ScopeState;
 use crate::semantic::scope::static_types::{PrimitiveType, TupleType, POINTER_SIZE};
 use crate::semantic::scope::user_types::{Enum, Struct, Union};
@@ -13,12 +13,10 @@ use crate::semantic::{
     scope::{static_types::StaticType, user_types::UserType},
     CompatibleWith, EType, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{Desugar, Info, MergeType, ResolveNumber, SizeOf};
+use crate::semantic::{Desugar, Info, ResolveNumber, SizeOf};
 use crate::vm::GenerateCode;
-use crate::{e_static, p_num};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt::Debug;
-use std::primitive;
 
 impl Resolve for ExprFlow {
     type Output = ();
@@ -756,15 +754,7 @@ impl Desugar<Atomic> for TryExpr {
 #[cfg(test)]
 mod tests {
 
-    use crate::{
-        ast::TryParse,
-        e_static, p_num,
-        semantic::scope::{
-            scope::ScopeManager,
-            static_types::{StaticType, StringType},
-            user_types::{Enum, Struct, Union, UserType},
-        },
-    };
+    use crate::ast::TryParse;
 
     use super::*;
 

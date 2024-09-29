@@ -1,9 +1,6 @@
 use crate::ast::{types::Type, utils::strings::ID};
 
-use super::{
-    block::{Block, FunctionBlock},
-    declaration::TypedVar,
-};
+use super::{block::FunctionBlock, declaration::TypedVar};
 
 pub mod definition_gencode;
 pub mod definition_parse;
