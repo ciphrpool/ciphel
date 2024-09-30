@@ -64,7 +64,7 @@ impl GenerateCode for FnDef {
         if let Some(scope_id) = scope_id {
             // LOCAL FUNCTION
             // store the function label as it is considered a variable
-            let Some((id_external, id_internal)) = self.id else {
+            let Some((id_external, id_internal, _)) = self.id else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
             let Ok(VariableInfo { address, .. }) = scope_manager.find_var_by_id(id_external) else {
@@ -79,7 +79,7 @@ impl GenerateCode for FnDef {
         } else {
             // GLOBAL FUNCTION
             // allocate the function
-            let Some((id_external, id_internal)) = self.id else {
+            let Some((id_external, id_internal, _)) = self.id else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
             // store the function label as it is considered a variable

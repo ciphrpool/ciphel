@@ -1,3 +1,4 @@
+pub const MODULE: &str = "module";
 pub const ENUM: &str = "enum";
 pub const STRUCT: &str = "struct";
 pub const UNION: &str = "union";

@@ -140,7 +140,7 @@ impl Resolve for Variable {
     where
         Self: Sized,
     {
-        let var = scope_manager.find_var_by_name(&self.name, scope_id)?;
+        let var = scope_manager.find_var_by_name(&self.name, None, scope_id)?;
 
         if let Some(scope_id) = scope_id {
             scope_manager.signal_variable_access(&var, scope_id);
@@ -1282,66 +1282,57 @@ impl Resolve for Call {
                 id,
                 is_closure,
             }) => {
-                match path {
-                    Path::Segment(vec) => todo!("module function"),
-                    Path::Empty => {
-                        let function = scope_manager.find_var_by_name(name, scope_id)?;
-
-                        if let Some(scope_id) = scope_id {
-                            scope_manager.signal_variable_access(&function, scope_id);
-                        }
-
-                        let (params, return_type) = match &function.ctype {
-                            EType::Static(StaticType::Closure(ClosureType {
-                                params, ret, ..
-                            })) => {
-                                *is_closure = true;
-                                (params, ret)
-                            }
-                            EType::Static(StaticType::Lambda(LambdaType {
-                                params, ret, ..
-                            })) => {
-                                *is_closure = false;
-                                (params, ret)
-                            }
-                            EType::Static(StaticType::Function(FunctionType {
-                                params,
-                                ret,
-                                ..
-                            })) => {
-                                *is_closure = false;
-                                (params, ret)
-                            }
-                            _ => return Err(SemanticError::ExpectedCallable),
-                        };
-
-                        if params.len() != self.args.args.len() {
-                            return Err(SemanticError::IncorrectArguments);
-                        }
-
-                        let mut params_size = 0;
-                        for (arg, param) in self.args.args.iter_mut().zip(params) {
-                            let _ = arg.resolve::<E>(
-                                scope_manager,
-                                scope_id,
-                                &Some(param.clone()),
-                                &mut None,
-                            )?;
-                            params_size += param.size_of();
-                        }
-                        let _ = self.args.size.insert(params_size);
-
-                        if context.is_some() && *context.as_ref().unwrap() != **return_type {
-                            return Err(SemanticError::IncompatibleTypes);
-                        }
-                        self.metadata.info = Info::Resolved {
-                            context: context.clone(),
-                            signature: Some(return_type.as_ref().clone()),
-                        };
-
-                        let _ = id.insert(function.id);
+                let function = match path {
+                    Path::Segment(vec) => {
+                        scope_manager.find_var_by_name(name, Some(vec.as_slice()), scope_id)?
                     }
+                    Path::Empty => {
+                        let function = scope_manager.find_var_by_name(name, None, scope_id)?;
+                        function
+                    }
+                };
+                if let Some(scope_id) = scope_id {
+                    scope_manager.signal_variable_access(&function, scope_id);
                 }
+
+                let (params, return_type) = match &function.ctype {
+                    EType::Static(StaticType::Closure(ClosureType { params, ret, .. })) => {
+                        *is_closure = true;
+                        (params, ret)
+                    }
+                    EType::Static(StaticType::Lambda(LambdaType { params, ret, .. })) => {
+                        *is_closure = false;
+                        (params, ret)
+                    }
+                    EType::Static(StaticType::Function(FunctionType { params, ret, .. })) => {
+                        *is_closure = false;
+                        (params, ret)
+                    }
+                    _ => return Err(SemanticError::ExpectedCallable),
+                };
+
+                if params.len() != self.args.args.len() {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+
+                let mut params_size = 0;
+                for (arg, param) in self.args.args.iter_mut().zip(params) {
+                    let _ =
+                        arg.resolve::<E>(scope_manager, scope_id, &Some(param.clone()), &mut None)?;
+                    params_size += param.size_of();
+                }
+                let _ = self.args.size.insert(params_size);
+
+                if context.is_some() && *context.as_ref().unwrap() != **return_type {
+                    return Err(SemanticError::IncompatibleTypes);
+                }
+                self.metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(return_type.as_ref().clone()),
+                };
+
+                let _ = id.insert(function.id);
+
                 Ok(())
             }
             LeftCall::ExternCall(ExternCall {

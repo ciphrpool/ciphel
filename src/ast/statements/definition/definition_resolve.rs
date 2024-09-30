@@ -188,9 +188,9 @@ impl Resolve for FnDef {
         let id = scope_manager.register_var(self.name.as_str(), fn_type_sig.clone(), scope_id)?;
 
         let id_internal =
-            scope_manager.register_caller(self.name.as_str(), fn_type_sig, inner_scope)?;
+            scope_manager.register_caller(self.name.as_str(), fn_type_sig.clone(), inner_scope)?;
 
-        let _ = self.id.insert((id, id_internal));
+        let _ = self.id.insert((id, id_internal, fn_type_sig));
         for arg in &self.params {
             let argtype = arg.type_of(scope_manager, scope_id)?;
             let _ =
@@ -461,7 +461,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let function_var = scope_manager
-            .find_var_by_name("main", None)
+            .find_var_by_name("main", None, None)
             .unwrap()
             .clone();
         let function_type = &function_var.ctype;
@@ -502,7 +502,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let function_var = scope_manager
-            .find_var_by_name(&"main", None)
+            .find_var_by_name(&"main", None, None)
             .unwrap()
             .clone();
         let function_type = &function_var.ctype;
@@ -520,11 +520,11 @@ mod tests {
 
         let function_scope = function.scope;
         let x_var = scope_manager
-            .find_var_by_name(&"x", function_scope.scope)
+            .find_var_by_name(&"x", None, function_scope.scope)
             .unwrap();
         assert_eq!(p_num!(U64), x_var.ctype);
         let text_var = scope_manager
-            .find_var_by_name(&"text", function_scope.scope)
+            .find_var_by_name(&"text", None, function_scope.scope)
             .unwrap();
         assert_eq!(e_static!(StaticType::String(StringType())), text_var.ctype);
     }
@@ -554,7 +554,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let function_var = scope_manager
-            .find_var_by_name(&"main", None)
+            .find_var_by_name(&"main", None, None)
             .unwrap()
             .clone();
         let function_type = &function_var.ctype;
@@ -657,7 +657,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let function_var = scope_manager
-            .find_var_by_name(&"main", None)
+            .find_var_by_name(&"main", None, None)
             .unwrap()
             .clone();
         let function_type = &function_var.ctype;

@@ -1,4 +1,7 @@
-use crate::ast::{types::Type, utils::strings::ID};
+use crate::{
+    ast::{types::Type, utils::strings::ID},
+    semantic::EType,
+};
 
 use super::{block::FunctionBlock, declaration::TypedVar};
 
@@ -40,8 +43,8 @@ pub struct EnumDef {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDef {
-    name: String,
-    id: Option<(u64, u64)>,
+    pub name: String,
+    pub id: Option<(u64, u64, EType)>,
     params: Vec<TypedVar>,
     ret: Box<Type>,
     scope: FunctionBlock,

@@ -1116,7 +1116,7 @@ mod tests {
         heap: &crate::vm::allocator::heap::Heap,
     ) -> Option<bool> {
         let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
-            .find_var_by_name(variable_name, None)
+            .find_var_by_name(variable_name, None, None)
             .expect("The variable should have been found");
 
         let crate::semantic::scope::scope::VariableInfo { address, .. } = scope_manager
@@ -1139,7 +1139,7 @@ mod tests {
         heap: &crate::vm::allocator::heap::Heap,
     ) -> Option<char> {
         let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
-            .find_var_by_name(variable_name, None)
+            .find_var_by_name(variable_name, None, None)
             .expect("The variable should have been found");
 
         let crate::semantic::scope::scope::VariableInfo { address, .. } = scope_manager
@@ -1162,7 +1162,7 @@ mod tests {
         heap: &crate::vm::allocator::heap::Heap,
     ) -> Option<f64> {
         let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
-            .find_var_by_name(variable_name, None)
+            .find_var_by_name(variable_name, None, None)
             .expect("The variable should have been found");
 
         let crate::semantic::scope::scope::VariableInfo { address, .. } = scope_manager

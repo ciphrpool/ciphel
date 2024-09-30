@@ -296,7 +296,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let variable = scope_manager.find_var_by_name("x", None).unwrap();
+        let variable = scope_manager.find_var_by_name("x", None, None).unwrap();
         assert_eq!(p_num!(U64), variable.ctype);
 
         let mut decl = Declaration::parse("let x = 1.0;".into()).unwrap().1;
@@ -310,7 +310,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let variable = scope_manager.find_var_by_name("x", None).unwrap();
+        let variable = scope_manager.find_var_by_name("x", None, None).unwrap();
         assert_eq!(p_num!(F64), variable.ctype);
     }
 
@@ -341,10 +341,10 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let variable = scope_manager.find_var_by_name("x", None).unwrap();
+        let variable = scope_manager.find_var_by_name("x", None, None).unwrap();
         assert_eq!(p_num!(I64), variable.ctype);
 
-        let variable = scope_manager.find_var_by_name("y", None).unwrap();
+        let variable = scope_manager.find_var_by_name("y", None, None).unwrap();
         assert_eq!(
             e_static!(StaticType::Primitive(PrimitiveType::Char)),
             variable.ctype
@@ -381,9 +381,9 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let variable = scope_manager.find_var_by_name("x", None).unwrap();
+        let variable = scope_manager.find_var_by_name("x", None, None).unwrap();
         assert_eq!(p_num!(I64), variable.ctype);
-        let variable = scope_manager.find_var_by_name("y", None).unwrap();
+        let variable = scope_manager.find_var_by_name("y", None, None).unwrap();
         assert_eq!(p_num!(I64), variable.ctype);
     }
 }

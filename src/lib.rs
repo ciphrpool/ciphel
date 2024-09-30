@@ -1,5 +1,12 @@
 #![allow(unused_variables)]
-use ast::statements::parse_statements;
+use std::collections::HashMap;
+
+use ast::{
+    modules::{parse_module, Module},
+    statements::parse_statements,
+    TryParse,
+};
+use nom::Finish;
 use semantic::{Resolve, SemanticError};
 
 pub mod ast;
@@ -10,11 +17,16 @@ pub type CiphelResult<T> = Option<T>;
 
 use thiserror::Error;
 use vm::{
-    allocator::heap::Heap, runtime::Runtime, stdio::StdIO, CodeGenerationError, GenerateCode,
+    allocator::heap::Heap,
+    external::ExternThreadIdentifier,
+    runtime::{Runtime, RuntimeError},
+    scheduler::SchedulingPolicy,
+    stdio::StdIO,
+    CodeGenerationError, GenerateCode,
 };
 
 #[derive(Debug, Clone, Error)]
-pub enum CompilationError {
+pub enum CompilationError<TID: ExternThreadIdentifier> {
     #[error("Parsing Error :\n{0}")]
     ParsingError(String),
 
@@ -25,214 +37,102 @@ pub enum CompilationError {
     CodeGen(usize, CodeGenerationError),
 
     #[error("Invalid thread id : {0}")]
-    InvalidTID(usize),
+    InvalidTID(TID),
     #[error("Transaction Error : {0}")]
     TransactionError(&'static str),
 }
 
-// #[derive(Debug, Clone)]
-// pub struct Ciphel {
-//     runtime: Runtime,
-//     heap: Heap,
-//     stdio: StdIO,
-//     scheduler: Scheduler,
-// }
+pub struct Ciphel<E: crate::vm::external::Engine, P: SchedulingPolicy> {
+    pub runtime: Runtime<E, P>,
+    pub heap: Heap,
+    pub stdio: StdIO,
+}
 
-// impl Ciphel {
-//     pub fn new() -> Self {
-//         let (runtime, heap, stdio) = Runtime::new();
-//         Self {
-//             runtime,
-//             heap,
-//             stdio,
-//             scheduler: Scheduler::new(),
-//         }
-//     }
+impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Default for Ciphel<E, P> {
+    fn default() -> Self {
+        Self {
+            runtime: Runtime::default(),
+            heap: Heap::new(),
+            stdio: StdIO::default(),
+        }
+    }
+}
 
-//     pub fn start_arena<E: crate::vm::external::Engine>(
-//         &mut self,
-//         engine: &mut E,
-//     ) -> Result<usize, RuntimeError> {
-//         let main_tid = self.runtime.spawn(vm::vm::Player::P1, engine)?;
-//         Ok(main_tid)
-//     }
+impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Ciphel<E, P> {
+    pub fn import(
+        &mut self,
+        tids: &[E::TID],
+        module: &str,
+        line_offset: usize,
+    ) -> Result<(), CompilationError<E::TID>> {
+        let mut module = parse_module(module.into(), 0)?;
+        for tid in tids {
+            let tid = tid.clone();
+            let vm::runtime::ThreadContext {
+                scope_manager,
+                program,
+                ..
+            } = self
+                .runtime
+                .context_of(&tid)
+                .map_err(|_| CompilationError::InvalidTID::<E::TID>(tid.clone()))?;
 
-//     pub fn available_tids(&self, player: crate::vm::vm::Player) -> Vec<usize> {
-//         match player {
-//             vm::vm::Player::P1 => self
-//                 .runtime
-//                 .p1_manager
-//                 .alive()
-//                 .iter()
-//                 .enumerate()
-//                 .filter(|(_, alive)| !**alive)
-//                 .map(|(i, _)| i)
-//                 .collect(),
-//             vm::vm::Player::P2 => self
-//                 .runtime
-//                 .p2_manager
-//                 .alive()
-//                 .iter()
-//                 .enumerate()
-//                 .filter(|(_, alive)| !**alive)
-//                 .map(|(i, _)| i)
-//                 .collect(),
-//         }
-//     }
+            module
+                .resolve::<E>(scope_manager, None, &(), &mut ())
+                .map_err(|err| CompilationError::SemanticError::<E::TID>(0, err))?;
+            module
+                .gencode::<E>(
+                    scope_manager,
+                    None,
+                    program,
+                    &crate::vm::CodeGenerationContext::default(),
+                )
+                .map_err(|err| CompilationError::CodeGen::<E::TID>(0, err))?;
+            scope_manager.modules.push(module.clone());
+        }
+        Ok(())
+    }
 
-//     pub fn compile_with_transaction<E: crate::vm::external::Engine>(
-//         &mut self,
-//         player: crate::vm::vm::Player,
-//         tid: usize,
-//         src_code: &str,
-//         line_offset: usize,
-//     ) -> Result<(), CompilationError> {
-//         let (scope_manager, stack, program) = self
-//             .runtime
-//             .get_mut(player, tid)
-//             .map_err(|_| CompilationError::InvalidTID(tid))?;
-//         {
-//             let _ = scope_manager.open_transaction()?;
-//         }
-//         program.in_transaction = TransactionState::OPEN;
+    pub fn compile(
+        &mut self,
+        tid: E::TID,
+        src_code: &str,
+        line_offset: usize,
+    ) -> Result<(), CompilationError<E::TID>> {
+        let mut statements = parse_statements(src_code.into(), line_offset)?;
+        let vm::runtime::ThreadContext {
+            scope_manager,
+            program,
+            ..
+        } = self
+            .runtime
+            .context_of(&tid)
+            .map_err(|_| CompilationError::InvalidTID::<E::TID>(tid))?;
 
-//         let mut statements = parse_statements(src_code.into(), line_offset)?;
-//         for statement in &mut statements {
-//             let _ = statement
-//                 .resolve::<E>(scope_manager, None, &None, &mut ())
-//                 .map_err(|e| CompilationError::SemanticError(statement.line, e))?;
-//         }
-//         program.statements_buffer.extend(statements);
-//         Ok(())
-//     }
+        for statement in statements.iter_mut() {
+            statement
+                .resolve::<E>(scope_manager, None, &None, &mut ())
+                .map_err(|err| CompilationError::SemanticError::<E::TID>(statement.line, err))?;
+        }
 
-//     pub fn commit_transaction(
-//         &mut self,
-//         player: crate::vm::vm::Player,
-//         tid: usize,
-//     ) -> Result<(), CompilationError> {
-//         let (scope_manager, stack, program) = self
-//             .runtime
-//             .get_mut(player, tid)
-//             .map_err(|_| CompilationError::InvalidTID(tid))?;
+        for statement in statements {
+            statement
+                .gencode::<E>(
+                    scope_manager,
+                    None,
+                    program,
+                    &crate::vm::CodeGenerationContext::default(),
+                )
+                .map_err(|err| CompilationError::CodeGen::<E::TID>(statement.line, err))?;
+        }
+        Ok(())
+    }
 
-//         if program.in_transaction == TransactionState::CLOSE {
-//             return Err(CompilationError::TransactionError(
-//                 "Cannot commit in a closed transaction",
-//             ));
-//         }
-//         {
-//             let _ = scope_manager.commit_transaction()?;
-//         }
-
-//         program.in_transaction = TransactionState::COMMITED;
-//         Ok(())
-//     }
-
-//     pub fn reject_transaction(
-//         &mut self,
-//         player: crate::vm::vm::Player,
-//         tid: usize,
-//     ) -> Result<(), CompilationError> {
-//         let (scope_manager, stack, program) = self
-//             .runtime
-//             .get_mut(player, tid)
-//             .map_err(|_| CompilationError::InvalidTID(tid))?;
-
-//         if program.in_transaction == TransactionState::CLOSE {
-//             return Err(CompilationError::TransactionError(
-//                 "Cannot reject in closed transaction",
-//             ));
-//         }
-//         {
-//             let _ = scope_manager.reject_transaction()?;
-//             // let _ = scope_manager.close_transaction()?;
-//         }
-//         program.statements_buffer.clear();
-//         program.in_transaction = TransactionState::CLOSE;
-//         Ok(())
-//     }
-
-//     pub fn push_compilation(
-//         &mut self,
-//         player: crate::vm::vm::Player,
-//         tid: usize,
-//     ) -> Result<(), CompilationError> {
-//         let (scope_manager, stack, program) = self
-//             .runtime
-//             .get_mut(player, tid)
-//             .map_err(|_| CompilationError::InvalidTID(tid))?;
-
-//         if program.in_transaction != TransactionState::COMMITED {
-//             return Err(CompilationError::TransactionError(
-//                 "Cannot push without a commit",
-//             ));
-//         }
-
-//         let statements: Vec<WithLine<Statement>> = program.statements_buffer.drain(..).collect();
-
-//         for statement in statements {
-//             let _ = statement
-//                 .gencode::<E>(
-//                     scope_manager,
-//                     None,
-//                     program,
-//                     &crate::vm::CodeGenerationContext::default(),
-//                 )
-//                 .map_err(|e| CompilationError::CodeGen(statement.line, e))?;
-//         }
-
-//         Ok(())
-//     }
-
-//     pub fn compile<E: crate::vm::external::Engine>(
-//         &mut self,
-//         player: crate::vm::vm::Player,
-//         tid: usize,
-//         src_code: &str,
-//     ) -> Result<(), CompilationError> {
-//         let (scope_manager, stack, program) = self
-//             .runtime
-//             .get_mut(player, tid)
-//             .map_err(|_| CompilationError::InvalidTID(tid))?;
-
-//         let mut statements = parse_statements(src_code.into(), 0)?;
-
-//         for statement in &mut statements {
-//             let _ = statement
-//                 .resolve::<E>(scope_manager, None, &None, &mut ())
-//                 .map_err(|e| CompilationError::SemanticError(statement.line, e))?;
-//         }
-
-//         for statement in &statements {
-//             let _ = statement
-//                 .gencode::<E>(
-//                     scope_manager,
-//                     None,
-//                     program,
-//                     &crate::vm::CodeGenerationContext::default(),
-//                 )
-//                 .map_err(|e| CompilationError::CodeGen(statement.line, e))?;
-//         }
-
-//         Ok(())
-//     }
-
-//     pub fn run<E: crate::vm::external::Engine>(
-//         &mut self,
-//         engine: &mut E,
-//     ) -> Result<(), RuntimeError> {
-//         self.scheduler.prepare(&mut self.runtime);
-
-//         self.scheduler.run_major_frame(
-//             &mut self.runtime,
-//             &mut self.heap,
-//             &mut self.stdio,
-//             engine,
-//         )?;
-//         Ok(())
-//     }
-// }
+    pub fn run(&mut self, engine: &mut E) -> Result<(), RuntimeError> {
+        let _ = self.runtime.run(&mut self.heap, &mut self.stdio, engine)?;
+        Ok(())
+    }
+}
 
 pub fn test_extract_variable_with(
     variable_name: &str,
@@ -246,7 +146,7 @@ pub fn test_extract_variable_with(
     heap: &crate::vm::allocator::heap::Heap,
 ) {
     let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
-        .find_var_by_name(variable_name, None)
+        .find_var_by_name(variable_name, None, None)
         .expect("The variable should have been found");
     let crate::semantic::scope::scope::VariableInfo { address, .. } = scope_manager
         .find_var_by_id(id)
@@ -266,7 +166,7 @@ pub fn test_extract_variable<N: num_traits::PrimInt>(
     heap: &crate::vm::allocator::heap::Heap,
 ) -> Option<N> {
     let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
-        .find_var_by_name(variable_name, None)
+        .find_var_by_name(variable_name, None, None)
         .expect("The variable should have been found");
 
     let crate::semantic::scope::scope::VariableInfo { address, .. } = scope_manager
@@ -294,7 +194,8 @@ pub fn test_statements<E: crate::vm::external::Engine>(
         &vm::allocator::heap::Heap,
     ) -> bool,
 ) {
-    let mut statements = parse_statements(input.into(), 0).expect("Parsing should have succeeded");
+    let mut statements =
+        parse_statements::<E::TID>(input.into(), 0).expect("Parsing should have succeeded");
 
     let mut heap = Heap::new();
     let mut stdio = StdIO::default();

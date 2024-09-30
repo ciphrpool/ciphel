@@ -565,7 +565,7 @@ mod tests {
         runtime: &mut Runtime<E, QueuePolicy>,
     ) {
         let mut statements =
-            parse_statements(input.into(), 0).expect("Parsing should have succeeded");
+            parse_statements::<E::TID>(input.into(), 0).expect("Parsing should have succeeded");
 
         let ThreadContext {
             scope_manager,

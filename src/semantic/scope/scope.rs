@@ -6,6 +6,7 @@ use std::{
 use ulid::Ulid;
 
 use crate::{
+    ast::modules::Module,
     semantic::{EType, SemanticError, SizeOf},
     vm::{allocator::MemoryAddress, CodeGenerationError},
     CompilationError,
@@ -157,6 +158,8 @@ pub struct FrameMapping {
 
 #[derive(Debug, Clone)]
 pub struct ScopeManager {
+    pub modules: Vec<Module>,
+
     vars: HashMap<u64, VariableInfo>,
     types: Vec<TypeInfo>,
     scope_branches: HashMap<u128, Vec<u128>>, // parent scope of a given scope (key)
@@ -182,21 +185,12 @@ impl Default for ScopeManager {
             scope_lookup: HashMap::default(),
             scope_states: HashMap::default(),
             global_mapping: GlobalMapping::default(),
+            modules: Vec::default(),
         }
     }
 }
 
 impl ScopeManager {
-    pub fn open_transaction(&mut self) -> Result<(), CompilationError> {
-        todo!()
-    }
-    pub fn commit_transaction(&mut self) -> Result<(), CompilationError> {
-        todo!()
-    }
-    pub fn reject_transaction(&mut self) -> Result<(), CompilationError> {
-        todo!()
-    }
-
     pub fn spawn(&mut self, parent: Option<u128>) -> Result<u128, SemanticError> {
         let scope_id = Ulid::new().0;
 
@@ -410,8 +404,17 @@ impl ScopeManager {
     pub fn find_var_by_name(
         &self,
         name: &str,
+        path: Option<&[String]>,
         scope: Option<u128>,
     ) -> Result<Variable, SemanticError> {
+        if let Some(path) = path {
+            return self
+                .modules
+                .iter()
+                .find_map(|module| module.find_var(path, name))
+                .ok_or(SemanticError::UnknownVar(name.to_string()));
+        }
+
         match scope {
             Some(scope) => {
                 let Some(branch) = self.scope_branches.get(&scope) else {

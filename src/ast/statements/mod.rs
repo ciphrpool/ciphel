@@ -3,7 +3,7 @@ use nom::{branch::alt, combinator::map, multi::many0, Finish, Parser};
 use self::return_stat::Return;
 use crate::{
     semantic::{Desugar, Metadata},
-    vm::GenerateCode,
+    vm::{external::ExternThreadIdentifier, GenerateCode},
     CompilationError,
 };
 
@@ -88,10 +88,10 @@ pub enum Statement {
     Return(Return),
 }
 
-pub fn parse_statements(
+pub fn parse_statements<TID: ExternThreadIdentifier>(
     input: Span,
     line_offset: usize,
-) -> Result<Vec<WithLine<Statement>>, CompilationError> {
+) -> Result<Vec<WithLine<Statement>>, CompilationError<TID>> {
     let mut parser = ws(many0(|input| {
         let (input, statement) = Statement::parse(input)?;
         let line = input.location_line();

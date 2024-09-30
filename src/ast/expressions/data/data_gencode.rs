@@ -736,47 +736,44 @@ impl GenerateCode for Call {
                 path: CompletePath { path, name },
                 id,
                 is_closure,
-            }) => match path {
-                Path::Segment(vec) => todo!("module function"),
-                Path::Empty => {
-                    let Some(id) = id else {
-                        return Err(CodeGenerationError::UnresolvedError);
-                    };
-                    let Some(param_size) = self.args.size else {
-                        return Err(CodeGenerationError::UnresolvedError);
-                    };
-                    let Ok(crate::semantic::scope::scope::VariableInfo { address, .. }) =
-                        scope_manager.find_var_by_id(*id)
-                    else {
-                        return Err(CodeGenerationError::Unlocatable);
-                    };
-                    let Ok(address) = address.clone().try_into() else {
-                        return Err(CodeGenerationError::Unlocatable);
-                    };
+            }) => {
+                let Some(id) = id else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                let Some(param_size) = self.args.size else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                let Ok(crate::semantic::scope::scope::VariableInfo { address, .. }) =
+                    scope_manager.find_var_by_id(*id)
+                else {
+                    return Err(CodeGenerationError::Unlocatable);
+                };
+                let Ok(address) = address.clone().try_into() else {
+                    return Err(CodeGenerationError::Unlocatable);
+                };
 
-                    for arg in self.args.args.iter() {
-                        arg.gencode::<E>(scope_manager, scope_id, instructions, context)?;
-                    }
-
-                    // call function stored in this address
-                    instructions.push(Asm::Access(Access::Static {
-                        address,
-                        size: POINTER_SIZE,
-                    }));
-
-                    if *is_closure {
-                        instructions.push(Asm::Call(crate::vm::asm::branch::Call::Closure {
-                            param_size,
-                        }));
-                    } else {
-                        instructions.push(Asm::Call(crate::vm::asm::branch::Call::Function {
-                            param_size,
-                        }));
-                    }
-
-                    Ok(())
+                for arg in self.args.args.iter() {
+                    arg.gencode::<E>(scope_manager, scope_id, instructions, context)?;
                 }
-            },
+
+                // call function stored in this address
+                instructions.push(Asm::Access(Access::Static {
+                    address,
+                    size: POINTER_SIZE,
+                }));
+
+                if *is_closure {
+                    instructions.push(Asm::Call(crate::vm::asm::branch::Call::Closure {
+                        param_size,
+                    }));
+                } else {
+                    instructions.push(Asm::Call(crate::vm::asm::branch::Call::Function {
+                        param_size,
+                    }));
+                }
+
+                Ok(())
+            }
             super::LeftCall::ExternCall(ExternCall {
                 path: CompletePath { path, name },
             }) => {
