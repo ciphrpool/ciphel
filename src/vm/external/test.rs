@@ -1,7 +1,6 @@
 use crate::{
-    semantic::{CompatibleWith, Resolve},
     vm::{
-        allocator::MemoryAddress, asm::operation::PopNum, scheduler::Executable, AsmName, AsmWeight,
+        asm::operation::PopNum, scheduler::Executable, AsmName, AsmWeight,
     },
 };
 
@@ -80,7 +79,7 @@ impl ExternResolve for DefaultExternFunction {
         scope_id: Option<u128>,
         params: &mut Vec<crate::ast::expressions::Expression>,
     ) -> Result<crate::semantic::EType, crate::semantic::SemanticError> {
-        todo!()
+        unimplemented!()
     }
 }
 impl<E: Engine> ExternFunction<E> for DefaultExternFunction {}

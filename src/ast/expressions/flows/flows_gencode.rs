@@ -494,7 +494,7 @@ impl GenerateCode for TryExpr {
 #[cfg(test)]
 mod tests {
 
-    use crate::{test_extract_variable, test_statements, vm::external::test};
+    use crate::{test_extract_variable, test_statements};
 
     #[test]
     fn valid_if() {

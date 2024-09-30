@@ -165,7 +165,7 @@ pub fn parse_module<TID: ExternThreadIdentifier>(
 mod tests {
     use crate::{test_extract_variable, Ciphel};
 
-    use super::*;
+    
 
     #[test]
     fn valid_module() {

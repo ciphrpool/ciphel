@@ -27,7 +27,6 @@ macro_rules! perform_operation {
                 .ok_or(RuntimeError::MathError)?
                 .to_le_bytes(),
             MathOperator::Add => {
-                // dbg!($left,$right);
                 ($left as $cast_left)
                 .checked_add($right as $cast_right)
                 .ok_or(RuntimeError::MathError)?

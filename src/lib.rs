@@ -1,12 +1,9 @@
 #![allow(unused_variables)]
-use std::collections::HashMap;
 
 use ast::{
-    modules::{parse_module, Module},
+    modules::{parse_module},
     statements::parse_statements,
-    TryParse,
 };
-use nom::Finish;
 use semantic::{Resolve, SemanticError};
 
 pub mod ast;

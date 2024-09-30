@@ -9,7 +9,6 @@ use crate::{
     ast::modules::Module,
     semantic::{EType, SemanticError, SizeOf},
     vm::{allocator::MemoryAddress, CodeGenerationError},
-    CompilationError,
 };
 
 use super::{static_types::POINTER_SIZE, user_types::UserType};

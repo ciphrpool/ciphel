@@ -288,7 +288,6 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
             if ThreadState::RUNNING != *state {
                 continue;
             }
-            dbg!((tid, &state));
 
             scheduler.policy.init_watchdog();
 
@@ -319,7 +318,6 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         }
 
         let _ = signal_handler.commit(self)?;
-        dbg!("END MAF");
         Ok(())
     }
 }
