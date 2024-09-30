@@ -744,7 +744,6 @@ impl GenerateCode for Call {
                     let Some(param_size) = self.args.size else {
                         return Err(CodeGenerationError::UnresolvedError);
                     };
-
                     let Ok(crate::semantic::scope::scope::VariableInfo { address, .. }) =
                         scope_manager.find_var_by_id(*id)
                     else {

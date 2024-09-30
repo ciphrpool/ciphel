@@ -25,7 +25,7 @@ impl Resolve for Declaration {
                 let var_type = value.signature.type_of(&scope_manager, scope_id)?;
 
                 let var_id = scope_manager.register_var(value.name.as_str(), var_type, scope_id)?;
-                value.id.insert(var_id);
+                let _ = value.id.insert(var_id);
                 Ok(())
             }
             Declaration::Assigned {
@@ -66,8 +66,39 @@ impl Resolve for Declaration {
                 let _ = left.resolve::<E>(scope_manager, scope_id, &Some(right_type), &mut ())?;
                 Ok(())
             }
-            Declaration::RecClosure { left, right } => {
-                todo!()
+            Declaration::RecClosure {
+                name,
+                id,
+                signature,
+                right,
+            } => {
+                let _ = signature.resolve::<E>(scope_manager, scope_id, &(), extra)?;
+                let fn_type @ EType::Static(StaticType::Closure(_)) =
+                    signature.type_of(scope_manager, scope_id)?
+                else {
+                    return Err(SemanticError::ExpectedCallable);
+                };
+                let _ = right.name.insert(name.clone());
+                let _ = right.resolve::<E>(scope_manager, scope_id, &Some(fn_type), extra)?;
+                *id = right.id;
+                Ok(())
+            }
+            Declaration::RecLambda {
+                name,
+                id,
+                signature,
+                right,
+            } => {
+                let _ = signature.resolve::<E>(scope_manager, scope_id, &(), extra)?;
+                let fn_type @ EType::Static(StaticType::Lambda(_)) =
+                    signature.type_of(scope_manager, scope_id)?
+                else {
+                    return Err(SemanticError::ExpectedCallable);
+                };
+                let _ = right.name.insert(name.clone());
+                let _ = right.resolve::<E>(scope_manager, scope_id, &Some(fn_type), extra)?;
+                *id = right.id;
+                Ok(())
             }
         }
     }
@@ -87,7 +118,24 @@ impl Desugar<Statement> for Declaration {
                 }
                 Ok(None)
             }
-            Declaration::RecClosure { left, right } => todo!(),
+            Declaration::RecClosure {
+                name,
+                id,
+                signature,
+                right,
+            } => {
+                let _ = right.desugar::<E>(scope_manager, scope_id)?;
+                Ok(None)
+            }
+            Declaration::RecLambda {
+                name,
+                id,
+                signature,
+                right,
+            } => {
+                let _ = right.desugar::<E>(scope_manager, scope_id)?;
+                Ok(None)
+            }
         }
     }
 }

@@ -28,8 +28,8 @@ pub trait ExternIO {
     fn stdout_print(&mut self, content: String);
     fn stdout_println(&mut self, content: String);
     fn stderr_print(&mut self, content: String);
-    fn stdin_scan(&mut self) -> Option<String>;
-    fn stdin_request(&mut self);
+    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String>;
+    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID);
     fn stdasm_print(&mut self, content: String);
 }
 

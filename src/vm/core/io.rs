@@ -279,7 +279,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
                 }
             }
             IOAsm::RequestScan => {
-                stdio.stdin.request(engine);
+                stdio.stdin.request(context.tid.clone(), engine);
                 fn callback<E: crate::vm::external::Engine>(
                     response: crate::vm::signal::SignalResult<E>,
                     stack: &mut crate::vm::allocator::stack::Stack,

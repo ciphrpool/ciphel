@@ -64,10 +64,10 @@ impl GenerateCode for FnDef {
         if let Some(scope_id) = scope_id {
             // LOCAL FUNCTION
             // store the function label as it is considered a variable
-            let Some(id) = self.id else {
+            let Some((id_external, id_internal)) = self.id else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
-            let Ok(VariableInfo { address, .. }) = scope_manager.find_var_by_id(id) else {
+            let Ok(VariableInfo { address, .. }) = scope_manager.find_var_by_id(id_external) else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
             instructions.push(Asm::Mem(Mem::Store {
@@ -79,11 +79,11 @@ impl GenerateCode for FnDef {
         } else {
             // GLOBAL FUNCTION
             // allocate the function
-            let Some(id) = self.id else {
+            let Some((id_external, id_internal)) = self.id else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
             // store the function label as it is considered a variable
-            let address = scope_manager.alloc_global_var_by_id(id)?;
+            let address = scope_manager.alloc_global_var_by_id(id_external)?;
             instructions.push(Asm::Mem(Mem::Store {
                 size: 8,
                 address: (address)
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn valid_fn() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::DbgGameEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,

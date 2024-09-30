@@ -185,14 +185,17 @@ impl Resolve for FnDef {
         }));
 
         // Register parameters, add as first parameter the function pointer
-        let id = scope_manager.register_parameter(self.name.as_str(), fn_type_sig, scope_id)?;
+        let id = scope_manager.register_var(self.name.as_str(), fn_type_sig.clone(), scope_id)?;
+
+        let id_internal =
+            scope_manager.register_caller(self.name.as_str(), fn_type_sig, inner_scope)?;
+
+        let _ = self.id.insert((id, id_internal));
         for arg in &self.params {
             let argtype = arg.type_of(scope_manager, scope_id)?;
             let _ =
                 scope_manager.register_parameter(arg.name.as_str(), argtype, Some(inner_scope))?;
         }
-
-        let _ = self.id.insert(id);
 
         let _ = self
             .scope

@@ -41,7 +41,7 @@ pub struct EnumDef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDef {
     name: String,
-    id: Option<u64>,
+    id: Option<(u64, u64)>,
     params: Vec<TypedVar>,
     ret: Box<Type>,
     scope: FunctionBlock,

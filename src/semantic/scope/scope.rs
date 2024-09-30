@@ -38,6 +38,7 @@ pub enum VariableState {
     Global,
     Local,
     Parameter,
+    Function,
 }
 
 #[derive(Debug, Clone)]
@@ -359,6 +360,39 @@ impl ScopeManager {
                 scope,
                 address: VariableAddress::default(),
                 state: VariableState::Parameter,
+            },
+        );
+        Ok(var_id)
+    }
+
+    pub fn register_caller(
+        &mut self,
+        name: &str,
+        ctype: EType,
+        scope: u128,
+    ) -> Result<u64, SemanticError> {
+        let count = self
+            .vars
+            .values()
+            .filter(|v| v.name == name)
+            .map(|v| v.count)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let var_id = ScopeManager::hash_id(name, count, Some(scope));
+
+        self.vars.insert(
+            var_id,
+            VariableInfo {
+                id: var_id,
+                name: name.to_string(),
+                count,
+                is_global: false,
+                marked_as_closed_var: ClosedMarker::Open,
+                ctype,
+                scope: Some(scope),
+                address: VariableAddress::Local(0),
+                state: VariableState::Function,
             },
         );
         Ok(var_id)

@@ -123,6 +123,8 @@ pub struct Closure {
     params: Vec<ClosureParam>,
     pub block: ClosureBlock,
     pub repr_data: Option<ClosureReprData>,
+    pub name: Option<String>,
+    pub id: Option<u64>,
     pub metadata: Metadata,
 }
 
@@ -130,6 +132,8 @@ pub struct Closure {
 pub struct Lambda {
     params: Vec<ClosureParam>,
     pub block: LambdaBlock,
+    pub name: Option<String>,
+    pub id: Option<u64>,
     pub metadata: Metadata,
 }
 

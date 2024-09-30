@@ -1,4 +1,7 @@
-use crate::ast::{expressions::data::Closure, types::Type};
+use crate::ast::{
+    expressions::data::{Closure, Lambda},
+    types::{ClosureType, LambdaType, Type},
+};
 
 use super::assignation::AssignValue;
 
@@ -15,8 +18,16 @@ pub enum Declaration {
         right: AssignValue,
     },
     RecClosure {
-        left: TypedVar,
+        name: String,
+        id: Option<u64>,
+        signature: ClosureType,
         right: Closure,
+    },
+    RecLambda {
+        name: String,
+        id: Option<u64>,
+        signature: LambdaType,
+        right: Lambda,
     },
 }
 #[derive(Debug, Clone, PartialEq)]

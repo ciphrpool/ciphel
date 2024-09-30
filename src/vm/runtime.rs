@@ -79,6 +79,7 @@ impl<TID: ExternThreadIdentifier> Default for ThreadState<TID> {
 impl<TID: ExternThreadIdentifier> ThreadState<TID> {
     pub fn init_maf<E: crate::vm::external::Engine<TID = TID>>(
         &mut self,
+        tid: E::TID,
         snapshot: &RuntimeSnapshot<E::TID>,
         stdio: &mut super::stdio::StdIO,
         engine: &mut E,
@@ -102,7 +103,7 @@ impl<TID: ExternThreadIdentifier> ThreadState<TID> {
             }
             ThreadState::WAITING => {}
             ThreadState::WAITING_STDIN => {
-                if let Some(data) = engine.stdin_scan() {
+                if let Some(data) = engine.stdin_scan(tid) {
                     *self = ThreadState::RUNNING;
                     stdio.stdin.write(data);
                 }
@@ -264,7 +265,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         let mut signal_handler = SignalHandler::default();
         let snapshot = self.snapshot();
         for (tid, ThreadContext { state, .. }) in self.contexts.iter_mut() {
-            state.init_maf(&snapshot, stdio, engine);
+            state.init_maf(tid.clone(), &snapshot, stdio, engine);
         }
         signal_handler.init(snapshot);
 

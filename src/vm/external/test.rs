@@ -80,10 +80,10 @@ impl ExternIO for NoopGameEngine {
 
     fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan(&mut self) -> Option<String> {
+    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
         None
     }
-    fn stdin_request(&mut self) {}
+    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
 
     fn stdasm_print(&mut self, content: String) {}
 }
@@ -138,10 +138,10 @@ impl ExternIO for StdoutTestGameEngine {
     }
     fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan(&mut self) -> Option<String> {
+    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
         None
     }
-    fn stdin_request(&mut self) {}
+    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
 
     fn stdasm_print(&mut self, content: String) {
         // println!("{}", content);
@@ -198,14 +198,14 @@ impl ExternIO for StdinTestGameEngine {
     }
     fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan(&mut self) -> Option<String> {
+    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
         if self.in_buf.is_empty() {
             None
         } else {
             Some(self.in_buf.clone())
         }
     }
-    fn stdin_request(&mut self) {}
+    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
 
     fn stdasm_print(&mut self, content: String) {
         println!("{}", content);
@@ -263,10 +263,10 @@ impl ExternIO for DbgGameEngine {
         eprintln!("{}", content);
     }
 
-    fn stdin_scan(&mut self) -> Option<String> {
+    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
         Some("Hello World".to_string())
     }
-    fn stdin_request(&mut self) {}
+    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
 
     fn stdasm_print(&mut self, content: String) {
         println!("{}", content);
@@ -320,10 +320,10 @@ impl ExternIO for ThreadTestGameEngine {
 
     fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan(&mut self) -> Option<String> {
+    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
         None
     }
-    fn stdin_request(&mut self) {}
+    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
 
     fn stdasm_print(&mut self, content: String) {
         println!("{}", content);

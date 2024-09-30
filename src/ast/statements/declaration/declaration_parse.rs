@@ -7,9 +7,9 @@ use nom::{
 use nom_supreme::ParserExt;
 
 use crate::ast::{
-    expressions::data::Closure,
+    expressions::data::{Closure, Lambda},
     statements::assignation::AssignValue,
-    types::Type,
+    types::{ClosureType, LambdaType, Type},
     utils::{
         error::squash,
         io::{PResult, Span},
@@ -46,11 +46,43 @@ impl TryParse for Declaration {
                 ),
                 map(
                     separated_pair(
-                        preceded(wst_closed(lexem::REC), TypedVar::parse),
+                        preceded(
+                            wst_closed(lexem::REC),
+                            separated_pair(
+                                parse_id,
+                                wst(lexem::COLON),
+                                ClosureType::parse.context("Invalid type"),
+                            ),
+                        ),
                         wst(lexem::EQUAL),
                         Closure::parse,
                     ),
-                    |(left, right)| Declaration::RecClosure { left, right },
+                    |((name, signature), right)| Declaration::RecClosure {
+                        id: None,
+                        name,
+                        signature,
+                        right,
+                    },
+                ),
+                map(
+                    separated_pair(
+                        preceded(
+                            wst_closed(lexem::REC),
+                            separated_pair(
+                                parse_id,
+                                wst(lexem::COLON),
+                                LambdaType::parse.context("Invalid type"),
+                            ),
+                        ),
+                        wst(lexem::EQUAL),
+                        Lambda::parse,
+                    ),
+                    |((name, signature), right)| Declaration::RecLambda {
+                        id: None,
+                        name,
+                        signature,
+                        right,
+                    },
                 ),
             ))),
         )(input)

@@ -105,8 +105,64 @@ impl GenerateCode for Declaration {
                 }
                 store_right_side(left, right, scope_manager, None, instructions, context)
             }
-            Declaration::RecClosure { left, right } => todo!(),
-            // }
+            Declaration::RecClosure {
+                name,
+                id,
+                signature,
+                right,
+            } => {
+                let Some(id) = id else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                let Some(right_type) = right.metadata.signature() else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                if scope_manager.is_var_global(*id) {
+                    let _ = scope_manager.alloc_global_var_by_id(*id)?;
+                }
+
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let Some(VariableInfo { address, .. }) = scope_manager.find_var_by_id(*id).ok()
+                else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Asm::Mem(Mem::Store {
+                    size: right_type.size_of(),
+                    address: (*address)
+                        .try_into()
+                        .map_err(|_| CodeGenerationError::UnresolvedError)?,
+                }));
+                Ok(())
+            }
+            Declaration::RecLambda {
+                name,
+                id,
+                signature,
+                right,
+            } => {
+                let Some(id) = id else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                let Some(right_type) = right.metadata.signature() else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                if scope_manager.is_var_global(*id) {
+                    let _ = scope_manager.alloc_global_var_by_id(*id)?;
+                }
+
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let Some(VariableInfo { address, .. }) = scope_manager.find_var_by_id(*id).ok()
+                else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Asm::Mem(Mem::Store {
+                    size: right_type.size_of(),
+                    address: (*address)
+                        .try_into()
+                        .map_err(|_| CodeGenerationError::UnresolvedError)?,
+                }));
+                Ok(())
+            } // }
         }
     }
 }
@@ -199,6 +255,38 @@ mod tests {
         
         let Test {a,b,c} = Test {a:9,b:10,c:11};
         
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_rec_functions() {
+        let mut engine = crate::vm::external::test::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 55);
+            true
+        }
+
+        test_statements(
+            r##"
+        fn fibonacci(x:u64) -> u64 {
+            if x == 0u64 {
+                return 0;
+            } else if x == 1u64 or x == 2u64 {
+                return 1;
+            }
+            return fibonacci(x-1) + fibonacci(x-2);
+        }
+        let res1 = fibonacci(10);
         "##,
             &mut engine,
             assert_fn,

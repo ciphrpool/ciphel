@@ -197,10 +197,10 @@ impl StdIn {
         self.valid = true;
         self.data.push_str(&content);
     }
-    pub fn request<E: crate::vm::external::Engine>(&mut self, engine: &mut E) {
+    pub fn request<E: crate::vm::external::Engine>(&mut self, tid: E::TID, engine: &mut E) {
         self.data.clear();
         self.valid = false;
-        engine.stdin_request();
+        engine.stdin_request(tid);
     }
     pub fn read<E: crate::vm::external::Engine>(&mut self, engine: &mut E) -> Option<String> {
         if !self.valid {

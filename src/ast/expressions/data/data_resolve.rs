@@ -655,6 +655,15 @@ impl Resolve for Closure {
                     return Err(SemanticError::IncompatibleTypes);
                 };
 
+                // Register parameters, add as first parameter the function pointer
+                if let Some(name) = &self.name {
+                    let id = scope_manager.register_parameter(
+                        name.as_str(),
+                        context.clone(),
+                        Some(inner_scope),
+                    )?;
+                    let _ = self.id.insert(id);
+                }
                 for (param, expected_param) in self.params.iter_mut().zip(params) {
                     let _ = param.resolve::<E>(
                         scope_manager,
@@ -788,7 +797,15 @@ impl Resolve for Lambda {
                 let EType::Static(StaticType::Lambda(LambdaType { params, ret })) = context else {
                     return Err(SemanticError::IncompatibleTypes);
                 };
-
+                // Register parameters, add as first parameter the function pointer
+                if let Some(name) = &self.name {
+                    let id = scope_manager.register_parameter(
+                        name.as_str(),
+                        context.clone(),
+                        Some(inner_scope),
+                    )?;
+                    let _ = self.id.insert(id);
+                }
                 for (param, expected_param) in self.params.iter_mut().zip(params) {
                     let _ = param.resolve::<E>(
                         scope_manager,

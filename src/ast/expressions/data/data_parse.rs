@@ -251,6 +251,8 @@ impl TryParse for Closure {
                 params,
                 block,
                 repr_data: None,
+                name: None,
+                id: None,
                 metadata: Metadata::default(),
             },
         )(input)
@@ -271,6 +273,8 @@ impl TryParse for Lambda {
             |(params, block)| Lambda {
                 params,
                 block,
+                name: None,
+                id: None,
                 metadata: Metadata::default(),
             },
         )(input)
