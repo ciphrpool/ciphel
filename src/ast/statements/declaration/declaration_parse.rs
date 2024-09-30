@@ -55,7 +55,7 @@ impl TryParse for Declaration {
                             ),
                         ),
                         wst(lexem::EQUAL),
-                        Closure::parse,
+                        terminated(Closure::parse, wst(lexem::SEMI_COLON)),
                     ),
                     |((name, signature), right)| Declaration::RecClosure {
                         id: None,
@@ -75,7 +75,7 @@ impl TryParse for Declaration {
                             ),
                         ),
                         wst(lexem::EQUAL),
-                        Lambda::parse,
+                        terminated(Lambda::parse, wst(lexem::SEMI_COLON)),
                     ),
                     |((name, signature), right)| Declaration::RecLambda {
                         id: None,

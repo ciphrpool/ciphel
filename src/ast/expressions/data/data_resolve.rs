@@ -657,10 +657,10 @@ impl Resolve for Closure {
 
                 // Register parameters, add as first parameter the function pointer
                 if let Some(name) = &self.name {
-                    let id = scope_manager.register_parameter(
+                    let id = scope_manager.register_caller(
                         name.as_str(),
                         context.clone(),
-                        Some(inner_scope),
+                        inner_scope,
                     )?;
                     let _ = self.id.insert(id);
                 }
@@ -799,10 +799,10 @@ impl Resolve for Lambda {
                 };
                 // Register parameters, add as first parameter the function pointer
                 if let Some(name) = &self.name {
-                    let id = scope_manager.register_parameter(
+                    let id = scope_manager.register_caller(
                         name.as_str(),
                         context.clone(),
-                        Some(inner_scope),
+                        inner_scope,
                     )?;
                     let _ = self.id.insert(id);
                 }

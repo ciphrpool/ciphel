@@ -79,8 +79,11 @@ impl Resolve for Declaration {
                     return Err(SemanticError::ExpectedCallable);
                 };
                 let _ = right.name.insert(name.clone());
-                let _ = right.resolve::<E>(scope_manager, scope_id, &Some(fn_type), extra)?;
-                *id = right.id;
+                let _ =
+                    right.resolve::<E>(scope_manager, scope_id, &Some(fn_type.clone()), extra)?;
+
+                let var_id = scope_manager.register_var(name, fn_type, scope_id)?;
+                let _ = id.insert(var_id);
                 Ok(())
             }
             Declaration::RecLambda {
@@ -96,8 +99,11 @@ impl Resolve for Declaration {
                     return Err(SemanticError::ExpectedCallable);
                 };
                 let _ = right.name.insert(name.clone());
-                let _ = right.resolve::<E>(scope_manager, scope_id, &Some(fn_type), extra)?;
-                *id = right.id;
+                let _ =
+                    right.resolve::<E>(scope_manager, scope_id, &Some(fn_type.clone()), extra)?;
+
+                let var_id = scope_manager.register_var(name, fn_type, scope_id)?;
+                let _ = id.insert(var_id);
                 Ok(())
             }
         }

@@ -273,6 +273,14 @@ mod tests {
             let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
             assert_eq!(res, 55);
+
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 15);
+
+            let res = test_extract_variable::<i64>("res3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 15);
             true
         }
 
@@ -287,6 +295,24 @@ mod tests {
             return fibonacci(x-1) + fibonacci(x-2);
         }
         let res1 = fibonacci(10);
+
+        let rec lambda1 : (u64) -> u64 = (x) -> {
+            if x == 0 {
+                return 0;
+            }
+            return x + lambda1(x - 1);
+        };
+
+        let res2 = lambda1(5);
+
+        let rec closure1 : (u64) -> u64 = (x) -> {
+            if x == 0 {
+                return 0;
+            }
+            return x + closure1(x - 1);
+        };
+
+        let res3 = closure1(5);
         "##,
             &mut engine,
             assert_fn,
