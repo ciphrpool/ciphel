@@ -22,6 +22,7 @@ use crate::semantic::{Desugar, Info, ResolveFromStruct, ResolveNumber, SizeOf};
 use crate::vm::allocator::align;
 use crate::vm::asm::branch::Label;
 use crate::vm::core::{Core, PathFinder};
+use crate::vm::external::ExternResolve;
 use crate::{e_static, semantic};
 
 impl Resolve for Data {
@@ -1343,7 +1344,25 @@ impl Resolve for Call {
                 }
                 Ok(())
             }
-            LeftCall::ExternCall(extern_call) => todo!(),
+            LeftCall::ExternCall(ExternCall {
+                path: CompletePath { path, name },
+            }) => {
+                let path = match &path {
+                    Path::Segment(vec) => vec.as_slice(),
+                    Path::Empty => &[],
+                };
+                if let Some(mut extern_func) = E::find(path, name.as_str()) {
+                    let return_type =
+                        extern_func.resolve::<E>(scope_manager, scope_id, &mut self.args.args)?;
+                    self.metadata.info = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(return_type),
+                    };
+                } else {
+                    return Err(SemanticError::UnknownVar(name.clone()));
+                }
+                Ok(())
+            }
             LeftCall::CoreCall(CoreCall { path }) => {
                 let return_type = path.resolve::<E>(
                     scope_manager,
@@ -1394,7 +1413,17 @@ impl Desugar<Atomic> for Call {
 
         if let Some(core_func) = Core::find(path, name.as_str()) {
             self.path = LeftCall::CoreCall(CoreCall { path: core_func });
+        } else {
+            if let Some(_) = E::find(path, name.as_str()) {
+                self.path = LeftCall::ExternCall(ExternCall {
+                    path: CompletePath {
+                        path: Path::Segment(path.to_owned()),
+                        name: name.to_owned(),
+                    },
+                });
+            }
         }
+
         Ok(None)
     }
 }
@@ -1523,7 +1552,7 @@ mod tests {
             .1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = primitive.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = primitive.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1531,7 +1560,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res = primitive.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = primitive.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(p_num!(I64)),
@@ -1546,7 +1575,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = primitive.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = primitive.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1564,7 +1593,7 @@ mod tests {
             .1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = string.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = string.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1572,7 +1601,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res = string.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = string.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(StaticType::StrSlice(StrSliceType {}).into())),
@@ -1587,7 +1616,7 @@ mod tests {
             .1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = slice.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = slice.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1595,7 +1624,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res = slice.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = slice.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1617,7 +1646,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = string.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = string.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1634,7 +1663,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = slice.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = slice.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1658,7 +1687,7 @@ mod tests {
             .1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = vector.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = vector.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1666,7 +1695,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res = vector.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = vector.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1684,7 +1713,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = vector.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = vector.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1705,7 +1734,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = variable.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = variable.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1725,7 +1754,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = variable.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = variable.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1740,7 +1769,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = variable.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = variable.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1764,7 +1793,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        let res = variable.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = variable.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1785,7 +1814,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        let res = variable.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = variable.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1806,7 +1835,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = address.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = address.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1829,7 +1858,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = tuple.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = tuple.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1837,7 +1866,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res = tuple.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = tuple.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1858,7 +1887,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = tuple.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = tuple.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1872,7 +1901,7 @@ mod tests {
         );
         assert!(res.is_err());
 
-        let res = tuple.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = tuple.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1890,7 +1919,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = map.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = map.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1906,7 +1935,7 @@ mod tests {
         );
         assert!(res.is_err());
 
-        let res = map.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = map.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &Some(EType::Static(
@@ -1943,7 +1972,7 @@ mod tests {
             )
             .unwrap();
 
-        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1958,7 +1987,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1984,7 +2013,7 @@ mod tests {
             )
             .unwrap();
 
-        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2034,7 +2063,7 @@ mod tests {
             )
             .unwrap();
 
-        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2050,7 +2079,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2089,7 +2118,7 @@ mod tests {
         let mut object = Union::parse(r##"Geo::Axe { x : 2, y : 8}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2100,7 +2129,7 @@ mod tests {
         let mut object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2129,7 +2158,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2158,7 +2187,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        let res = object.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = object.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,

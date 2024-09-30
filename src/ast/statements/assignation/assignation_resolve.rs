@@ -121,7 +121,7 @@ mod tests {
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = assignation.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = assignation.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -143,7 +143,7 @@ mod tests {
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = assignation.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = assignation.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -157,7 +157,7 @@ mod tests {
         let mut assignation = Assignation::parse("x = 1;".into()).unwrap().1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = assignation.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = assignation.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,

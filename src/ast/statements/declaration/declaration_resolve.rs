@@ -288,7 +288,7 @@ mod tests {
         let mut decl = Declaration::parse("let x:u64 = 1;".into()).unwrap().1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = decl.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = decl.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -302,7 +302,7 @@ mod tests {
         let mut decl = Declaration::parse("let x = 1.0;".into()).unwrap().1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = decl.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = decl.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -319,7 +319,7 @@ mod tests {
         let mut decl = Declaration::parse("let x:char = 1;".into()).unwrap().1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = decl.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = decl.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -333,7 +333,7 @@ mod tests {
         let mut decl = Declaration::parse("let (x,y) = (1,'a');".into()).unwrap().1;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = decl.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = decl.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -373,7 +373,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        let res = decl.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = decl.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,

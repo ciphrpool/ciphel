@@ -1,5 +1,5 @@
 use crate::ast::expressions::locate::Locatable;
-use crate::semantic::scope::static_types::POINTER_SIZE;
+use crate::semantic::scope::static_types::{SliceType, POINTER_SIZE};
 use crate::vm::asm::alloc::Access;
 use crate::vm::asm::locate::{LocateIndex, LocateOffset};
 use crate::vm::{CodeGenerationError, GenerateCode};
@@ -101,9 +101,9 @@ impl GenerateCode for ListAccess {
         let Some(array_type) = self.var.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::core::vector::VEC_HEADER,
-            EType::Static(StaticType::Slice(_)) => 0,
+        let (offset, len) = match array_type {
+            EType::Static(StaticType::Vec(_)) => (crate::vm::core::vector::VEC_HEADER, None),
+            EType::Static(StaticType::Slice(SliceType { size, .. })) => (0, Some(size)),
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
 
@@ -118,6 +118,7 @@ impl GenerateCode for ListAccess {
 
                 instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
+                    len,
                     base_address: Some(address),
                     offset: Some(offset),
                 }));
@@ -136,6 +137,7 @@ impl GenerateCode for ListAccess {
 
                 instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
+                    len,
                     base_address: None,
                     offset: Some(offset),
                 }));
@@ -763,7 +765,7 @@ mod tests {
 
     #[test]
     fn valid_addition() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -825,7 +827,7 @@ mod tests {
 
     #[test]
     fn valid_substraction() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -887,7 +889,7 @@ mod tests {
 
     #[test]
     fn valid_multiplaction() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -949,7 +951,7 @@ mod tests {
 
     #[test]
     fn valid_division() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -1011,7 +1013,7 @@ mod tests {
 
     #[test]
     fn valid_shift() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -1073,7 +1075,7 @@ mod tests {
 
     #[test]
     fn valid_band_bor_bxor() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -1135,7 +1137,7 @@ mod tests {
 
     #[test]
     fn valid_cmp() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -1231,7 +1233,7 @@ mod tests {
 
     #[test]
     fn valid_neg() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -1283,7 +1285,7 @@ mod tests {
 
     #[test]
     fn valid_tuple_access() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -1317,7 +1319,7 @@ mod tests {
 
     #[test]
     fn valid_field_access() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -1357,7 +1359,7 @@ mod tests {
 
     #[test]
     fn valid_slice_access() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -1392,7 +1394,7 @@ mod tests {
 
     #[test]
     fn valid_vec_access() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -1427,7 +1429,7 @@ mod tests {
 
     #[test]
     fn valid_complex_access() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,

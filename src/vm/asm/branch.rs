@@ -305,8 +305,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Return {
         engine: &mut E,
         context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
-        let return_pointer = stack.return_pointer;
-        let _ = stack.close_frame(self.size)?;
+        let return_pointer = stack.close_frame(self.size)?;
         scheduler.jump(return_pointer);
         Ok(())
     }
@@ -323,6 +322,8 @@ impl<E: crate::vm::external::Engine> Executable<E> for CloseFrame {
         engine: &mut E,
         context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
-        todo!()
+        let _ = stack.close_frame(0)?;
+        scheduler.next();
+        Ok(())
     }
 }

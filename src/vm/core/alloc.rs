@@ -409,7 +409,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -433,7 +433,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -472,7 +472,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -496,7 +496,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -526,7 +526,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -550,7 +550,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -601,7 +601,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -625,7 +625,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -846,7 +846,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -870,7 +870,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -895,7 +895,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -919,7 +919,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -959,7 +959,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -983,7 +983,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1034,7 +1034,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -1058,7 +1058,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1132,7 +1132,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -1156,7 +1156,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1183,7 +1183,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -1207,7 +1207,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1239,7 +1239,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -1263,7 +1263,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1315,7 +1315,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -1339,7 +1339,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1375,7 +1375,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -1399,7 +1399,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1450,7 +1450,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -1474,7 +1474,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1532,7 +1532,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -1556,7 +1556,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1594,7 +1594,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -1618,7 +1618,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1650,7 +1650,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -1674,7 +1674,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1731,7 +1731,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -1755,7 +1755,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
@@ -1802,7 +1802,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //         .1;
 //         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 //         let _ = statement
-//             .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
 //         let mut instructions = Program::default();
@@ -1826,7 +1826,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for AllocAsm {
 //             .get_mut(crate::vm::vm::Player::P1, tid)
 //             .expect("Thread should exist");
 //         program.merge(instructions);
-//         let mut engine = crate::vm::external::test::NoopGameEngine {};
+//         let mut engine = crate::vm::external::test::NoopEngine {};
 
 //         program
 //             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)

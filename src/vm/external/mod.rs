@@ -20,7 +20,7 @@ pub trait ExternPathFinder {
 }
 
 pub trait ExternFunction<E: Engine>:
-    super::AsmName<E> + super::AsmWeight + super::scheduler::Executable<E> + Sized
+    super::AsmName<E> + super::AsmWeight + super::scheduler::Executable<E> + Sized + ExternResolve
 {
 }
 

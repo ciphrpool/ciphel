@@ -762,7 +762,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -777,7 +777,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -789,7 +789,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -804,7 +804,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -819,7 +819,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -834,7 +834,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = expr
-            .resolve::<crate::vm::external::test::NoopGameEngine>(
+            .resolve::<crate::vm::external::test::NoopEngine>(
                 &mut scope_manager,
                 None,
                 &None,
@@ -850,7 +850,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = expr
-            .resolve::<crate::vm::external::test::NoopGameEngine>(
+            .resolve::<crate::vm::external::test::NoopEngine>(
                 &mut scope_manager,
                 None,
                 &None,
@@ -865,7 +865,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = expr
-            .resolve::<crate::vm::external::test::NoopGameEngine>(
+            .resolve::<crate::vm::external::test::NoopEngine>(
                 &mut scope_manager,
                 None,
                 &None,
@@ -880,7 +880,7 @@ mod tests {
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = expr
-            .resolve::<crate::vm::external::test::NoopGameEngine>(
+            .resolve::<crate::vm::external::test::NoopEngine>(
                 &mut scope_manager,
                 None,
                 &None,

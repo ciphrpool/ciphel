@@ -1631,7 +1631,7 @@ mod tests {
     fn valid_high_ord_math() {
         let mut expr = Product::parse("10 * 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1641,7 +1641,7 @@ mod tests {
 
         let mut expr = Product::parse("10.0 * 10.0".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1651,7 +1651,7 @@ mod tests {
 
         let mut expr = Product::parse("10 * (10+10)".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1661,7 +1661,7 @@ mod tests {
 
         let mut expr = Product::parse("(10+10) * 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1672,7 +1672,7 @@ mod tests {
         let mut expr = Product::parse("10 * x".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1685,7 +1685,7 @@ mod tests {
     fn robustness_high_ord_math() {
         let mut expr = Product::parse("10 * 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1695,7 +1695,7 @@ mod tests {
 
         let mut expr = Product::parse("'a' * 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1705,7 +1705,7 @@ mod tests {
 
         let mut expr = Product::parse("10 * x".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1718,7 +1718,7 @@ mod tests {
     fn valid_low_ord_math() {
         let mut expr = Addition::parse("10 + 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1728,7 +1728,7 @@ mod tests {
 
         let mut expr = Addition::parse("10 - 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1738,7 +1738,7 @@ mod tests {
 
         let mut expr = Addition::parse("10 + (10*10)".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1748,7 +1748,7 @@ mod tests {
 
         let mut expr = Addition::parse("10 + 10*10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1758,7 +1758,7 @@ mod tests {
 
         let mut expr = Addition::parse("(10 * 10) + 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1768,7 +1768,7 @@ mod tests {
 
         let mut expr = Addition::parse("10 * 10 + 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1778,7 +1778,7 @@ mod tests {
 
         let mut expr = Product::parse("10 * 10 + 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1788,7 +1788,7 @@ mod tests {
 
         let mut expr = Product::parse("10 * 10 + 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1799,7 +1799,7 @@ mod tests {
         let mut expr = Addition::parse("10 + x".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1812,7 +1812,7 @@ mod tests {
     fn robustness_low_ord_math() {
         let mut expr = Addition::parse("10 + 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1822,7 +1822,7 @@ mod tests {
 
         let mut expr = Addition::parse("'a' + 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1832,7 +1832,7 @@ mod tests {
 
         let mut expr = Addition::parse("10 + x".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1845,7 +1845,7 @@ mod tests {
     fn valid_shift() {
         let mut expr = Shift::parse("10 >> 1".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1855,7 +1855,7 @@ mod tests {
 
         let mut expr = Shift::parse("10 << 1".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1868,7 +1868,7 @@ mod tests {
     fn robustness_shift() {
         let mut expr = Shift::parse("10 >> 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1878,7 +1878,7 @@ mod tests {
 
         let mut expr = Shift::parse("'a' >> 1".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1891,7 +1891,7 @@ mod tests {
     fn valid_bitwise() {
         let mut expr = BitwiseAnd::parse("10 & 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1901,7 +1901,7 @@ mod tests {
 
         let mut expr = BitwiseOR::parse("10 | 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1911,7 +1911,7 @@ mod tests {
 
         let mut expr = BitwiseXOR::parse("10 ^ 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1924,7 +1924,7 @@ mod tests {
     fn robustness_bitwise() {
         let mut expr = BitwiseAnd::parse("10 & 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1934,7 +1934,7 @@ mod tests {
 
         let mut expr = BitwiseOR::parse("'a' | 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1944,7 +1944,7 @@ mod tests {
 
         let mut expr = BitwiseXOR::parse("10 ^ 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1957,7 +1957,7 @@ mod tests {
     fn valid_cast() {
         let mut expr = Cast::parse("10 as f64".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1969,7 +1969,7 @@ mod tests {
 
         let mut expr = Cast::parse("'a' as u64".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1984,7 +1984,7 @@ mod tests {
     fn valid_comparaison() {
         let mut expr = Expression::parse("10 < 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -1994,7 +1994,7 @@ mod tests {
 
         let mut expr = Expression::parse("'a' > 'b'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2007,7 +2007,7 @@ mod tests {
     fn robustness_comparaison() {
         let mut expr = Expression::parse("10 > 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2020,7 +2020,7 @@ mod tests {
     fn valid_equation() {
         let mut expr = Expression::parse("10 == 10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2030,7 +2030,7 @@ mod tests {
 
         let mut expr = Expression::parse("'a' != 'b'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2043,7 +2043,7 @@ mod tests {
     fn robustness_equation() {
         let mut expr = Expression::parse("10 == 'a'".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2056,7 +2056,7 @@ mod tests {
     fn valid_and_or() {
         let mut expr = Expression::parse("true and false".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2066,7 +2066,7 @@ mod tests {
 
         let mut expr = Expression::parse("true or false".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2076,7 +2076,7 @@ mod tests {
 
         let mut expr = Expression::parse("true and 2 > 3".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2088,7 +2088,7 @@ mod tests {
             .unwrap()
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2101,7 +2101,7 @@ mod tests {
     fn robustness_and_or() {
         let mut expr = Expression::parse("true and 2".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2111,7 +2111,7 @@ mod tests {
 
         let mut expr = Expression::parse("1 or true".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2124,7 +2124,7 @@ mod tests {
     fn valid_unary() {
         let mut expr = UnaryOperation::parse("!true".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2136,7 +2136,7 @@ mod tests {
             .unwrap()
             .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2146,7 +2146,7 @@ mod tests {
 
         let mut expr = UnaryOperation::parse("-1".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2156,7 +2156,7 @@ mod tests {
 
         let mut expr = UnaryOperation::parse("-1.0".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2166,7 +2166,7 @@ mod tests {
 
         let mut expr = UnaryOperation::parse("- ( 10 + 10 )".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2179,7 +2179,7 @@ mod tests {
     fn robustness_unary() {
         let mut expr = UnaryOperation::parse("!10".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2189,7 +2189,7 @@ mod tests {
 
         let mut expr = UnaryOperation::parse("- true".into()).unwrap().1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -2219,7 +2219,7 @@ mod tests {
     //             None,
     //         )
     //         .unwrap();
-    //     let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+    //     let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
     //         &mut scope_manager,
     //         None,
     //         &None,
@@ -2239,7 +2239,7 @@ mod tests {
 
     //     let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
     //     let _ = scope_manager.register_var("f", p_num!(I64), None).unwrap();
-    //     let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+    //     let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
     //         &mut scope_manager,
     //         None,
     //         &None,
@@ -2259,7 +2259,7 @@ mod tests {
     //         .register_var("print", p_num!(I64), None)
     //         .unwrap();
     //     let _ = expr
-    //         .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
+    //         .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut None)
     //         .expect("Resolution should have succeeded");
     // }
 
@@ -2274,7 +2274,7 @@ mod tests {
     //         .register_var("print", p_num!(I64), None)
     //         .unwrap();
     //     let _ = expr
-    //         .resolve::<crate::vm::external::test::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
+    //         .resolve::<crate::vm::external::test::NoopEngine>(&mut scope_manager, None, &None, &mut None)
     //         .expect_err("Resolution should have failed");
     // }
 }

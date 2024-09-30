@@ -247,7 +247,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = type_def.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = type_def.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &(),
@@ -301,7 +301,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        let res = type_def.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = type_def.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &(),
@@ -356,7 +356,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = type_def.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = type_def.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &(),
@@ -414,7 +414,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = type_def.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = type_def.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &(),
@@ -452,7 +452,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = function.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = function.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &(),
@@ -493,7 +493,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = function.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = function.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &(),
@@ -545,7 +545,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = function.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = function.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &(),
@@ -591,7 +591,7 @@ mod tests {
             .register_var("x", p_num!(I64), None)
             .expect("registering vars should succeed");
 
-        let res = function.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = function.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &(),
@@ -623,7 +623,7 @@ mod tests {
         let _ = scope_manager
             .register_var("y", p_num!(I64), None)
             .expect("registering vars should succeed");
-        let res = function.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = function.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &(),
@@ -648,7 +648,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = scope::ScopeManager::default();
-        let res = function.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = function.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &(),

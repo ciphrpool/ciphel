@@ -1,6 +1,9 @@
-use crate::vm::{
-    allocator::MemoryAddress, asm::operation::OpPrimitive, runtime::RuntimeError,
-    scheduler::Executable, stdio::StdIO,
+use crate::{
+    semantic::scope::static_types::POINTER_SIZE,
+    vm::{
+        allocator::MemoryAddress, asm::operation::OpPrimitive, runtime::RuntimeError,
+        scheduler::Executable, stdio::StdIO,
+    },
 };
 use num_traits::ToBytes;
 
@@ -110,6 +113,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for LocateOffset {
 
 #[derive(Debug, Clone)]
 pub struct LocateIndex {
+    pub len: Option<usize>,
     pub size: usize,
     pub base_address: Option<MemoryAddress>,
     pub offset: Option<usize>,
@@ -153,6 +157,18 @@ impl<E: crate::vm::external::Engine> Executable<E> for LocateIndex {
                 (address, index)
             }
         };
+
+        if let Some(len) = self.len {
+            if index >= len as u64 {
+                return Err(RuntimeError::IndexOutOfBound);
+            }
+        } else {
+            let len =
+                OpPrimitive::get_num_from::<u64>(address.add(POINTER_SIZE), stack, heap)? as usize;
+            if index >= len as u64 {
+                return Err(RuntimeError::IndexOutOfBound);
+            }
+        }
 
         if let Some(offset) = self.offset {
             address = address.add(offset);

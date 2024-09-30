@@ -326,7 +326,7 @@ mod tests {
     }
     #[test]
     fn valid_print() {
-        let mut engine = crate::vm::external::test::StdoutTestGameEngine { out: String::new() };
+        let mut engine = crate::vm::external::test::StdoutTestEngine { out: String::new() };
         test_statements(
             r##"
         print("Hello World");
@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn valid_printf() {
-        let mut engine = crate::vm::external::test::StdoutTestGameEngine { out: String::new() };
+        let mut engine = crate::vm::external::test::StdoutTestEngine { out: String::new() };
 
         test_statements(
             r##"
@@ -643,7 +643,7 @@ mod tests {
 
     #[test]
     fn valid_scan() {
-        let mut engine = crate::vm::external::test::StdinTestGameEngine {
+        let mut engine = crate::vm::external::test::StdinTestEngine {
             out: String::new(),
             in_buf: String::new(),
         };
@@ -731,7 +731,7 @@ mod tests {
 
     // #[test]
     // fn valid_scan() {
-    //     let mut engine = StdinTestGameEngine {
+    //     let mut engine = StdinTestEngine {
     //         out: String::new(),
     //         in_buf: String::new(),
     //     };
@@ -748,7 +748,7 @@ mod tests {
     //     "##;
 
     //     ciphel
-    //         .compile::<StdinTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
+    //         .compile::<StdinTestEngine>(crate::vm::vm::Player::P1, tid, src)
     //         .expect("Compilation should have succeeded");
     //     ciphel.run(&mut engine).expect("no error should arise");
     //     ciphel.run(&mut engine).expect("no error should arise");

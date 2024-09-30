@@ -95,6 +95,9 @@ impl<E: Engine> Program<E> {
     pub fn push(&mut self, value: Asm) {
         self.instructions.push(Instruction::Asm(value));
     }
+    pub fn push_extern(&mut self, value: E::Function) {
+        self.instructions.push(Instruction::Extern(value));
+    }
     pub fn push_label(&mut self, label: String) -> Ulid {
         let id = Ulid::new();
 

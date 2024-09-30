@@ -347,15 +347,15 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 
 // #[cfg(test)]
 // mod tests {
-//     use vm::vm::StdoutTestGameEngine;
+//     use vm::vm::StdoutTestEngine;
 
-//     use self::vm::vm::{DbgGameEngine, NoopGameEngine};
+//     use self::vm::vm::{DbgEngine, NoopEngine};
 
 //     use super::*;
 
 //     #[test]
 //     fn valid_hello_world() {
-//         let mut engine = DbgGameEngine {};
+//         let mut engine = DbgEngine {};
 //         let mut ciphel = Ciphel::new();
 //         let tid = ciphel
 //             .start_arena(&mut engine)
@@ -372,7 +372,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 //         "##;
 
 //         ciphel
-//             .compile::<DbgGameEngine>(crate::vm::vm::Player::P1, tid, src)
+//             .compile::<DbgEngine>(crate::vm::vm::Player::P1, tid, src)
 //             .expect("Compilation should have succeeded");
 
 //         ciphel.run(&mut engine).expect("no error should arise");
@@ -380,7 +380,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 
 //     #[test]
 //     fn valid_multiple_program() {
-//         let mut engine = NoopGameEngine {};
+//         let mut engine = NoopEngine {};
 //         let mut ciphel = Ciphel::new();
 //         let tid = ciphel
 //             .start_arena(&mut engine)
@@ -401,7 +401,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 //         "##;
 
 //         ciphel
-//             .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, tid, src)
+//             .compile::<NoopEngine>(crate::vm::vm::Player::P1, tid, src)
 //             .expect("Compilation should have succeeded");
 
 //         let src = r##"
@@ -413,7 +413,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 //         "##;
 
 //         ciphel
-//             .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, tid, src)
+//             .compile::<NoopEngine>(crate::vm::vm::Player::P1, tid, src)
 //             .expect("Compilation should have succeeded");
 
 //         ciphel.run(&mut engine).expect("no error should arise");
@@ -422,7 +422,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 
 //     #[test]
 //     fn valid_multiple_thread() {
-//         let mut engine = NoopGameEngine {};
+//         let mut engine = NoopEngine {};
 //         let mut ciphel = Ciphel::new();
 //         let main_tid = ciphel
 //             .start_arena(&mut engine)
@@ -438,7 +438,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 //         "##;
 
 //         ciphel
-//             .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, main_tid, src)
+//             .compile::<NoopEngine>(crate::vm::vm::Player::P1, main_tid, src)
 //             .expect("Compilation should have succeeded");
 
 //         let tid = ciphel
@@ -457,7 +457,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 //         "##;
 
 //         ciphel
-//             .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, tid, src)
+//             .compile::<NoopEngine>(crate::vm::vm::Player::P1, tid, src)
 //             .expect("Compilation should have succeeded");
 
 //         ciphel.run(&mut engine).expect("no error should arise");
@@ -465,7 +465,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 
 //     #[test]
 //     fn valid_commit_transaction() {
-//         let mut engine = StdoutTestGameEngine { out: String::new() };
+//         let mut engine = StdoutTestEngine { out: String::new() };
 //         let mut ciphel = Ciphel::new();
 //         let tid = ciphel
 //             .start_arena(&mut engine)
@@ -476,7 +476,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 //         "##;
 
 //         ciphel
-//             .compile_with_transaction::<StdoutTestGameEngine>(
+//             .compile_with_transaction::<StdoutTestEngine>(
 //                 crate::vm::vm::Player::P1,
 //                 tid,
 //                 src,
@@ -497,7 +497,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 //     }
 //     #[test]
 //     fn valid_reject_transaction() {
-//         let mut engine = StdoutTestGameEngine { out: String::new() };
+//         let mut engine = StdoutTestEngine { out: String::new() };
 //         let mut ciphel = Ciphel::new();
 //         let tid = ciphel
 //             .start_arena(&mut engine)
@@ -508,7 +508,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 //         "##;
 
 //         ciphel
-//             .compile_with_transaction::<StdoutTestGameEngine>(
+//             .compile_with_transaction::<StdoutTestEngine>(
 //                 crate::vm::vm::Player::P1,
 //                 tid,
 //                 src,
@@ -525,7 +525,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
 //         "##;
 
 //         ciphel
-//             .compile_with_transaction::<StdoutTestGameEngine>(
+//             .compile_with_transaction::<StdoutTestEngine>(
 //                 crate::vm::vm::Player::P1,
 //                 tid,
 //                 src,

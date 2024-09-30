@@ -159,8 +159,6 @@ pub struct FrameMapping {
 pub struct ScopeManager {
     vars: HashMap<u64, VariableInfo>,
     types: Vec<TypeInfo>,
-    transaction_vars_idx: Option<usize>, // Index of the last pushed variable
-    transaction_types_idx: Option<usize>, // Index of the last pushed types
     scope_branches: HashMap<u128, Vec<u128>>, // parent scope of a given scope (key)
 
     pub allocating_scope: HashMap<u128, FrameMapping>,
@@ -175,8 +173,7 @@ impl Default for ScopeManager {
     fn default() -> Self {
         Self {
             scope_branches: HashMap::default(),
-            transaction_types_idx: None,
-            transaction_vars_idx: None,
+
             types: Vec::default(),
             vars: HashMap::default(),
             allocating_scope: HashMap::default(),
@@ -191,26 +188,13 @@ impl Default for ScopeManager {
 
 impl ScopeManager {
     pub fn open_transaction(&mut self) -> Result<(), CompilationError> {
-        todo!();
-        self.transaction_vars_idx = Some(self.vars.len());
-        self.transaction_types_idx = Some(self.types.len());
-        Ok(())
+        todo!()
     }
     pub fn commit_transaction(&mut self) -> Result<(), CompilationError> {
-        todo!();
-        self.transaction_vars_idx = None;
-        self.transaction_types_idx = None;
-        Ok(())
+        todo!()
     }
     pub fn reject_transaction(&mut self) -> Result<(), CompilationError> {
-        todo!();
-        // self.vars
-        //     .truncate(self.transaction_vars_idx.unwrap_or(self.vars.len()));
-        // self.types
-        //     .truncate(self.transaction_types_idx.unwrap_or(self.types.len()));
-        // self.transaction_vars_idx = None;
-        // self.transaction_types_idx = None;
-        Ok(())
+        todo!()
     }
 
     pub fn spawn(&mut self, parent: Option<u128>) -> Result<u128, SemanticError> {
@@ -747,18 +731,5 @@ impl ScopeManager {
                 _ => None,
             }
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::hash::{DefaultHasher, Hash, Hasher};
-
-    #[test]
-    fn valid_hash() {
-        let x: String = "var".into();
-        let mut hasher = DefaultHasher::new();
-        x.hash(&mut hasher);
-        let hash = hasher.finish();
     }
 }

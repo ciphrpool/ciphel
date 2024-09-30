@@ -361,7 +361,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -380,7 +380,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -404,7 +404,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -428,7 +428,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -456,7 +456,7 @@ mod tests {
         .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,
@@ -478,7 +478,7 @@ mod tests {
         .unwrap()
         .1;
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let res = expr.resolve::<crate::vm::external::test::NoopGameEngine>(
+        let res = expr.resolve::<crate::vm::external::test::NoopEngine>(
             &mut scope_manager,
             None,
             &None,

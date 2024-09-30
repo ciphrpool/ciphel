@@ -434,13 +434,13 @@ mod tests {
     //     .expect("Parsing should have succeeded")
     //     .1;
 
-    //     let mut engine = crate::vm::vm::TestDynamicGameEngine {
+    //     let mut engine = crate::vm::vm::TestDynamicEngine {
     //         dynamic_fn_provider: crate::vm::vm::TestDynamicFnProvider {},
     //         out: String::new(),
     //     };
     //     let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
     //     let _ = statement
-    //         .resolve::<crate::vm::vm::TestDynamicGameEngine>(
+    //         .resolve::<crate::vm::vm::TestDynamicEngine>(
     //             &mut scope_manager,
     //             None,
     //             &None,

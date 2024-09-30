@@ -1070,7 +1070,7 @@ mod tests {
 
     #[test]
     fn valid_format() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -1180,7 +1180,7 @@ mod tests {
 
     #[test]
     fn valid_ato_x() {
-        let mut engine = crate::vm::external::test::NoopGameEngine {};
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
         fn assert_fn(
             scope_manager: &crate::semantic::scope::scope::ScopeManager,

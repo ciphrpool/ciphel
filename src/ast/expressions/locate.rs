@@ -1,6 +1,6 @@
 use crate::{
     semantic::{
-        scope::static_types::{StaticType, POINTER_SIZE},
+        scope::static_types::{SliceType, StaticType, POINTER_SIZE},
         EType, SizeOf,
     },
     vm::{
@@ -481,9 +481,9 @@ impl Locatable for ListAccess {
             return Err(CodeGenerationError::UnresolvedError);
         };
 
-        let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::core::vector::VEC_HEADER,
-            EType::Static(StaticType::Slice(_)) => 0,
+        let (offset, len) = match array_type {
+            EType::Static(StaticType::Vec(_)) => (crate::vm::core::vector::VEC_HEADER, None),
+            EType::Static(StaticType::Slice(SliceType { size, .. })) => (0, Some(size)),
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
 
@@ -499,6 +499,7 @@ impl Locatable for ListAccess {
 
                 instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
+                    len,
                     base_address: Some(address),
                     offset: Some(offset),
                 }));
@@ -518,6 +519,7 @@ impl Locatable for ListAccess {
 
                 instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
+                    len,
                     base_address: None,
                     offset: Some(offset),
                 }));
@@ -541,9 +543,9 @@ impl Locatable for ListAccess {
         let Some(array_type) = self.var.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::core::vector::VEC_HEADER,
-            EType::Static(StaticType::Slice(_)) => 0,
+        let (offset, len) = match array_type {
+            EType::Static(StaticType::Vec(_)) => (crate::vm::core::vector::VEC_HEADER, None),
+            EType::Static(StaticType::Slice(SliceType { size, .. })) => (0, Some(size)),
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
 
@@ -562,6 +564,7 @@ impl Locatable for ListAccess {
 
                 instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
+                    len,
                     base_address: Some(address),
                     offset: Some(offset),
                 }));
@@ -581,6 +584,7 @@ impl Locatable for ListAccess {
 
                 instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
+                    len,
                     base_address: None,
                     offset: Some(offset),
                 }));
@@ -604,9 +608,9 @@ impl Locatable for ListAccess {
         let Some(array_type) = self.var.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::core::vector::VEC_HEADER,
-            EType::Static(StaticType::Slice(_)) => 0,
+        let (offset, len) = match array_type {
+            EType::Static(StaticType::Vec(_)) => (crate::vm::core::vector::VEC_HEADER, None),
+            EType::Static(StaticType::Slice(SliceType { size, .. })) => (0, Some(size)),
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
         match self
@@ -624,6 +628,7 @@ impl Locatable for ListAccess {
 
                 instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
+                    len,
                     base_address: Some(address),
                     offset: Some(offset),
                 }));
@@ -644,6 +649,7 @@ impl Locatable for ListAccess {
 
                 instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
+                    len,
                     base_address: None,
                     offset: Some(offset),
                 }));
@@ -667,9 +673,9 @@ impl Locatable for ListAccess {
         let Some(array_type) = self.var.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::core::vector::VEC_HEADER,
-            EType::Static(StaticType::Slice(_)) => 0,
+        let (offset, len) = match array_type {
+            EType::Static(StaticType::Vec(_)) => (crate::vm::core::vector::VEC_HEADER, None),
+            EType::Static(StaticType::Slice(SliceType { size, .. })) => (0, Some(size)),
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
 
@@ -688,6 +694,7 @@ impl Locatable for ListAccess {
 
                 instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
+                    len,
                     base_address: Some(address),
                     offset: Some(offset),
                 }));
@@ -705,6 +712,7 @@ impl Locatable for ListAccess {
 
                 instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
+                    len,
                     base_address: None,
                     offset: Some(offset),
                 }));
