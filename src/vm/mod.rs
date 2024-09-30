@@ -9,8 +9,8 @@ pub mod external;
 pub mod program;
 pub mod runtime;
 pub mod scheduler;
+pub mod signal;
 pub mod stdio;
-pub mod vm;
 
 #[derive(Debug, Clone)]
 pub struct CodeGenerationContext {

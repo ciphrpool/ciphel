@@ -349,7 +349,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for MathAsm {
         &self,
         program: &crate::vm::program::Program<E>,
         scheduler: &mut crate::vm::scheduler::Scheduler<P>,
-        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,

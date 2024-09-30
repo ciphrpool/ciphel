@@ -56,7 +56,7 @@ impl<E: Engine> Executable<E> for DefaultExternFunction {
         &self,
         program: &crate::vm::program::Program<E>,
         scheduler: &mut crate::vm::scheduler::Scheduler<P>,
-        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
@@ -231,7 +231,7 @@ impl ExternThreadHandler for StdinTestGameEngine {
     type TID = DefaultThreadID;
 
     fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
-        unimplemented!()
+        Ok(DefaultThreadID(0))
     }
 
     fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {

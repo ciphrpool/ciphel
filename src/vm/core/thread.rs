@@ -6,8 +6,9 @@ use crate::vm::core::lexem;
 use crate::vm::core::CoreAsm;
 use crate::vm::core::{ERROR_SLICE, OK_SLICE};
 use crate::vm::external::ExternThreadIdentifier;
-use crate::vm::runtime::{RuntimeError, SignalAction, SignalResult};
+use crate::vm::runtime::RuntimeError;
 use crate::vm::scheduler::Executable;
+use crate::vm::signal::{SignalAction, SignalResult};
 use crate::vm::GenerateCode;
 use crate::{
     ast::expressions::Expression,
@@ -341,7 +342,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
         &self,
         program: &crate::vm::program::Program<E>,
         scheduler: &mut crate::vm::scheduler::Scheduler<P>,
-        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
@@ -352,7 +353,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
             ThreadAsm::Spawn => {
                 // request spawn of an other another thread
                 fn spawn_callback<E: crate::vm::external::Engine>(
-                    response: crate::vm::runtime::SignalResult<E>,
+                    response: crate::vm::signal::SignalResult<E>,
                     stack: &mut crate::vm::allocator::stack::Stack,
                 ) -> Result<(), RuntimeError> {
                     match response {
@@ -369,7 +370,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
                     Ok(())
                 }
                 let _ = signal_handler.notify(
-                    crate::vm::runtime::Signal::Spawn,
+                    crate::vm::signal::Signal::Spawn,
                     stack,
                     engine,
                     context.tid.clone(),
@@ -381,7 +382,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
             ThreadAsm::Close => {
                 // request close of an other another thread
                 fn close_callback<E: crate::vm::external::Engine>(
-                    response: crate::vm::runtime::SignalResult<E>,
+                    response: crate::vm::signal::SignalResult<E>,
                     stack: &mut crate::vm::allocator::stack::Stack,
                 ) -> Result<(), RuntimeError> {
                     match response {
@@ -397,7 +398,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
                 }
                 let tid = E::TID::from_u64(OpPrimitive::pop_num::<u64>(stack)?);
                 let _ = signal_handler.notify(
-                    crate::vm::runtime::Signal::Close(tid),
+                    crate::vm::signal::Signal::Close(tid),
                     stack,
                     engine,
                     context.tid.clone(),
@@ -409,7 +410,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
             ThreadAsm::Exit => {
                 // request exit of an other another thread
                 fn exit_callback<E: crate::vm::external::Engine>(
-                    response: crate::vm::runtime::SignalResult<E>,
+                    response: crate::vm::signal::SignalResult<E>,
                     stack: &mut crate::vm::allocator::stack::Stack,
                 ) -> Result<(), RuntimeError> {
                     match response {
@@ -420,7 +421,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
                     Ok(())
                 }
                 let _ = signal_handler.notify(
-                    crate::vm::runtime::Signal::Exit,
+                    crate::vm::signal::Signal::Exit,
                     stack,
                     engine,
                     context.tid.clone(),
@@ -432,7 +433,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
             ThreadAsm::Wait => {
                 // request wait of an other another thread
                 fn wait_callback<E: crate::vm::external::Engine>(
-                    response: crate::vm::runtime::SignalResult<E>,
+                    response: crate::vm::signal::SignalResult<E>,
                     stack: &mut crate::vm::allocator::stack::Stack,
                 ) -> Result<(), RuntimeError> {
                     match response {
@@ -443,7 +444,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
                     Ok(())
                 }
                 let _ = signal_handler.notify(
-                    crate::vm::runtime::Signal::Wait,
+                    crate::vm::signal::Signal::Wait,
                     stack,
                     engine,
                     context.tid.clone(),
@@ -455,7 +456,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
             ThreadAsm::Wake => {
                 // request wake of an other another thread
                 fn wake_callback<E: crate::vm::external::Engine>(
-                    response: crate::vm::runtime::SignalResult<E>,
+                    response: crate::vm::signal::SignalResult<E>,
                     stack: &mut crate::vm::allocator::stack::Stack,
                 ) -> Result<(), RuntimeError> {
                     match response {
@@ -471,7 +472,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
                 }
                 let target = E::TID::from_u64(OpPrimitive::pop_num::<u64>(stack)?);
                 let _ = signal_handler.notify(
-                    crate::vm::runtime::Signal::Wake(target),
+                    crate::vm::signal::Signal::Wake(target),
                     stack,
                     engine,
                     context.tid.clone(),
@@ -483,7 +484,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
             ThreadAsm::Sleep => {
                 // request sleep of an other another thread
                 fn sleep_callback<E: crate::vm::external::Engine>(
-                    response: crate::vm::runtime::SignalResult<E>,
+                    response: crate::vm::signal::SignalResult<E>,
                     stack: &mut crate::vm::allocator::stack::Stack,
                 ) -> Result<(), RuntimeError> {
                     match response {
@@ -495,7 +496,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
                 }
                 let time = OpPrimitive::pop_num::<u64>(stack)? as usize;
                 let _ = signal_handler.notify(
-                    crate::vm::runtime::Signal::Sleep { time },
+                    crate::vm::signal::Signal::Sleep { time },
                     stack,
                     engine,
                     context.tid.clone(),
@@ -507,7 +508,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
             ThreadAsm::Join => {
                 // request join of an other another thread
                 fn join_callback<E: crate::vm::external::Engine>(
-                    response: crate::vm::runtime::SignalResult<E>,
+                    response: crate::vm::signal::SignalResult<E>,
                     stack: &mut crate::vm::allocator::stack::Stack,
                 ) -> Result<(), RuntimeError> {
                     match response {
@@ -524,7 +525,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
 
                 let target = E::TID::from_u64(OpPrimitive::pop_num::<u64>(stack)?);
                 let _ = signal_handler.notify(
-                    crate::vm::runtime::Signal::Join(target),
+                    crate::vm::signal::Signal::Join(target),
                     stack,
                     engine,
                     context.tid.clone(),

@@ -17,6 +17,7 @@ use crate::{
     semantic::{EType, Resolve, SemanticError},
 };
 
+use super::string::STRING_HEADER;
 use super::PathFinder;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -63,8 +64,8 @@ impl crate::vm::AsmWeight for IOAsm {
             }
             IOAsm::Flush => crate::vm::Weight::EXTREME,
             IOAsm::Flushln => crate::vm::Weight::EXTREME,
-            IOAsm::Scan => crate::vm::Weight::HIGH,
-            IOAsm::RequestScan => crate::vm::Weight::EXTREME,
+            IOAsm::Scan => crate::vm::Weight::END,
+            IOAsm::RequestScan => crate::vm::Weight::END,
         }
     }
 }
@@ -178,7 +179,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
         &self,
         program: &crate::vm::program::Program<E>,
         scheduler: &mut crate::vm::scheduler::Scheduler<P>,
-        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
@@ -237,8 +238,8 @@ impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
                 if let Some(content) = res {
                     // Alloc and fill the string with the content, then ^push the address onto the stack
                     let len = content.len();
-                    let cap = align(len as usize) as u64;
-                    let alloc_size = cap + 16;
+                    let cap = align(len as usize);
+                    let alloc_size = cap + STRING_HEADER;
 
                     let len_bytes = len.to_le_bytes().as_slice().to_vec();
                     let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
@@ -246,10 +247,11 @@ impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
                     let address = heap.alloc(alloc_size as usize)?;
 
                     let data = content.as_bytes();
-                    /* Write len */
-                    let _ = heap.write(address, &len_bytes)?;
                     /* Write capacity */
-                    let _ = heap.write(address.add(8), &cap_bytes)?;
+                    let _ = heap.write(address, &cap_bytes)?;
+                    /* Write len */
+                    let _ = heap.write(address.add(8), &len_bytes)?;
+
                     /* Write slice */
                     let _ = heap.write(address.add(16), &data.to_vec())?;
 
@@ -258,17 +260,41 @@ impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
                     scheduler.next();
                     Ok(())
                 } else {
-                    // the program instruction cursor is not increment, therefore when content will be available in the stdin
+                    // the program instruction cursor is not incremented, therefore when content will be available in the stdin
                     // the instruction will be run again and only then the program cursor will get incremented
-                    // Err(RuntimeError::Signal(crate::vm::vm::Signal::WAIT_STDIN))
-                    todo!()
+                    fn callback<E: crate::vm::external::Engine>(
+                        response: crate::vm::signal::SignalResult<E>,
+                        stack: &mut crate::vm::allocator::stack::Stack,
+                    ) -> Result<(), RuntimeError> {
+                        Ok(())
+                    }
+                    let _ = signal_handler.notify(
+                        crate::vm::signal::Signal::WaitSTDIN,
+                        stack,
+                        engine,
+                        context.tid.clone(),
+                        callback::<E>,
+                    )?;
+                    Ok(())
                 }
             }
             IOAsm::RequestScan => {
                 stdio.stdin.request(engine);
+                fn callback<E: crate::vm::external::Engine>(
+                    response: crate::vm::signal::SignalResult<E>,
+                    stack: &mut crate::vm::allocator::stack::Stack,
+                ) -> Result<(), RuntimeError> {
+                    Ok(())
+                }
+                let _ = signal_handler.notify(
+                    crate::vm::signal::Signal::WaitSTDIN,
+                    stack,
+                    engine,
+                    context.tid.clone(),
+                    callback::<E>,
+                )?;
                 scheduler.next();
-                // Err(RuntimeError::Signal(crate::vm::vm::Signal::WAIT_STDIN))
-                todo!()
+                Ok(())
             }
         }
     }
@@ -277,7 +303,19 @@ impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
 #[cfg(test)]
 mod tests {
 
-    use crate::test_statements;
+    use crate::{
+        ast::statements::parse_statements,
+        semantic::Resolve,
+        test_extract_variable_with, test_statements,
+        vm::{
+            allocator::{heap::Heap, MemoryAddress},
+            asm::operation::{GetNumFrom, OpPrimitive},
+            runtime::{Runtime, Thread, ThreadContext, ThreadState},
+            scheduler::QueuePolicy,
+            stdio::StdIO,
+            GenerateCode,
+        },
+    };
 
     fn nil(
         scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -564,6 +602,131 @@ mod tests {
             nil,
         );
         assert!(engine.out.starts_with("addr = &i64"));
+    }
+
+    pub fn compile_for<E: crate::vm::external::Engine>(
+        input: &str,
+        tid: &E::TID,
+        runtime: &mut Runtime<E, QueuePolicy>,
+    ) {
+        let mut statements =
+            parse_statements(input.into(), 0).expect("Parsing should have succeeded");
+
+        let ThreadContext {
+            scope_manager,
+            program,
+            ..
+        } = runtime
+            .context_of(&tid)
+            .expect("Thread should have been found");
+
+        for statement in statements.iter_mut() {
+            statement
+                .resolve::<E>(scope_manager, None, &None, &mut ())
+                .expect(&format!("Resulotion should have succeeded {:?}", statement));
+        }
+
+        for statement in statements {
+            statement
+                .gencode::<E>(
+                    scope_manager,
+                    None,
+                    program,
+                    &crate::vm::CodeGenerationContext::default(),
+                )
+                .expect(&format!(
+                    "Code generation should have succeeded {:?}",
+                    statement
+                ));
+        }
+    }
+
+    #[test]
+    fn valid_scan() {
+        let mut engine = crate::vm::external::test::StdinTestGameEngine {
+            out: String::new(),
+            in_buf: String::new(),
+        };
+
+        let mut heap = Heap::new();
+        let mut stdio = StdIO::default();
+        let mut runtime = Runtime::default();
+
+        let tid_1 = runtime
+            .spawn(&mut engine)
+            .expect("Spawning should have succeeded");
+
+        compile_for(
+            r##"
+        let res = scan();
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+        if ThreadState::WAITING_STDIN
+            != *runtime
+                .snapshot()
+                .states
+                .get(&tid_1)
+                .expect("Thread should exist")
+        {
+            panic!("Thread should have been waiting");
+        }
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+        if ThreadState::WAITING_STDIN
+            != *runtime
+                .snapshot()
+                .states
+                .get(&tid_1)
+                .expect("Thread should exist")
+        {
+            panic!("Thread should have been waiting");
+        }
+
+        engine.in_buf.push_str("Hello World");
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+        if ThreadState::IDLE
+            != *runtime
+                .snapshot()
+                .states
+                .get(&tid_1)
+                .expect("Thread should exist")
+        {
+            panic!("Thread should have been waiting");
+        }
+        {
+            let (Thread { stack, .. }, ThreadContext { scope_manager, .. }) = runtime
+                .thread_with_context_of(&tid_1)
+                .expect("Thread should have been found");
+            test_extract_variable_with(
+                "res",
+                |address, stack, heap| {
+                    let address: MemoryAddress =
+                        OpPrimitive::get_num_from::<u64>(address, stack, heap)
+                            .expect("Deserialization should have succeeded")
+                            .try_into()
+                            .unwrap();
+                    let address = address.add(8);
+
+                    let text = OpPrimitive::get_string_from(address, stack, heap)
+                        .expect("Deserialization should have succeeded");
+
+                    assert_eq!(text, "Hello World");
+                },
+                scope_manager,
+                stack,
+                &heap,
+            )
+        }
     }
 
     // #[test]

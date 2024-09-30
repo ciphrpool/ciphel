@@ -1,11 +1,11 @@
 use crate::{
     ast::expressions::Expression,
     semantic::{
-        scope::static_types::{StaticType, VecType},
+        scope::static_types::{SliceType, StaticType, VecType},
         CompatibleWith, EType, Resolve, ResolveCore, SemanticError, SizeOf, TypeOf,
     },
     vm::{
-        allocator::align,
+        allocator::{align, MemoryAddress},
         asm::{
             operation::{GetNumFrom, OpPrimitive, PopNum},
             Asm,
@@ -34,6 +34,7 @@ pub enum VectorFn {
     },
     Extend {
         item_size: usize,
+        len: usize,
     },
     Delete {
         item_size: usize,
@@ -56,7 +57,10 @@ impl PathFinder for VectorFn {
                 }),
                 lexem::PUSH => Some(VectorFn::Push { item_size: 0 }),
                 lexem::POP => Some(VectorFn::Pop { item_size: 0 }),
-                // lexem::EXTEND => Some(VectorFn::Extend { item_size: 0 }),
+                lexem::EXTEND => Some(VectorFn::Extend {
+                    item_size: 0,
+                    len: 0,
+                }),
                 lexem::DELETE => Some(VectorFn::Delete { item_size: 0 }),
                 lexem::CLEAR_VEC => Some(VectorFn::ClearVec { item_size: 0 }),
                 _ => None,
@@ -176,7 +180,34 @@ impl ResolveCore for VectorFn {
 
                 Ok(vector_type.0.as_ref().clone())
             }
-            VectorFn::Extend { item_size } => todo!(),
+            VectorFn::Extend { item_size, len } => {
+                if parameters.len() != 2 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let (first_part, second_part) = parameters.split_at_mut(1);
+                let vector = &mut first_part[0];
+                let array = &mut second_part[1];
+                let vector_type = vec_param::<E>(vector, scope_manager, scope_id)?;
+
+                let _ = array.resolve::<E>(
+                    scope_manager,
+                    scope_id,
+                    &Some(vector_type.0.as_ref().clone()),
+                    &mut None,
+                )?;
+
+                let EType::Static(StaticType::Slice(SliceType { size, item_type })) =
+                    array.type_of(scope_manager, scope_id)?
+                else {
+                    return Err(SemanticError::IncompatibleTypes);
+                };
+
+                *len = size;
+
+                *item_size = item_type.size_of();
+
+                Ok(EType::Static(StaticType::Vec(vector_type)))
+            }
             VectorFn::ClearVec { item_size } => {
                 if parameters.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
@@ -198,7 +229,7 @@ pub enum VectorAsm {
     VecWithCapacity { item_size: usize },
     Push { item_size: usize },
     Pop { item_size: usize },
-    Extend { item_size: usize },
+    Extend { item_size: usize, len: usize },
     Delete { item_size: usize },
     Clear { item_size: usize },
 }
@@ -210,7 +241,7 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for VectorAsm {
             VectorAsm::VecWithCapacity { item_size } => stdio.push_asm_lib(engine, "vec"),
             VectorAsm::Push { item_size } => stdio.push_asm_lib(engine, "push"),
             VectorAsm::Pop { item_size } => stdio.push_asm_lib(engine, "pop"),
-            VectorAsm::Extend { item_size } => stdio.push_asm_lib(engine, "extend"),
+            VectorAsm::Extend { item_size, len } => stdio.push_asm_lib(engine, "extend"),
             VectorAsm::Delete { item_size } => stdio.push_asm_lib(engine, "delete"),
             VectorAsm::Clear { item_size } => stdio.push_asm_lib(engine, "clear_vec"),
         }
@@ -220,13 +251,13 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for VectorAsm {
 impl crate::vm::AsmWeight for VectorAsm {
     fn weight(&self) -> crate::vm::Weight {
         match self {
-            VectorAsm::Vec { item_size } => crate::vm::Weight::HIGH,
-            VectorAsm::VecWithCapacity { item_size } => crate::vm::Weight::HIGH,
-            VectorAsm::Push { item_size } => crate::vm::Weight::MEDIUM,
-            VectorAsm::Pop { item_size } => crate::vm::Weight::LOW,
-            VectorAsm::Extend { item_size } => crate::vm::Weight::HIGH,
-            VectorAsm::Delete { item_size } => crate::vm::Weight::LOW,
-            VectorAsm::Clear { item_size } => crate::vm::Weight::HIGH,
+            VectorAsm::Vec { .. } => crate::vm::Weight::HIGH,
+            VectorAsm::VecWithCapacity { .. } => crate::vm::Weight::HIGH,
+            VectorAsm::Push { .. } => crate::vm::Weight::MEDIUM,
+            VectorAsm::Pop { .. } => crate::vm::Weight::LOW,
+            VectorAsm::Extend { .. } => crate::vm::Weight::HIGH,
+            VectorAsm::Delete { .. } => crate::vm::Weight::LOW,
+            VectorAsm::Clear { .. } => crate::vm::Weight::HIGH,
         }
     }
 }
@@ -258,8 +289,11 @@ impl GenerateCode for VectorFn {
             VectorFn::Pop { item_size } => {
                 instructions.push(Asm::Core(CoreAsm::Vec(VectorAsm::Pop { item_size })));
             }
-            VectorFn::Extend { item_size } => {
-                instructions.push(Asm::Core(CoreAsm::Vec(VectorAsm::Extend { item_size })));
+            VectorFn::Extend { item_size, len } => {
+                instructions.push(Asm::Core(CoreAsm::Vec(VectorAsm::Extend {
+                    item_size,
+                    len,
+                })));
             }
             VectorFn::Delete { item_size } => {
                 instructions.push(Asm::Core(CoreAsm::Vec(VectorAsm::Delete { item_size })));
@@ -286,7 +320,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
         &self,
         program: &crate::vm::program::Program<E>,
         scheduler: &mut crate::vm::scheduler::Scheduler<P>,
-        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
@@ -294,8 +328,35 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
         context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         match *self {
-            VectorAsm::Vec { item_size } => todo!(),
-            VectorAsm::VecWithCapacity { item_size } => todo!(),
+            VectorAsm::Vec { item_size } => {
+                let len = OpPrimitive::pop_num::<u64>(stack)? as usize;
+                let cap = len * 2;
+                let address = heap.alloc(align(cap * item_size) + VEC_HEADER)?;
+
+                /* Write capacity */
+                let _ = heap.write(address, &(cap as u64).to_le_bytes())?;
+                /* Write len */
+                let _ = heap.write(address.add(8), &(len as u64).to_le_bytes())?;
+
+                /* Push vec address */
+                let address: u64 = address.into(stack);
+                stack.push_with(&address.to_le_bytes())?;
+            }
+            VectorAsm::VecWithCapacity { item_size } => {
+                let cap = OpPrimitive::pop_num::<u64>(stack)? as usize;
+                let len = OpPrimitive::pop_num::<u64>(stack)? as usize;
+
+                let address = heap.alloc(align(cap * item_size) + VEC_HEADER)?;
+
+                /* Write capacity */
+                let _ = heap.write(address, &(cap as u64).to_le_bytes())?;
+                /* Write len */
+                let _ = heap.write(address.add(8), &(len as u64).to_le_bytes())?;
+
+                /* Push vec address */
+                let address: u64 = address.into(stack);
+                stack.push_with(&address.to_le_bytes())?;
+            }
             VectorAsm::Push { item_size } => {
                 let item_data = stack.pop(item_size)?.to_owned();
                 let mut address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
@@ -350,7 +411,59 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
 
                 stack.push_with(&item_data)?;
             }
-            VectorAsm::Extend { item_size } => todo!(),
+            VectorAsm::Extend {
+                item_size,
+                len: array_len,
+            } => {
+                let array_address: MemoryAddress =
+                    OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let mut vector_address: MemoryAddress =
+                    OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+
+                let array_data = match array_address {
+                    MemoryAddress::Heap { offset } => {
+                        heap.read_slice(array_address, item_size * array_len)?
+                    }
+                    MemoryAddress::Stack { offset } => {
+                        stack.read(array_address, item_size * array_len)?
+                    }
+                    MemoryAddress::Frame { offset } => {
+                        stack.read_in_frame(array_address, item_size * array_len)?
+                    }
+                    MemoryAddress::Global { offset } => {
+                        stack.read_global(array_address, item_size * array_len)?
+                    }
+                }
+                .to_vec();
+
+                let mut cap =
+                    OpPrimitive::get_num_from::<u64>(vector_address, stack, heap)? as usize;
+                let mut len =
+                    OpPrimitive::get_num_from::<u64>(vector_address.add(8), stack, heap)? as usize;
+
+                if len + array_len >= cap {
+                    // Reallocate
+                    let size = align(((len + array_len) * 2) * item_size + VEC_HEADER);
+                    len += array_len;
+                    cap = (len + array_len) * 2;
+                    vector_address = heap.realloc(vector_address, size)?;
+                }
+
+                /* Write capacity */
+                let _ = heap.write(vector_address, &(cap as u64).to_le_bytes())?;
+                /* Write len */
+                let _ = heap.write(vector_address.add(8), &(len as u64).to_le_bytes())?;
+
+                /* Write new items */
+                let _ = heap.write(
+                    vector_address.add(VEC_HEADER + ((len - array_len) * item_size)),
+                    &array_data,
+                )?;
+
+                /* Push vec address */
+                let address: u64 = vector_address.into(stack);
+                stack.push_with(&address.to_le_bytes())?;
+            }
             VectorAsm::Delete { item_size } => {
                 let index = OpPrimitive::pop_num::<u64>(stack)? as usize;
                 let mut address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;

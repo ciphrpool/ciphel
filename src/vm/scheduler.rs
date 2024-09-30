@@ -30,7 +30,7 @@ pub trait Executable<E: crate::vm::external::Engine> {
         &self,
         program: &crate::vm::program::Program<E>,
         scheduler: &mut crate::vm::scheduler::Scheduler<P>,
-        signal_handler: &mut crate::vm::runtime::SignalHandler<E>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
@@ -160,7 +160,7 @@ impl<P: SchedulingPolicy> Scheduler<P> {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        signal_handler: &mut super::runtime::SignalHandler<E>,
+        signal_handler: &mut super::signal::SignalHandler<E>,
         // context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<ControlFlow<(), ()>, RuntimeError> {
         let Some(instruction) = self.select(program)? else {
@@ -266,7 +266,13 @@ impl SchedulingPolicy for QueuePolicy {
             Weight::MEDIUM => 2,
             Weight::HIGH => 4,
             Weight::EXTREME => 8,
-            Weight::END => self.balance,
+            Weight::END => {
+                if self.balance > 0 {
+                    self.balance
+                } else {
+                    1
+                }
+            }
         }
     }
 

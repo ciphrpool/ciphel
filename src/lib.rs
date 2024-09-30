@@ -1,4 +1,4 @@
-#![allow(unused)]
+#![allow(unused_variables)]
 use ast::statements::parse_statements;
 use semantic::{Resolve, SemanticError};
 

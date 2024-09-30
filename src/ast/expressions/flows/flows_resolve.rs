@@ -152,14 +152,14 @@ impl Desugar<Atomic> for IfExpr {
 
 impl ResolveNumber for IfExpr {
     fn is_unresolved_number(&self) -> bool {
-        todo!()
+        self.condition.is_unresolved_number()
     }
 
     fn resolve_number(
         &mut self,
         to: crate::semantic::scope::static_types::NumberType,
     ) -> Result<(), SemanticError> {
-        todo!()
+        self.condition.resolve_number(to)
     }
 }
 
@@ -579,14 +579,14 @@ impl Resolve for MatchExpr {
 
 impl ResolveNumber for MatchExpr {
     fn is_unresolved_number(&self) -> bool {
-        todo!()
+        self.expr.is_unresolved_number()
     }
 
     fn resolve_number(
         &mut self,
         to: crate::semantic::scope::static_types::NumberType,
     ) -> Result<(), SemanticError> {
-        todo!()
+        self.expr.resolve_number(to)
     }
 }
 
@@ -707,8 +707,6 @@ impl Resolve for TryExpr {
             return Err(SemanticError::IncompatibleTypes);
         }
 
-        dbg!("here");
-
         let _ = try_branch_type.compatible_with(&else_branch_type, &scope_manager, scope_id)?;
 
         self.metadata.info = Info::Resolved {
@@ -722,14 +720,14 @@ impl Resolve for TryExpr {
 
 impl ResolveNumber for TryExpr {
     fn is_unresolved_number(&self) -> bool {
-        todo!()
+        false
     }
 
     fn resolve_number(
         &mut self,
         to: crate::semantic::scope::static_types::NumberType,
     ) -> Result<(), SemanticError> {
-        todo!()
+        Ok(())
     }
 }
 
