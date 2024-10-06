@@ -1,4 +1,3 @@
-use nom::{error::ParseError, IResult};
 use nom_supreme::error::{BaseErrorKind, ErrorTree, Expectation, GenericErrorTree, StackContext};
 
 use super::io::{PResult, Span};

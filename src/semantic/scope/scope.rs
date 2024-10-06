@@ -1,736 +1,746 @@
-use crate::{
-    arw_new, arw_read, arw_write,
-    ast::utils::strings::ID,
-    p_num,
-    semantic::{AccessLevel, ArcMutex, ArcRwLock, SemanticError, SizeOf},
-    vm::{allocator::stack::Offset, vm::CodeGenerationError},
-    CompilationError,
-};
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc, RwLock, Weak,
-};
 use std::{
-    borrow::Borrow,
-    collections::{BTreeSet, HashMap},
-    slice::Iter,
+    collections::{HashMap, HashSet},
+    hash::{DefaultHasher, Hash, Hasher},
 };
 
-use super::{
-    user_type_impl::UserType,
-    var_impl::{Var, VarState},
-    ClosureState, ScopeState,
+use ulid::Ulid;
+
+use crate::{
+    ast::modules::Module,
+    semantic::{EType, SemanticError, SizeOf},
+    vm::{allocator::MemoryAddress, CodeGenerationError},
 };
 
-#[derive(Debug, Clone)]
-pub struct ScopeData {
-    vars: Vec<(ArcRwLock<Var>, ArcRwLock<Offset>)>,
-    env_vars: ArcRwLock<BTreeSet<Arc<Var>>>,
-    env_vars_address: HashMap<ID, ArcMutex<AccessLevel>>,
-    types: HashMap<ID, Arc<UserType>>,
-    state: ArcRwLock<ScopeState>,
+use super::{static_types::POINTER_SIZE, user_types::UserType};
+
+#[derive(Debug, Clone, Default, PartialEq, Copy)]
+pub enum VariableAddress {
+    Global(usize),
+    Local(usize),
+    #[default]
+    Unallocated,
+}
+
+impl TryInto<MemoryAddress> for VariableAddress {
+    type Error = ();
+    fn try_into(self) -> Result<MemoryAddress, Self::Error> {
+        match self {
+            VariableAddress::Global(address) => Ok(MemoryAddress::Global { offset: address }),
+            VariableAddress::Local(address) => Ok(MemoryAddress::Frame { offset: address }),
+            VariableAddress::Unallocated => Err(()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum VariableState {
+    #[default]
+    Global,
+    Local,
+    Parameter,
+    Function,
 }
 
 #[derive(Debug, Clone)]
-pub enum Scope {
-    Inner {
-        parent: Option<Weak<RwLock<Scope>>>,
-        general: ArcRwLock<Scope>,
-        data: ScopeData,
-    },
-    General {
-        data: ScopeData,
-        transaction_data: ScopeData,
-        stack_top: Arc<AtomicUsize>,
-        in_transaction: bool,
+pub struct Variable {
+    pub id: u64,
+    pub ctype: EType,
+    pub scope: Option<u128>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ClosedMarker {
+    Open,
+    Close {
+        closed_scope: u128,
+        env_address: MemoryAddress,
+        offset: usize,
     },
 }
 
-impl ScopeData {
-    pub fn new() -> Self {
+impl ClosedMarker {
+    pub fn get(
+        &self,
+        scope_id: Option<u128>,
+        scope_manager: &ScopeManager,
+    ) -> Option<(MemoryAddress, usize)> {
+        let Some(scope_id) = scope_id else {
+            return None;
+        };
+        let ClosedMarker::Close {
+            closed_scope,
+            env_address,
+            offset,
+        } = self
+        else {
+            return None;
+        };
+        let Some(branch) = scope_manager.scope_branches.get(&scope_id) else {
+            return None;
+        };
+        if branch.iter().find(|sid| **sid == *closed_scope).is_some() {
+            return Some((env_address.clone(), *offset));
+        } else {
+            return None;
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VariableInfo {
+    pub id: u64,
+    pub name: String,
+    pub count: usize,
+    pub ctype: EType,
+    pub scope: Option<u128>,
+    pub is_global: bool,
+    pub marked_as_closed_var: ClosedMarker,
+    pub address: VariableAddress,
+    pub state: VariableState,
+}
+
+#[derive(Debug, Clone)]
+pub struct Type {
+    pub id: u64,
+    pub def: UserType,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeInfo {
+    pub id: u64,
+    pub name: String,
+    pub count: usize,
+    pub def: UserType,
+    pub scope: Option<u128>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum ScopeState {
+    Function,
+    Closure,
+    Lambda,
+    Inline,
+    IIFE,
+    Loop,
+    #[default]
+    Default,
+}
+
+#[derive(Debug, Clone)]
+pub struct GlobalMapping {
+    pub top: usize,
+}
+
+impl Default for GlobalMapping {
+    fn default() -> Self {
+        // EMPTY STRING : must set the first 8 bytes to 0
+        Self { top: 8 }
+    }
+}
+
+impl GlobalMapping {
+    pub const EMPTY_STRING_ADDRESS: MemoryAddress = MemoryAddress::Global { offset: 0 };
+    pub fn alloc(&mut self, size: usize) -> VariableAddress {
+        let variable = VariableAddress::Global(self.top);
+        self.top += size;
+        variable
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct FrameMapping {
+    pub param_size: usize,
+    pub local_size: usize,
+    pub top: usize,
+    pub vars: Vec<(u64, usize)>, // var id and offset
+}
+
+#[derive(Debug, Clone)]
+pub struct ScopeManager {
+    pub modules: Vec<Module>,
+
+    vars: HashMap<u64, VariableInfo>,
+    types: Vec<TypeInfo>,
+    scope_branches: HashMap<u128, Vec<u128>>, // parent scope of a given scope (key)
+
+    pub allocating_scope: HashMap<u128, FrameMapping>,
+
+    pub scope_types: HashMap<u128, Vec<EType>>,
+    pub scope_lookup: HashMap<u128, HashSet<u64>>,
+    pub scope_states: HashMap<u128, ScopeState>,
+    pub global_mapping: GlobalMapping,
+}
+
+impl Default for ScopeManager {
+    fn default() -> Self {
         Self {
-            vars: Vec::new(),
-            types: HashMap::new(),
-            state: Default::default(),
-            env_vars: Default::default(),
-            env_vars_address: HashMap::default(),
+            scope_branches: HashMap::default(),
+
+            types: Vec::default(),
+            vars: HashMap::default(),
+            allocating_scope: HashMap::default(),
+
+            scope_types: HashMap::default(),
+            scope_lookup: HashMap::default(),
+            scope_states: HashMap::default(),
+            global_mapping: GlobalMapping::default(),
+            modules: Vec::default(),
         }
-    }
-
-    pub fn clear(&mut self) {
-        self.vars.clear();
-        self.types.clear();
-        self.state = Default::default();
-        self.env_vars = Default::default();
-        self.env_vars_address = Default::default();
-    }
-
-    pub fn spawn(&self) -> Result<Self, SemanticError> {
-        Ok(Self {
-            vars: Vec::default(),
-            types: HashMap::new(),
-            state: Arc::new(RwLock::new(
-                self.state
-                    .read()
-                    .map_err(|_| SemanticError::ConcurrencyError)?
-                    .clone(),
-            )),
-            env_vars: Default::default(),
-            env_vars_address: HashMap::default(),
-        })
     }
 }
 
-impl Scope {
-    pub fn new() -> ArcRwLock<Self> {
-        Arc::new(RwLock::new(Self::General {
-            data: ScopeData::new(),
-            transaction_data: ScopeData::new(),
-            stack_top: Default::default(),
-            in_transaction: false,
-        }))
-    }
-}
+impl ScopeManager {
+    pub fn spawn(&mut self, parent: Option<u128>) -> Result<u128, SemanticError> {
+        let scope_id = Ulid::new().0;
 
-impl Scope {
-    pub fn open_transaction(&mut self) -> Result<(), CompilationError> {
-        match self {
-            Scope::Inner {
-                parent,
-                general,
-                data,
-            } => {
-                return Err(CompilationError::TransactionError(
-                    "Cannot open a transaction in an inner scope",
-                ))
-            }
-            Scope::General {
-                data,
-                stack_top,
-                in_transaction,
-                transaction_data,
-            } => {
-                *in_transaction = true;
-                transaction_data.clear();
-                Ok(())
-            }
+        if let Some(parent) = parent {
+            let Some(parent_branch) = self.scope_branches.get(&parent) else {
+                return Err(SemanticError::Default);
+            };
+            let mut branch = parent_branch.clone();
+            branch.push(scope_id);
+            self.scope_branches.insert(scope_id, branch);
+        } else {
+            self.scope_branches.insert(scope_id, vec![scope_id]);
         }
+
+        self.scope_lookup.insert(scope_id, HashSet::new());
+
+        Ok(scope_id)
     }
 
-    pub fn commit_transaction(&mut self) -> Result<(), CompilationError> {
-        match self {
-            Scope::Inner {
-                parent,
-                general,
-                data,
-            } => {
-                return Err(CompilationError::TransactionError(
-                    "Cannot commit a transaction in an inner scope",
-                ))
-            }
-            Scope::General {
-                data,
-                stack_top,
-                in_transaction,
-                transaction_data,
-            } => {
-                if *in_transaction {
-                    data.vars.extend(transaction_data.vars.drain(..));
-                    data.types.extend(transaction_data.types.drain());
-                }
-                Ok(())
-            }
-        }
+    pub fn spawn_allocating(
+        &mut self,
+        parent: Option<u128>,
+        with_caller: bool,
+    ) -> Result<u128, SemanticError> {
+        let scope_id = self.spawn(parent)?;
+        self.allocating_scope.insert(
+            scope_id,
+            FrameMapping {
+                top: if with_caller { POINTER_SIZE } else { 0 },
+                local_size: 0,
+                param_size: 0,
+                vars: Vec::default(),
+            },
+        );
+        Ok(scope_id)
     }
 
-    pub fn reject_transaction(&mut self) -> Result<(), CompilationError> {
-        match self {
-            Scope::Inner {
-                parent,
-                general,
-                data,
-            } => {
-                return Err(CompilationError::TransactionError(
-                    "Cannot reject a transaction in an inner scope",
-                ))
-            }
-            Scope::General {
-                data,
-                stack_top,
-                in_transaction,
-                transaction_data,
-            } => {
-                if *in_transaction {
-                    transaction_data.vars.clear();
-                    transaction_data.types.clear();
-                }
-                Ok(())
-            }
-        }
+    pub fn hash_id(name: &str, count: usize, scope: Option<u128>) -> u64 {
+        let mut hasher = DefaultHasher::default();
+        name.hash(&mut hasher);
+        count.hash(&mut hasher);
+        scope.hash(&mut hasher);
+        let hash = hasher.finish();
+        hash
     }
 
-    pub fn close_transaction(&mut self) -> Result<(), CompilationError> {
-        match self {
-            Scope::Inner {
-                parent,
-                general,
-                data,
-            } => {
-                return Err(CompilationError::TransactionError(
-                    "Cannot close a transaction in an inner scope",
-                ))
-            }
-            Scope::General {
-                data,
-                stack_top,
-                in_transaction,
-                transaction_data,
-            } => {
-                *in_transaction = true;
-                transaction_data.clear();
-                Ok(())
-            }
-        }
-    }
-
-    pub fn spawn(
-        parent: &ArcRwLock<Self>,
-        vars: Vec<Var>,
-    ) -> Result<ArcRwLock<Self>, SemanticError> {
-        let borrowed_parent = arw_read!(parent, SemanticError::ConcurrencyError)?;
-        match &*borrowed_parent {
-            Scope::Inner { general, data, .. } => {
-                let mut child = Self::Inner {
-                    parent: Some(Arc::downgrade(parent)),
-                    general: general.clone(),
-                    data: data.spawn()?,
-                };
-                for variable in vars {
-                    let _ = child.register_var(variable);
-                }
-                let child = arw_new!(child);
-                Ok(child)
-            }
-            Scope::General { .. } => {
-                let mut child = Self::Inner {
-                    parent: None,
-                    general: parent.clone(),
-                    data: ScopeData::new(),
-                };
-                for variable in vars {
-                    let _ = child.register_var(variable);
-                }
-                Ok(arw_new!(child))
-            }
-        }
-    }
-
-    pub fn register_type(&mut self, id: &ID, reg: UserType) -> Result<(), SemanticError> {
-        match self {
-            Scope::Inner { data, .. } => {
-                data.types.insert(id.clone(), reg.into());
-                Ok(())
-            }
-            Scope::General {
-                data,
-                in_transaction,
-                transaction_data,
-                ..
-            } => {
-                if *in_transaction {
-                    transaction_data.types.insert(id.clone(), reg.into());
-                } else {
-                    data.types.insert(id.clone(), reg.into());
-                }
-                Ok(())
-            }
-        }
-    }
-
-    pub fn register_var(&mut self, mut reg: Var) -> Result<(), SemanticError> {
-        match self {
-            Scope::Inner { data, .. } => {
-                data.vars
-                    .push((Arc::new(RwLock::new(reg)), Default::default()));
-                Ok(())
-            }
-            Scope::General {
-                data,
-                in_transaction,
-                transaction_data,
-                ..
-            } => {
-                if *in_transaction {
-                    reg.state = VarState::Global;
-                    transaction_data
-                        .vars
-                        .push((Arc::new(RwLock::new(reg)), Default::default()));
-                } else {
-                    reg.state = VarState::Global;
-                    data.vars
-                        .push((Arc::new(RwLock::new(reg)), Default::default()));
-                }
-                Ok(())
-            }
-        }
-    }
-
-    pub fn find_var(&self, id: &ID) -> Result<ArcRwLock<Var>, SemanticError> {
-        match self {
-            Scope::Inner {
-                data,
-                parent,
-                general,
-                ..
-            } => self
-                .find_var_in_data(data, id)
-                .or_else(|| self.find_var_in_parent(parent, id))
-                .or_else(|| self.find_var_in_general(general, id))
-                .ok_or_else(|| SemanticError::UnknownVar(id.clone())),
-            Scope::General {
-                data,
-                in_transaction,
-                transaction_data,
-                ..
-            } => self.find_var_in_general_scope(data, *in_transaction, transaction_data, id),
-        }
-    }
-
-    fn find_var_in_data(&self, data: &ScopeData, id: &ID) -> Option<ArcRwLock<Var>> {
-        data.vars.iter().rev().find_map(|(var, _)| {
-            arw_read!(var, SemanticError::ConcurrencyError)
-                .ok()
-                .filter(|v| v.id == *id)
-                .map(|_| var.clone())
-        })
-    }
-
-    fn find_var_in_parent(
-        &self,
-        parent: &Option<Weak<RwLock<Scope>>>,
-        id: &ID,
-    ) -> Option<ArcRwLock<Var>> {
-        parent.as_ref().and_then(|p| {
-            p.upgrade().and_then(|p| {
-                let borrowed_scope = arw_read!(p, SemanticError::ConcurrencyError).ok()?;
-                let var = borrowed_scope.find_var(id).ok()?;
-                let _ = self.capture(var.clone());
-                Some(var)
-            })
-        })
-    }
-
-    fn find_var_in_general(&self, general: &ArcRwLock<Scope>, id: &ID) -> Option<ArcRwLock<Var>> {
-        arw_read!(general, SemanticError::ConcurrencyError)
-            .ok()
-            .and_then(|borrowed_scope| borrowed_scope.find_var(id).ok())
-    }
-
-    fn find_var_in_general_scope(
-        &self,
-        data: &ScopeData,
-        in_transaction: bool,
-        transaction_data: &ScopeData,
-        id: &ID,
-    ) -> Result<ArcRwLock<Var>, SemanticError> {
-        let find_in_data = |data: &ScopeData| {
-            data.vars.iter().find_map(|(var, _)| {
-                match arw_read!(var, SemanticError::ConcurrencyError) {
-                    Ok(borrowed_var) if borrowed_var.id == *id => Some(var.clone()),
-                    _ => None,
-                }
-            })
+    pub fn register_data(
+        &mut self,
+        data_size: usize,
+        scope_id: Option<u128>,
+    ) -> Result<Option<MemoryAddress>, SemanticError> {
+        let Some(scope_id) = scope_id else {
+            return Ok(None);
         };
 
-        if in_transaction {
-            find_in_data(transaction_data)
-                .or_else(|| find_in_data(data))
-                .ok_or_else(|| SemanticError::UnknownVar(id.clone()))
-        } else {
-            find_in_data(data).ok_or_else(|| SemanticError::UnknownVar(id.clone()))
-        }
-    }
-
-    pub fn access_var(
-        &self,
-        id: &ID,
-    ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
-        let is_closure = self
-            .state()
-            .map_err(|_| CodeGenerationError::ConcurrencyError)?
-            .is_closure;
-
-        match self {
-            Scope::Inner {
-                data,
-                parent,
-                general,
-                ..
-            } => self.access_var_in_inner(id, is_closure, data, parent, general),
-            Scope::General { data, .. } => self.access_var_in_general(id, data),
-        }
-    }
-
-    fn access_var_in_inner(
-        &self,
-        id: &ID,
-        is_closure: ClosureState,
-        data: &ScopeData,
-        parent: &Option<Weak<RwLock<Scope>>>,
-        general: &ArcRwLock<Scope>,
-    ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
-        if let Some(result) = self.find_var_in_data_for_access(id, data)? {
-            return Ok(result);
-        }
-
-        match parent {
-            Some(parent) => self.access_var_in_parent(id, is_closure, parent),
-            None => self.access_var_in_general_scope(id, general),
-        }
-    }
-
-    fn find_var_in_data_for_access(
-        &self,
-        id: &ID,
-        data: &ScopeData,
-    ) -> Result<Option<(ArcRwLock<Var>, Offset, AccessLevel)>, CodeGenerationError> {
-        for (var, offset) in data.vars.iter().rev() {
-            let borrowed_var = arw_read!(var, CodeGenerationError::ConcurrencyError)?;
-            if &borrowed_var.id == id && borrowed_var.is_declared {
-                return Ok(Some((
-                    var.clone(),
-                    arw_read!(offset, CodeGenerationError::ConcurrencyError)?.clone(),
-                    AccessLevel::Direct,
-                )));
-            }
-        }
-        Ok(None)
-    }
-
-    fn access_var_in_parent(
-        &self,
-        id: &ID,
-        is_closure: ClosureState,
-        parent: &Weak<RwLock<Scope>>,
-    ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
-        let p = parent
-            .upgrade()
-            .ok_or(CodeGenerationError::UnresolvedError)?;
-        let borrowed_scope = arw_read!(p, CodeGenerationError::ConcurrencyError)?;
-
-        let (var, offset, level) = borrowed_scope.access_var(id)?;
-        let borrowed_var = arw_read!(var, CodeGenerationError::ConcurrencyError)?;
-
-        let level = self.adjust_access_level(level);
-
-        if is_closure == ClosureState::CAPTURING {
-            self.handle_closure_capturing(borrowed_scope, borrowed_var, var.clone(), level)
-        } else {
-            Ok((var.clone(), offset, level))
-        }
-    }
-
-    fn adjust_access_level(&self, level: AccessLevel) -> AccessLevel {
-        match level {
-            AccessLevel::General => AccessLevel::General,
-            AccessLevel::Direct => AccessLevel::Backward(1),
-            AccessLevel::Backward(l) => AccessLevel::Backward(l + 1),
-        }
-    }
-
-    fn handle_closure_capturing(
-        &self,
-        borrowed_scope: impl std::ops::Deref<Target = Scope>,
-        borrowed_var: impl std::ops::Deref<Target = Var>,
-        var: ArcRwLock<Var>,
-        level: AccessLevel,
-    ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
-        let level = match level {
-            AccessLevel::Backward(1) => AccessLevel::Direct,
-            AccessLevel::Backward(l) => AccessLevel::Backward(l - 1),
-            _ => level,
+        let Some(branch) = self.scope_branches.get(&scope_id) else {
+            return Ok(None);
         };
 
-        let offset = self.calculate_env_var_offset(&borrowed_scope, &borrowed_var)?;
-        let env_offset = self.get_env_offset()?;
+        for id in branch.iter().rev() {
+            let Some(scope_state) = self.scope_states.get(&id) else {
+                continue;
+            };
 
-        Ok((var, Offset::FE(env_offset, offset), level))
+            if (*scope_state == ScopeState::IIFE)
+                || (*scope_state == ScopeState::Closure)
+                || (*scope_state == ScopeState::Lambda)
+                || (*scope_state == ScopeState::Function)
+            {
+                let address: MemoryAddress;
+                if let Some(mapping) = self.allocating_scope.get_mut(id) {
+                    address = MemoryAddress::Frame {
+                        offset: mapping.top,
+                    };
+                    mapping.top += data_size;
+                    mapping.local_size += data_size;
+                } else {
+                    return Err(SemanticError::NotResolvedYet);
+                }
+                return Ok(Some(address));
+            }
+        }
+        return Ok(None);
     }
 
-    fn calculate_env_var_offset(
+    pub fn register_var(
+        &mut self,
+        name: &str,
+        ctype: EType,
+        scope: Option<u128>,
+    ) -> Result<u64, SemanticError> {
+        let count = self
+            .vars
+            .values()
+            .filter(|v| v.name == name)
+            .map(|v| v.count)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let var_id = ScopeManager::hash_id(name, count, scope);
+        let is_global = self.signal_variable_registation(var_id, ctype.size_of(), scope, false);
+        self.vars.insert(
+            var_id,
+            VariableInfo {
+                id: var_id,
+                name: name.to_string(),
+                count,
+                is_global,
+                marked_as_closed_var: ClosedMarker::Open,
+                ctype,
+                scope,
+                address: VariableAddress::default(),
+                state: scope.map_or(VariableState::Global, |_| VariableState::Local),
+            },
+        );
+        Ok(var_id)
+    }
+
+    pub fn register_parameter(
+        &mut self,
+        name: &str,
+        ctype: EType,
+        scope: Option<u128>,
+    ) -> Result<u64, SemanticError> {
+        let count = self
+            .vars
+            .values()
+            .filter(|v| v.name == name)
+            .map(|v| v.count)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let var_id = ScopeManager::hash_id(name, count, scope);
+
+        let _ = self.signal_variable_registation(var_id, ctype.size_of(), scope, true);
+        self.vars.insert(
+            var_id,
+            VariableInfo {
+                id: var_id,
+                name: name.to_string(),
+                count,
+                is_global: false,
+                marked_as_closed_var: ClosedMarker::Open,
+                ctype,
+                scope,
+                address: VariableAddress::default(),
+                state: VariableState::Parameter,
+            },
+        );
+        Ok(var_id)
+    }
+
+    pub fn register_caller(
+        &mut self,
+        name: &str,
+        ctype: EType,
+        scope: u128,
+    ) -> Result<u64, SemanticError> {
+        let count = self
+            .vars
+            .values()
+            .filter(|v| v.name == name)
+            .map(|v| v.count)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let var_id = ScopeManager::hash_id(name, count, Some(scope));
+
+        self.vars.insert(
+            var_id,
+            VariableInfo {
+                id: var_id,
+                name: name.to_string(),
+                count,
+                is_global: false,
+                marked_as_closed_var: ClosedMarker::Open,
+                ctype,
+                scope: Some(scope),
+                address: VariableAddress::Local(0),
+                state: VariableState::Function,
+            },
+        );
+        Ok(var_id)
+    }
+
+    pub fn register_type(
+        &mut self,
+        name: &str,
+        ctype: UserType,
+        scope: Option<u128>,
+    ) -> Result<u64, SemanticError> {
+        let count = self
+            .types
+            .iter()
+            .filter(|v| v.name == name)
+            .map(|v| v.count)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let type_id = ScopeManager::hash_id(name, count, scope);
+        self.types.push(TypeInfo {
+            id: type_id,
+            name: name.to_string(),
+            count,
+            def: ctype,
+            scope,
+        });
+        Ok(type_id)
+    }
+
+    pub fn find_var_by_name(
         &self,
-        borrowed_scope: &Scope,
-        borrowed_var: &Var,
-    ) -> Result<usize, CodeGenerationError> {
-        let mut offset = 0;
-        for env_var in borrowed_scope
-            .env_vars()
-            .map_err(|_| CodeGenerationError::ConcurrencyError)?
-        {
-            if env_var.id == borrowed_var.id {
+        name: &str,
+        path: Option<&[String]>,
+        scope: Option<u128>,
+    ) -> Result<Variable, SemanticError> {
+        if let Some(path) = path {
+            return self
+                .modules
+                .iter()
+                .find_map(|module| module.find_var(path, name))
+                .ok_or(SemanticError::UnknownVar(name.to_string()));
+        }
+
+        match scope {
+            Some(scope) => {
+                let Some(branch) = self.scope_branches.get(&scope) else {
+                    return Err(SemanticError::UnknownVar(name.to_string()));
+                };
+                let mut buffer: Vec<_> = self
+                    .vars
+                    .values()
+                    .filter(|v| v.name == name)
+                    .filter(|v| {
+                        v.scope.is_none()
+                            || branch.iter().find(|id| **id == v.scope.unwrap()).is_some()
+                    })
+                    .collect();
+
+                buffer.sort_by(|v1, v2| {
+                    v1.count
+                        .partial_cmp(&v2.count)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+
+                let Some(variable) = buffer.last() else {
+                    return Err(SemanticError::UnknownVar(name.to_string()));
+                };
+                Ok(Variable {
+                    ctype: variable.ctype.clone(),
+                    id: variable.id,
+                    scope: variable.scope,
+                })
+            }
+            None => {
+                let mut buffer: Vec<_> = self
+                    .vars
+                    .values()
+                    .filter(|v| v.scope.is_none() && v.name == name)
+                    .collect();
+
+                buffer.sort_by(|v1, v2| {
+                    v1.count
+                        .partial_cmp(&v2.count)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+
+                let Some(variable) = buffer.last() else {
+                    return Err(SemanticError::UnknownVar(name.to_string()));
+                };
+                Ok(Variable {
+                    ctype: variable.ctype.clone(),
+                    id: variable.id,
+                    scope: variable.scope,
+                })
+            }
+        }
+    }
+
+    pub fn signal_variable_access(&mut self, variable: &Variable, scope_id: u128) {
+        if variable.scope.is_none() {
+            return;
+        }
+        let var_scope = variable.scope.unwrap();
+        let Some(branch) = self.scope_branches.get(&scope_id) else {
+            return;
+        };
+
+        for id in branch.iter().rev() {
+            let Some(scope_state) = self.scope_states.get(&id) else {
+                continue;
+            };
+            if (*scope_state == ScopeState::IIFE
+                || *scope_state == ScopeState::Closure
+                || *scope_state == ScopeState::Lambda)
+                && (var_scope != *id)
+            {
+                let Some(outside) = self.scope_branches.get(&scope_id) else {
+                    continue;
+                };
+
+                if outside.iter().rev().find(|s| var_scope == **s).is_some() {
+                    // The variable is outside a closed scope
+                    self.scope_lookup
+                        .get_mut(&id)
+                        .map(|set| set.insert(variable.id));
+                }
+            }
+        }
+    }
+
+    pub fn mark_as_closed_var(
+        &mut self,
+        scope_id: u128,
+        id: u64,
+        address: MemoryAddress,
+        offset: usize,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        let Some(VariableInfo {
+            marked_as_closed_var,
+            ..
+        }) = self.vars.get_mut(&id)
+        else {
+            return Err(CodeGenerationError::Unlocatable);
+        };
+        *marked_as_closed_var = ClosedMarker::Close {
+            closed_scope: scope_id,
+            env_address: address,
+            offset,
+        };
+        Ok(())
+    }
+
+    pub fn is_scope_global(&self, scope_id: Option<u128>) -> bool {
+        let Some(scope_id) = scope_id else {
+            return true;
+        };
+
+        let Some(branch) = self.scope_branches.get(&scope_id) else {
+            return true;
+        };
+
+        let mut is_global = true;
+        for id in branch.iter().rev() {
+            let Some(scope_state) = self.scope_states.get(&id) else {
+                continue;
+            };
+            if (*scope_state == ScopeState::IIFE)
+                || (*scope_state == ScopeState::Closure)
+                || (*scope_state == ScopeState::Lambda)
+                || (*scope_state == ScopeState::Function)
+            {
+                is_global = false;
                 break;
             }
-            offset += env_var.as_ref().type_sig.size_of();
         }
-        Ok(offset)
+        return is_global;
     }
 
-    fn get_env_offset(&self) -> Result<usize, CodeGenerationError> {
-        match self.access_var(&"$ENV".to_string().into()) {
-            Ok((_, Offset::FP(o), _)) => Ok(o),
-            _ => Err(CodeGenerationError::UnresolvedError),
-        }
-    }
+    pub fn signal_variable_registation(
+        &mut self,
+        var_id: u64,
+        var_size: usize,
+        scope_id: Option<u128>,
+        is_parameter: bool,
+    ) -> bool {
+        let Some(scope_id) = scope_id else {
+            return true;
+        };
 
-    fn access_var_in_general_scope(
-        &self,
-        id: &ID,
-        general: &ArcRwLock<Scope>,
-    ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
-        let borrowed_scope = arw_read!(general, CodeGenerationError::ConcurrencyError)?;
-        borrowed_scope.access_var(id)
-    }
+        let Some(branch) = self.scope_branches.get(&scope_id) else {
+            return true;
+        };
 
-    fn access_var_in_general(
-        &self,
-        id: &ID,
-        data: &ScopeData,
-    ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
-        for (var, offset) in data.vars.iter().rev() {
-            let borrowed_var = arw_read!(var, CodeGenerationError::ConcurrencyError)?;
-            if &borrowed_var.id == id {
-                return Ok((
-                    var.clone(),
-                    arw_read!(offset, CodeGenerationError::ConcurrencyError)?.clone(),
-                    AccessLevel::General,
-                ));
-            }
-        }
-        Err(CodeGenerationError::UnresolvedError)
-    }
+        let mut is_global = true;
+        for id in branch.iter().rev() {
+            let Some(scope_state) = self.scope_states.get(&id) else {
+                continue;
+            };
 
-    pub fn capture(&self, var: ArcRwLock<Var>) -> Result<bool, SemanticError> {
-        match self {
-            Scope::Inner { data, .. } => {
-                let state = arw_read!(data.state, SemanticError::ConcurrencyError)?;
-
-                if state.is_closure != ClosureState::DEFAULT {
-                    let Some(mut env_vars) =
-                        arw_write!(data.env_vars, SemanticError::ConcurrencyError).ok()
-                    else {
-                        return Ok(false);
-                    };
-                    let var = arw_read!(var, SemanticError::ConcurrencyError)?.clone();
-                    env_vars.insert(Arc::new(var));
-                    return Ok(true);
-                }
-                return Ok(false);
-            }
-            _ => Ok(false),
-        }
-    }
-
-    pub fn find_type(&self, id: &ID) -> Result<Arc<UserType>, SemanticError> {
-        match self {
-            Scope::Inner {
-                data,
-                parent,
-                general,
-                ..
-            } => data
-                .types
-                .get(id)
-                .cloned()
-                .or_else(|| match parent {
-                    Some(parent) => parent.upgrade().and_then(|p| {
-                        let borrowed_scope = arw_read!(p, SemanticError::ConcurrencyError).ok()?;
-                        let borrowed_scope = borrowed_scope.borrow();
-                        borrowed_scope.find_type(id).ok()
-                    }),
-                    None => {
-                        let borrowed_scope =
-                            arw_read!(general, SemanticError::ConcurrencyError).ok()?;
-                        let borrowed_scope = borrowed_scope.borrow();
-
-                        borrowed_scope.find_type(id).ok()
+            if (*scope_state == ScopeState::IIFE)
+                || (*scope_state == ScopeState::Closure)
+                || (*scope_state == ScopeState::Lambda)
+                || (*scope_state == ScopeState::Function)
+            {
+                is_global = false;
+                if let Some(mapping) = self.allocating_scope.get_mut(id) {
+                    mapping.vars.push((var_id, mapping.top));
+                    mapping.top += var_size;
+                    if is_parameter {
+                        mapping.param_size += var_size;
+                    } else {
+                        mapping.local_size += var_size;
                     }
+                }
+                break;
+            }
+        }
+        return is_global;
+    }
+
+    pub fn find_var_by_id(&self, id: u64) -> Result<&VariableInfo, CodeGenerationError> {
+        self.vars.get(&id).ok_or(CodeGenerationError::Unlocatable)
+    }
+    pub fn alloc_global_var_by_id(
+        &mut self,
+        id: u64,
+    ) -> Result<VariableAddress, CodeGenerationError> {
+        let Some(var) = self.vars.get_mut(&id) else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        var.address = self.global_mapping.alloc(var.ctype.size_of());
+        Ok(var.address.clone())
+    }
+
+    pub fn find_type_by_name(
+        &self,
+        path: Option<&[String]>,
+        name: &str,
+        scope: Option<u128>,
+    ) -> Result<Type, SemanticError> {
+        if let Some(path) = path {
+            return self
+                .modules
+                .iter()
+                .find_map(|module| module.find_type(path, name))
+                .ok_or(SemanticError::UnknownType(name.to_string()));
+        }
+
+        match scope {
+            Some(scope) => {
+                let Some(branch) = self.scope_branches.get(&scope) else {
+                    return Err(SemanticError::UnknownType(name.to_string()));
+                };
+
+                let Some(ctype) = self
+                    .types
+                    .iter()
+                    .rev()
+                    .filter(|v| v.name == name)
+                    .filter(|v| {
+                        v.scope.is_none()
+                            || branch.iter().find(|id| **id == v.scope.unwrap()).is_some()
+                    })
+                    .next()
+                else {
+                    return Err(SemanticError::UnknownType(name.to_string()));
+                };
+                Ok(Type {
+                    id: ctype.id,
+                    def: ctype.def.clone(),
                 })
-                .ok_or(SemanticError::UnknownType(id.clone())),
-            Scope::General {
-                data,
-                in_transaction,
-                transaction_data,
-                ..
-            } => {
-                let found = data.types.get(id);
-                if let Some(typ) = found {
-                    return Ok(typ.clone());
-                } else if *in_transaction {
-                    let found = transaction_data.types.get(id);
-                    if let Some(typ) = found {
-                        return Ok(typ.clone());
-                    } else {
-                        return Err(SemanticError::UnknownType(id.clone()));
-                    }
-                } else {
-                    return Err(SemanticError::UnknownType(id.clone()));
+            }
+            None => {
+                let Some(ctype) = self
+                    .types
+                    .iter()
+                    .rev()
+                    .filter(|v| v.name == name && v.scope.is_none())
+                    .next()
+                else {
+                    return Err(SemanticError::UnknownType(name.to_string()));
+                };
+                Ok(Type {
+                    id: ctype.id,
+                    def: ctype.def.clone(),
+                })
+            }
+        }
+    }
+
+    pub fn find_type_by_id(&self, id: u64, scope: Option<u128>) -> Result<UserType, SemanticError> {
+        let ctype = self.types.iter().find(|var| var.id == id);
+        match ctype {
+            Some(ctype) => Ok(ctype.def.clone()),
+            None => return Err(SemanticError::CantInferType("unknown".to_string())),
+        }
+    }
+
+    pub fn is_scope_in(&self, scope_id: u128, state: ScopeState) -> Option<u128> {
+        let Some(branch) = self.scope_branches.get(&scope_id) else {
+            return None;
+        };
+
+        for id in branch.iter().rev() {
+            if let Some(scope_state) = self.scope_states.get(&id) {
+                if *scope_state == state {
+                    return Some(*id);
                 }
             }
         }
+        return None;
     }
 
-    pub fn state(&self) -> Result<ScopeState, SemanticError> {
-        match self {
-            Scope::Inner { data, .. } => {
-                let state = arw_read!(data.state, SemanticError::ConcurrencyError)?;
-                Ok(state.clone())
-            }
-            Scope::General { data, .. } => {
-                let state = arw_read!(data.state, SemanticError::ConcurrencyError)?;
-                Ok(state.clone())
-            }
-        }
-    }
+    pub fn can_return(&self, scope_id: u128) -> Option<u128> {
+        let Some(branch) = self.scope_branches.get(&scope_id) else {
+            return None;
+        };
 
-    pub fn to_closure(&mut self, state: ClosureState) -> Result<(), SemanticError> {
-        match self {
-            Scope::Inner { data, .. } => {
-                let mut data_state = arw_write!(data.state, SemanticError::ConcurrencyError)?;
-                data_state.is_closure = state;
-                if state == ClosureState::CAPTURING {
-                    let mut offset = 0;
-                    for (var, _o) in &data.vars {
-                        let borrowed_var = arw_read!(var, SemanticError::ConcurrencyError)?;
-                        if borrowed_var.state == VarState::Parameter {
-                            offset += borrowed_var.type_sig.size_of();
-                        }
-                    }
-                    data.vars.push((
-                        Arc::new(RwLock::new(Var {
-                            id: "$ENV".to_string().into(),
-                            type_sig: p_num!(U64),
-                            state: VarState::Parameter.into(),
-                            is_declared: true,
-                        })),
-                        Arc::new(RwLock::new(Offset::FP(offset))),
-                    ));
-                    Ok(())
-                } else {
-                    Ok(())
-                }
-            }
-            _ => Ok(()),
-        }
-    }
-
-    pub fn to_loop(&mut self) -> Result<(), SemanticError> {
-        match self {
-            Scope::Inner { data, .. } => {
-                let mut data_state = arw_write!(data.state, SemanticError::ConcurrencyError)?;
-                data_state.is_loop = true;
-                Ok(())
-            }
-            _ => Ok(()),
-        }
-    }
-
-    pub fn env_vars(&self) -> Result<Vec<Arc<Var>>, SemanticError> {
-        match self {
-            Scope::Inner { data, .. } => {
-                Ok(arw_read!(data.env_vars, SemanticError::ConcurrencyError)?
-                    .clone()
-                    .into_iter()
-                    .collect())
-            }
-            Scope::General { data, .. } => {
-                Ok(arw_read!(data.env_vars, SemanticError::ConcurrencyError)?
-                    .clone()
-                    .into_iter()
-                    .collect())
-            }
-        }
-    }
-
-    pub fn vars(&self) -> Iter<(ArcRwLock<Var>, ArcRwLock<Offset>)> {
-        match self {
-            Scope::Inner {
-                parent: _,
-                general: _,
-                data,
-            } => data.vars.iter(),
-            Scope::General { data, .. } => data.vars.iter(),
-        }
-    }
-
-    pub fn for_closure_vars(
-        &self,
-    ) -> Result<Iter<(ArcRwLock<Var>, ArcRwLock<Offset>)>, SemanticError> {
-        match self {
-            Scope::Inner {
-                parent: _,
-                general: _,
-                data,
-            } => Ok(data.vars.iter()),
-            Scope::General { .. } => Err(SemanticError::ExpectedClosure),
-        }
-    }
-
-    pub fn update_var_offset(
-        &self,
-        id: &ID,
-        offset: Offset,
-    ) -> Result<ArcRwLock<Var>, CodeGenerationError> {
-        match self {
-            Scope::Inner { data, .. } => {
-                if let Some((var, var_offset)) = data.vars.iter().rev().find(|(v, _)| {
-                    let borrowed_var = &arw_read!(v, CodeGenerationError::ConcurrencyError);
-                    if let Ok(v) = borrowed_var {
-                        v.id == *id
-                    } else {
-                        false
-                    }
-                }) {
-                    let mut var_offset =
-                        arw_write!(var_offset, CodeGenerationError::ConcurrencyError)?;
-                    *var_offset = offset;
-                    Ok(var.clone())
-                } else {
-                    Err(CodeGenerationError::UnresolvedError)
-                }
-            }
-            Scope::General { data, .. } => {
-                if let Some((var, var_offset)) = data.vars.iter().rev().find(|(v, _)| {
-                    let borrowed_var = &arw_read!(v, CodeGenerationError::ConcurrencyError);
-                    if let Ok(v) = borrowed_var {
-                        v.id == *id
-                    } else {
-                        false
-                    }
-                }) {
-                    let mut var_offset =
-                        arw_write!(var_offset, CodeGenerationError::ConcurrencyError)?;
-                    *var_offset = offset;
-                    Ok(var.clone())
-                } else {
-                    Err(CodeGenerationError::UnresolvedError)
+        for id in branch.iter().rev() {
+            if let Some(scope_state) = self.scope_states.get(&id) {
+                if *scope_state == ScopeState::Closure
+                    || *scope_state == ScopeState::Function
+                    || *scope_state == ScopeState::Lambda
+                {
+                    return Some(*id);
                 }
             }
         }
-    }
-    pub fn stack_top(&self) -> Option<usize> {
-        match self {
-            Scope::Inner { .. } => None,
-            Scope::General { stack_top, .. } => Some(stack_top.load(Ordering::Acquire)),
-        }
+        return None;
     }
 
-    pub fn update_stack_top(&self, top: usize) -> Result<(), CodeGenerationError> {
-        match self {
-            Scope::Inner { .. } => Err(CodeGenerationError::UnresolvedError),
-            Scope::General { stack_top, .. } => {
-                stack_top.store(top, Ordering::Release);
-                Ok(())
+    pub fn is_var_global(&self, var_id: u64) -> bool {
+        self.vars.get(&var_id).filter(|v| v.is_global).is_some()
+    }
+
+    pub fn iter_on_global_variable(&self) -> impl Iterator<Item = &VariableInfo> {
+        self.vars.values().filter(move |var| var.scope.is_none())
+    }
+
+    pub fn iter_mut_on_local_variable<'a>(
+        &'a mut self,
+        scope_id: u128,
+    ) -> impl Iterator<Item = (&mut VariableInfo, usize)> + 'a {
+        let vars = self.allocating_scope.get(&scope_id);
+
+        self.vars.values_mut().filter_map(move |var| {
+            let opt =
+                vars.and_then(|mapping| mapping.vars.iter().find(|(id, offset)| *id == var.id));
+
+            match opt {
+                Some((_, offset)) if var.state == VariableState::Local => Some((var, *offset)),
+                _ => None,
             }
-        }
+        })
+    }
+
+    pub fn iter_mut_on_parameters<'a>(
+        &'a mut self,
+        scope_id: u128,
+    ) -> impl Iterator<Item = (&mut VariableInfo, usize)> + 'a {
+        let vars = self.allocating_scope.get(&scope_id);
+
+        self.vars.values_mut().filter_map(move |var| {
+            let opt =
+                vars.and_then(|mapping| mapping.vars.iter().find(|(id, offset)| *id == var.id));
+
+            match opt {
+                Some((_, offset)) if var.state == VariableState::Parameter => Some((var, *offset)),
+                _ => None,
+            }
+        })
     }
 }

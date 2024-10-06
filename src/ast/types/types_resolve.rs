@@ -1,9 +1,7 @@
 use super::{
-    AddrType, ClosureType, MapType, PrimitiveType, RangeType, SliceType, StrSliceType, StringType,
-    TupleType, Type, Types, VecType,
+    AddrType, ClosureType, FunctionType, LambdaType, MapType, PrimitiveType, SliceType,
+    StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
-use crate::arw_read;
-use crate::semantic::scope::scope::Scope;
 use crate::semantic::{Resolve, SemanticError};
 
 impl Resolve for Type {
@@ -11,9 +9,10 @@ impl Resolve for Type {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -21,22 +20,30 @@ impl Resolve for Type {
         Self: Sized,
     {
         match self {
-            Type::Primitive(value) => value.resolve::<G>(scope, context, extra),
-            Type::Slice(value) => value.resolve::<G>(scope, context, extra),
-            Type::StrSlice(value) => value.resolve::<G>(scope, context, extra),
-            Type::UserType(value) => {
-                let _ = arw_read!(scope, SemanticError::ConcurrencyError)?.find_type(value)?;
+            Type::Primitive(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Slice(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::StrSlice(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::UserType { ref path, ref name } => {
+                let _ = scope_manager.find_type_by_name(
+                    match path {
+                        crate::ast::expressions::Path::Segment(vec) => Some(vec.as_slice()),
+                        crate::ast::expressions::Path::Empty => None,
+                    },
+                    name,
+                    scope_id,
+                )?;
                 Ok(())
             }
-            Type::Vec(value) => value.resolve::<G>(scope, context, extra),
-            Type::Closure(value) => value.resolve::<G>(scope, context, extra),
-            Type::Tuple(value) => value.resolve::<G>(scope, context, extra),
+            Type::Vec(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Closure(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Function(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Lambda(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Tuple(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Type::Unit => Ok(()),
             Type::Any => Ok(()),
-            Type::Address(value) => value.resolve::<G>(scope, context, extra),
-            Type::Map(value) => value.resolve::<G>(scope, context, extra),
-            Type::String(value) => value.resolve::<G>(scope, context, extra),
-            Type::Range(value) => value.resolve::<G>(scope, context, extra),
+            Type::Address(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::Map(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Type::String(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Type::Error => Ok(()),
         }
     }
@@ -46,9 +53,10 @@ impl Resolve for PrimitiveType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        _scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         _context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -63,16 +71,18 @@ impl Resolve for SliceType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        self.item_type.resolve::<G>(scope, context, extra)
+        self.item_type
+            .resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 
@@ -81,9 +91,10 @@ impl Resolve for StrSliceType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        _scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         _context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -99,9 +110,10 @@ impl Resolve for StringType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        _scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         _context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -117,27 +129,29 @@ impl Resolve for VecType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        self.0.resolve::<G>(scope, context, extra)
+        self.0.resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 
-impl Resolve for ClosureType {
+impl Resolve for FunctionType {
     type Output = ();
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -145,20 +159,66 @@ impl Resolve for ClosureType {
         Self: Sized,
     {
         for param in &mut self.params {
-            let _ = param.resolve::<G>(scope, context, extra)?;
+            let _ = param.resolve::<E>(scope_manager, scope_id, context, extra)?;
         }
-        self.ret.resolve::<G>(scope, context, extra)
+        self.ret
+            .resolve::<E>(scope_manager, scope_id, context, extra)
+    }
+}
+impl Resolve for ClosureType {
+    type Output = ();
+    type Context = ();
+
+    type Extra = ();
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: &Self::Context,
+        extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        for param in &mut self.params {
+            let _ = param.resolve::<E>(scope_manager, scope_id, context, extra)?;
+        }
+        self.ret
+            .resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 
+impl Resolve for LambdaType {
+    type Output = ();
+    type Context = ();
+
+    type Extra = ();
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: &Self::Context,
+        extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        for param in &mut self.params {
+            let _ = param.resolve::<E>(scope_manager, scope_id, context, extra)?;
+        }
+        self.ret
+            .resolve::<E>(scope_manager, scope_id, context, extra)
+    }
+}
 impl Resolve for Types {
     type Output = ();
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -166,7 +226,7 @@ impl Resolve for Types {
         Self: Sized,
     {
         for item in self {
-            let _ = item.resolve::<G>(scope, context, extra)?;
+            let _ = item.resolve::<E>(scope_manager, scope_id, context, extra)?;
         }
         Ok(())
     }
@@ -177,16 +237,17 @@ impl Resolve for TupleType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        self.0.resolve::<G>(scope, context, extra)
+        self.0.resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 
@@ -195,33 +256,17 @@ impl Resolve for AddrType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        self.0.resolve::<G>(scope, context, extra)
-    }
-}
-impl Resolve for RangeType {
-    type Output = ();
-    type Context = ();
-
-    type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
-        &mut self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
-        _context: &Self::Context,
-        _extra: &mut Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        Ok(())
+        self.0.resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 
@@ -230,16 +275,20 @@ impl Resolve for MapType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.keys_type.resolve::<G>(scope, context, extra)?;
-        self.values_type.resolve::<G>(scope, context, extra)
+        let _ = self
+            .keys_type
+            .resolve::<E>(scope_manager, scope_id, context, extra)?;
+        self.values_type
+            .resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }

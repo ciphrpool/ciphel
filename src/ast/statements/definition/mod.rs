@@ -1,6 +1,9 @@
-use crate::ast::{types::Type, utils::strings::ID};
+use crate::{
+    ast::{types::Type, utils::strings::ID},
+    semantic::{scope::user_types::UserType, EType},
+};
 
-use super::{block::Block, declaration::TypedVar};
+use super::{block::FunctionBlock, declaration::TypedVar};
 
 pub mod definition_gencode;
 pub mod definition_parse;
@@ -24,24 +27,28 @@ pub enum TypeDef {
 pub struct StructDef {
     pub id: ID,
     pub fields: Vec<(ID, Type)>,
+    pub signature: Option<(EType, UserType)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionDef {
     pub id: ID,
     pub variants: Vec<(ID, Vec<(ID, Type)>)>,
+    pub signature: Option<(EType, UserType)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumDef {
     pub id: ID,
     pub values: Vec<ID>,
+    pub signature: Option<(EType, UserType)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDef {
-    id: ID,
+    pub name: String,
+    pub id: Option<(u64, u64, EType)>,
     params: Vec<TypedVar>,
     ret: Box<Type>,
-    scope: Block,
+    scope: FunctionBlock,
 }

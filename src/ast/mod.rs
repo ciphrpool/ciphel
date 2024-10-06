@@ -1,6 +1,7 @@
 use crate::ast::utils::io::{PResult, Span};
 
 pub mod expressions;
+pub mod modules;
 pub(crate) mod statements;
 pub(crate) mod types;
 pub mod utils;

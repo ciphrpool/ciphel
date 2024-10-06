@@ -1,8 +1,10 @@
 use nom::{
     branch::alt,
-    combinator::{cut, map},
-    sequence::delimited,
+    combinator::map,
+    multi::{many0, many1},
+    sequence::{delimited, pair, terminated},
 };
+use operation::ExprCall;
 
 use crate::{
     ast::{
@@ -13,25 +15,27 @@ use crate::{
             strings::{eater, wst},
         },
     },
-    semantic::{AccessLevel, EType, Metadata, Resolve, SemanticError, SizeOf, TypeOf},
-    vm::{
-        allocator::{stack::Offset, MemoryAddress},
-        casm::{locate::Locate, Casm, CasmProgram},
-        vm::{CodeGenerationError, GenerateCode},
-    },
+    semantic::{EType, Metadata, Resolve, ResolveFromStruct, SemanticError, TypeOf},
 };
-use crate::{semantic::scope::scope::Scope, vm::vm::Locatable};
+use crate::{
+    semantic::{Desugar, ResolveNumber},
+    vm::GenerateCode,
+};
 
 use self::operation::{
     operation_parse::TryParseOperation, Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast,
-    Comparaison, Equation, FieldAccess, FnCall, ListAccess, LogicalAnd, Product, Range, Shift,
-    Substraction, TupleAccess, UnaryOperation,
+    Comparaison, Equation, FieldAccess, ListAccess, LogicalAnd, Product, Shift, Substraction,
+    TupleAccess, UnaryOperation,
 };
 
-use super::{utils::error::squash, TryParse};
+use super::{
+    utils::{error::squash, strings::parse_id},
+    TryParse,
+};
 
 pub mod data;
 pub mod flows;
+pub mod locate;
 pub mod operation;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,11 +52,10 @@ pub enum Expression {
     Equation(operation::Equation),
     LogicalAnd(operation::LogicalAnd),
     LogicalOr(operation::LogicalOr),
-    Range(operation::Range),
     FieldAccess(operation::FieldAccess),
     ListAccess(operation::ListAccess),
     TupleAccess(operation::TupleAccess),
-    FnCall(operation::FnCall),
+    ExprCall(operation::ExprCall),
     Atomic(Atomic),
 }
 
@@ -62,6 +65,56 @@ pub enum Atomic {
     UnaryOperation(operation::UnaryOperation),
     Paren(Box<Expression>),
     ExprFlow(flows::ExprFlow),
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum Path {
+    Segment(Vec<String>),
+    #[default]
+    Empty,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompletePath {
+    pub path: Path,
+    pub name: String,
+}
+
+impl TryParse for Path {
+    fn parse(input: Span) -> PResult<Self> {
+        map(many0(terminated(parse_id, wst(lexem::SEP))), |segments| {
+            if segments.len() == 0 {
+                Path::Empty
+            } else {
+                Path::Segment(segments)
+            }
+        })(input)
+    }
+}
+
+impl Path {
+    fn parse_segment(input: Span) -> PResult<Self> {
+        map(many1(terminated(parse_id, wst(lexem::SEP))), |segments| {
+            Path::Segment(segments)
+        })(input)
+    }
+}
+
+impl TryParse for CompletePath {
+    fn parse(input: Span) -> PResult<Self> {
+        map(pair(Path::parse, parse_id), |(path, name)| CompletePath {
+            name,
+            path,
+        })(input)
+    }
+}
+
+impl CompletePath {
+    fn parse_segment(input: Span) -> PResult<Self> {
+        map(pair(Path::parse_segment, parse_id), |(path, name)| {
+            CompletePath { name, path }
+        })(input)
+    }
 }
 
 impl TryParse for Atomic {
@@ -96,9 +149,10 @@ impl Resolve for Atomic {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -106,24 +160,75 @@ impl Resolve for Atomic {
         Self: Sized,
     {
         match self {
-            Atomic::Data(value) => value.resolve::<G>(scope, context, extra),
-            Atomic::UnaryOperation(value) => value.resolve::<G>(scope, context, &mut ()),
-            Atomic::Paren(value) => value.resolve::<G>(scope, context, extra),
-            Atomic::ExprFlow(value) => value.resolve::<G>(scope, context, &mut ()),
+            Atomic::Data(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Atomic::UnaryOperation(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Atomic::Paren(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Atomic::ExprFlow(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
         }
     }
 }
 
+impl ResolveFromStruct for Atomic {
+    fn resolve_from_struct<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        struct_id: u64,
+    ) -> Result<(), SemanticError> {
+        match self {
+            Atomic::Data(value) => {
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
+            }
+            Atomic::Paren(value) => {
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
+            }
+            _ => Err(SemanticError::UnknownField),
+        }
+    }
+}
+
+impl Desugar<Expression> for Atomic {
+    fn desugar<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Expression>, SemanticError> {
+        let output = match self {
+            Atomic::Data(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Atomic::UnaryOperation(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Atomic::Paren(value) => {
+                let _ = value.desugar::<E>(scope_manager, scope_id)?;
+                None
+            }
+            Atomic::ExprFlow(value) => value.desugar::<E>(scope_manager, scope_id)?,
+        };
+
+        if let Some(output) = output {
+            *self = output;
+        }
+
+        Ok(None)
+    }
+}
+
 impl TypeOf for Atomic {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
-            Atomic::Data(value) => value.type_of(&scope),
-            Atomic::UnaryOperation(value) => value.type_of(&scope),
-            Atomic::Paren(value) => value.type_of(&scope),
-            Atomic::ExprFlow(value) => value.type_of(&scope),
+            Atomic::Data(value) => value.type_of(&scope_manager, scope_id),
+            Atomic::UnaryOperation(value) => value.type_of(&scope_manager, scope_id),
+            Atomic::Paren(value) => value.type_of(&scope_manager, scope_id),
+            Atomic::ExprFlow(value) => value.type_of(&scope_manager, scope_id),
         }
     }
 }
@@ -144,7 +249,7 @@ impl TryParse for Expression {
      * HighM := Atom (* | / | % ) Atom | Atom
      */
     fn parse(input: Span) -> PResult<Self> {
-        eater::ws::<_, Expression>(Range::parse)(input)
+        eater::ws::<_, Expression>(LogicalOr::parse)(input)
     }
 }
 
@@ -152,9 +257,10 @@ impl Resolve for Expression {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -162,201 +268,308 @@ impl Resolve for Expression {
         Self: Sized,
     {
         match self {
-            Expression::Product(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::Addition(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::Substraction(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::Shift(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::BitwiseAnd(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::BitwiseXOR(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::BitwiseOR(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::Comparaison(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::LogicalAnd(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::Equation(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::LogicalOr(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::Atomic(value) => value.resolve::<G>(scope, context, extra),
-            Expression::Cast(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::Range(value) => value.resolve::<G>(scope, context, &mut ()),
-            Expression::FieldAccess(value) => value.resolve::<G>(scope, context, extra),
-            Expression::ListAccess(value) => value.resolve::<G>(scope, context, extra),
-            Expression::TupleAccess(value) => value.resolve::<G>(scope, context, extra),
-            Expression::FnCall(value) => value.resolve::<G>(scope, context, extra),
+            Expression::Product(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Expression::Addition(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Expression::Substraction(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Expression::Shift(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Expression::BitwiseAnd(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Expression::BitwiseXOR(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Expression::BitwiseOR(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Expression::Comparaison(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Expression::LogicalAnd(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Expression::Equation(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Expression::LogicalOr(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Expression::Atomic(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
+            }
+            Expression::Cast(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
+            }
+            Expression::FieldAccess(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
+            }
+            Expression::ListAccess(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
+            }
+            Expression::TupleAccess(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
+            }
+            Expression::ExprCall(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
+            }
         }
     }
 }
 
+impl ResolveNumber for Expression {
+    fn is_unresolved_number(&self) -> bool {
+        match self {
+            Expression::Product(product) => product.is_unresolved_number(),
+            Expression::Addition(addition) => addition.is_unresolved_number(),
+            Expression::Substraction(substraction) => substraction.is_unresolved_number(),
+            Expression::Shift(shift) => shift.is_unresolved_number(),
+            Expression::BitwiseAnd(bitwise_and) => bitwise_and.is_unresolved_number(),
+            Expression::BitwiseXOR(bitwise_xor) => bitwise_xor.is_unresolved_number(),
+            Expression::BitwiseOR(bitwise_or) => bitwise_or.is_unresolved_number(),
+            Expression::Cast(cast) => cast.is_unresolved_number(),
+            Expression::Comparaison(comparaison) => comparaison.is_unresolved_number(),
+            Expression::Equation(equation) => equation.is_unresolved_number(),
+            Expression::LogicalAnd(logical_and) => logical_and.is_unresolved_number(),
+            Expression::LogicalOr(logical_or) => logical_or.is_unresolved_number(),
+            Expression::FieldAccess(_) => false,
+            Expression::ListAccess(_) => false,
+            Expression::TupleAccess(_) => false,
+            Expression::ExprCall(_) => false,
+            Expression::Atomic(atomic) => atomic.is_unresolved_number(),
+        }
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        match self {
+            Expression::Product(product) => product.resolve_number(to),
+            Expression::Addition(addition) => addition.resolve_number(to),
+            Expression::Substraction(substraction) => substraction.resolve_number(to),
+            Expression::Shift(shift) => shift.resolve_number(to),
+            Expression::BitwiseAnd(bitwise_and) => bitwise_and.resolve_number(to),
+            Expression::BitwiseXOR(bitwise_xor) => bitwise_xor.resolve_number(to),
+            Expression::BitwiseOR(bitwise_or) => bitwise_or.resolve_number(to),
+            Expression::Cast(cast) => cast.resolve_number(to),
+            Expression::Comparaison(comparaison) => comparaison.resolve_number(to),
+            Expression::Equation(equation) => equation.resolve_number(to),
+            Expression::LogicalAnd(logical_and) => logical_and.resolve_number(to),
+            Expression::LogicalOr(logical_or) => logical_or.resolve_number(to),
+            Expression::FieldAccess(_) => Ok(()),
+            Expression::ListAccess(_) => Ok(()),
+            Expression::TupleAccess(_) => Ok(()),
+            Expression::ExprCall(_) => Ok(()),
+            Expression::Atomic(atomic) => atomic.resolve_number(to),
+        }
+    }
+}
+
+impl ResolveNumber for Atomic {
+    fn is_unresolved_number(&self) -> bool {
+        match self {
+            Atomic::Data(data) => data.is_unresolved_number(),
+            Atomic::UnaryOperation(unary_operation) => unary_operation.is_unresolved_number(),
+            Atomic::Paren(expression) => expression.is_unresolved_number(),
+            Atomic::ExprFlow(expr_flow) => expr_flow.is_unresolved_number(),
+        }
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        match self {
+            Atomic::Data(data) => data.resolve_number(to),
+            Atomic::UnaryOperation(unary_operation) => unary_operation.resolve_number(to),
+            Atomic::Paren(expression) => expression.resolve_number(to),
+            Atomic::ExprFlow(expr_flow) => expr_flow.resolve_number(to),
+        }
+    }
+}
+
+impl ResolveFromStruct for Expression {
+    fn resolve_from_struct<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        struct_id: u64,
+    ) -> Result<(), SemanticError> {
+        match self {
+            Expression::FieldAccess(value) => {
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
+            }
+            Expression::ListAccess(value) => {
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
+            }
+            Expression::TupleAccess(value) => {
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
+            }
+            Expression::Atomic(value) => {
+                value.resolve_from_struct::<E>(scope_manager, scope_id, struct_id)
+            }
+            _ => Err(SemanticError::UnknownField),
+        }
+    }
+}
+
+impl Desugar<Expression> for Expression {
+    fn desugar<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Expression>, SemanticError> {
+        let output = match self {
+            Expression::Product(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Addition(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Substraction(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Shift(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::BitwiseAnd(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::BitwiseXOR(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::BitwiseOR(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Cast(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Comparaison(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Equation(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::LogicalAnd(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::LogicalOr(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::FieldAccess(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::ListAccess(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::TupleAccess(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::ExprCall(value) => value.desugar::<E>(scope_manager, scope_id)?,
+            Expression::Atomic(value) => value.desugar::<E>(scope_manager, scope_id)?,
+        };
+
+        if let Some(output) = output {
+            *self = output;
+        }
+
+        Ok(None)
+    }
+}
+
 impl TypeOf for Expression {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
-            Expression::Product(value) => value.type_of(&scope),
-            Expression::Addition(value) => value.type_of(&scope),
-            Expression::Substraction(value) => value.type_of(&scope),
-            Expression::Shift(value) => value.type_of(&scope),
-            Expression::BitwiseAnd(value) => value.type_of(&scope),
-            Expression::BitwiseXOR(value) => value.type_of(&scope),
-            Expression::BitwiseOR(value) => value.type_of(&scope),
-            Expression::Comparaison(value) => value.type_of(&scope),
-            Expression::LogicalAnd(value) => value.type_of(&scope),
-            Expression::LogicalOr(value) => value.type_of(&scope),
-            Expression::Equation(value) => value.type_of(&scope),
-            Expression::Atomic(value) => value.type_of(&scope),
-            Expression::Cast(value) => value.type_of(&scope),
-            Expression::Range(value) => value.type_of(&scope),
-            Expression::FieldAccess(value) => value.type_of(&scope),
-            Expression::ListAccess(value) => value.type_of(&scope),
-            Expression::TupleAccess(value) => value.type_of(&scope),
-            Expression::FnCall(value) => value.type_of(&scope),
+            Expression::Product(value) => value.type_of(&scope_manager, scope_id),
+            Expression::Addition(value) => value.type_of(&scope_manager, scope_id),
+            Expression::Substraction(value) => value.type_of(&scope_manager, scope_id),
+            Expression::Shift(value) => value.type_of(&scope_manager, scope_id),
+            Expression::BitwiseAnd(value) => value.type_of(&scope_manager, scope_id),
+            Expression::BitwiseXOR(value) => value.type_of(&scope_manager, scope_id),
+            Expression::BitwiseOR(value) => value.type_of(&scope_manager, scope_id),
+            Expression::Comparaison(value) => value.type_of(&scope_manager, scope_id),
+            Expression::LogicalAnd(value) => value.type_of(&scope_manager, scope_id),
+            Expression::LogicalOr(value) => value.type_of(&scope_manager, scope_id),
+            Expression::Equation(value) => value.type_of(&scope_manager, scope_id),
+            Expression::Atomic(value) => value.type_of(&scope_manager, scope_id),
+            Expression::Cast(value) => value.type_of(&scope_manager, scope_id),
+            Expression::FieldAccess(value) => value.type_of(&scope_manager, scope_id),
+            Expression::ListAccess(value) => value.type_of(&scope_manager, scope_id),
+            Expression::TupleAccess(value) => value.type_of(&scope_manager, scope_id),
+            Expression::ExprCall(value) => value.type_of(&scope_manager, scope_id),
         }
     }
 }
 
 impl GenerateCode for Expression {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
-            Expression::Product(value) => value.gencode(scope, instructions),
-            Expression::Addition(value) => value.gencode(scope, instructions),
-            Expression::Substraction(value) => value.gencode(scope, instructions),
-            Expression::Shift(value) => value.gencode(scope, instructions),
-            Expression::BitwiseAnd(value) => value.gencode(scope, instructions),
-            Expression::BitwiseXOR(value) => value.gencode(scope, instructions),
-            Expression::BitwiseOR(value) => value.gencode(scope, instructions),
-            Expression::Cast(value) => value.gencode(scope, instructions),
-            Expression::Comparaison(value) => value.gencode(scope, instructions),
-            Expression::Equation(value) => value.gencode(scope, instructions),
-            Expression::LogicalAnd(value) => value.gencode(scope, instructions),
-            Expression::LogicalOr(value) => value.gencode(scope, instructions),
-            Expression::Atomic(value) => value.gencode(scope, instructions),
-            Expression::Range(value) => value.gencode(scope, instructions),
-            Expression::FieldAccess(value) => value.gencode(scope, instructions),
-            Expression::ListAccess(value) => value.gencode(scope, instructions),
-            Expression::TupleAccess(value) => value.gencode(scope, instructions),
-            Expression::FnCall(value) => value.gencode(scope, instructions),
-        }
-    }
-}
-
-impl Locatable for Expression {
-    fn locate(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        match self {
-            Expression::Atomic(value) => value.locate(scope, instructions),
-            Expression::FieldAccess(value) => value.locate(scope, instructions),
-            Expression::ListAccess(value) => value.locate(scope, instructions),
-            Expression::TupleAccess(value) => value.locate(scope, instructions),
-            Expression::FnCall(value) => value.locate(scope, instructions),
-            _ => {
-                let _ = self.gencode(scope, instructions)?;
-                let Some(value_type) = self.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                instructions.push(Casm::Locate(Locate {
-                    address: MemoryAddress::Stack {
-                        offset: Offset::ST(-(value_type.size_of() as isize)),
-                        level: AccessLevel::Direct,
-                    },
-                }));
-                Ok(())
+            Expression::Product(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
-        }
-    }
-
-    fn is_assignable(&self) -> bool {
-        match self {
-            Expression::Product(_) => false,
-            Expression::Addition(_) => false,
-            Expression::Substraction(_) => false,
-            Expression::Shift(_) => false,
-            Expression::BitwiseAnd(_) => false,
-            Expression::BitwiseXOR(_) => false,
-            Expression::BitwiseOR(_) => false,
-            Expression::Cast(_) => false,
-            Expression::Comparaison(_) => false,
-            Expression::Equation(_) => false,
-            Expression::LogicalAnd(_) => false,
-            Expression::LogicalOr(_) => false,
-            Expression::Range(_) => false,
-            Expression::Atomic(value) => value.is_assignable(),
-            Expression::FieldAccess(value) => value.is_assignable(),
-            Expression::ListAccess(value) => value.is_assignable(),
-            Expression::TupleAccess(value) => value.is_assignable(),
-            Expression::FnCall(_) => false,
-        }
-    }
-    fn most_left_id(&self) -> Option<super::utils::strings::ID> {
-        match self {
-            Expression::FieldAccess(value) => value.most_left_id(),
-            Expression::ListAccess(value) => value.most_left_id(),
-            Expression::TupleAccess(value) => value.most_left_id(),
-            Expression::Atomic(value) => value.most_left_id(),
-            _ => None,
+            Expression::Addition(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::Substraction(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::Shift(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::BitwiseAnd(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::BitwiseXOR(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::BitwiseOR(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::Cast(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::Comparaison(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::Equation(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::LogicalAnd(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::LogicalOr(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::Atomic(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::FieldAccess(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::ListAccess(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::TupleAccess(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Expression::ExprCall(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
         }
     }
 }
 
 impl GenerateCode for Atomic {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
-            Atomic::Data(value) => value.gencode(scope, instructions),
-            Atomic::UnaryOperation(value) => value.gencode(scope, instructions),
-            Atomic::Paren(value) => value.gencode(scope, instructions),
-            Atomic::ExprFlow(value) => value.gencode(scope, instructions),
-        }
-    }
-}
-
-impl Locatable for Atomic {
-    fn locate(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        match self {
-            Atomic::Data(value) => value.locate(scope, instructions),
-            Atomic::Paren(value) => value.locate(scope, instructions),
-            _ => {
-                let _ = self.gencode(scope, instructions)?;
-                let Some(value_type) = self.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                instructions.push(Casm::Locate(Locate {
-                    address: MemoryAddress::Stack {
-                        offset: Offset::ST(-(value_type.size_of() as isize)),
-                        level: AccessLevel::Direct,
-                    },
-                }));
-                Ok(())
+            Atomic::Data(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
             }
-        }
-    }
-
-    fn is_assignable(&self) -> bool {
-        match self {
-            Atomic::Data(value) => value.is_assignable(),
-            Atomic::UnaryOperation(_) => false,
-            Atomic::Paren(value) => value.is_assignable(),
-            Atomic::ExprFlow(_) => false,
-        }
-    }
-
-    fn most_left_id(&self) -> Option<super::utils::strings::ID> {
-        match self {
-            Atomic::Data(value) => value.most_left_id(),
-            Atomic::UnaryOperation(_) => None,
-            Atomic::Paren(value) => value.most_left_id(),
-            Atomic::ExprFlow(value) => None,
+            Atomic::UnaryOperation(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Atomic::Paren(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Atomic::ExprFlow(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
         }
     }
 }
@@ -383,12 +596,11 @@ impl Expression {
             Expression::Equation(Equation::NotEqual { metadata, .. }) => Some(metadata),
             Expression::LogicalAnd(LogicalAnd { metadata, .. }) => Some(metadata),
             Expression::LogicalOr(LogicalOr { metadata, .. }) => Some(metadata),
-            Expression::Range(Range { metadata, .. }) => Some(metadata),
             Expression::Atomic(value) => value.metadata(),
             Expression::FieldAccess(FieldAccess { metadata, .. }) => Some(metadata),
             Expression::ListAccess(ListAccess { metadata, .. }) => Some(metadata),
             Expression::TupleAccess(TupleAccess { metadata, .. }) => Some(metadata),
-            Expression::FnCall(FnCall { metadata, .. }) => Some(metadata),
+            Expression::ExprCall(ExprCall { metadata, .. }) => Some(metadata),
         }
     }
 
@@ -413,12 +625,11 @@ impl Expression {
             Expression::Equation(Equation::NotEqual { metadata, .. }) => Some(metadata),
             Expression::LogicalAnd(LogicalAnd { metadata, .. }) => Some(metadata),
             Expression::LogicalOr(LogicalOr { metadata, .. }) => Some(metadata),
-            Expression::Range(Range { metadata, .. }) => Some(metadata),
             Expression::Atomic(value) => value.metadata_mut(),
             Expression::FieldAccess(FieldAccess { metadata, .. }) => Some(metadata),
             Expression::ListAccess(ListAccess { metadata, .. }) => Some(metadata),
             Expression::TupleAccess(TupleAccess { metadata, .. }) => Some(metadata),
-            Expression::FnCall(FnCall { metadata, .. }) => Some(metadata),
+            Expression::ExprCall(ExprCall { metadata, .. }) => Some(metadata),
         }
     }
 
@@ -447,12 +658,11 @@ impl Expression {
             Expression::Equation(Equation::NotEqual { metadata, .. }) => metadata.signature(),
             Expression::LogicalAnd(LogicalAnd { metadata, .. }) => metadata.signature(),
             Expression::LogicalOr(LogicalOr { metadata, .. }) => metadata.signature(),
-            Expression::Range(Range { metadata, .. }) => metadata.signature(),
             Expression::Atomic(value) => value.signature(),
             Expression::FieldAccess(FieldAccess { metadata, .. }) => metadata.signature(),
             Expression::ListAccess(ListAccess { metadata, .. }) => metadata.signature(),
             Expression::TupleAccess(TupleAccess { metadata, .. }) => metadata.signature(),
-            Expression::FnCall(FnCall { metadata, .. }) => metadata.signature(),
+            Expression::ExprCall(ExprCall { metadata, .. }) => metadata.signature(),
         }
     }
 }

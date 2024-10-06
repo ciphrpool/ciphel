@@ -1,18 +1,20 @@
-use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
-use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
-use crate::semantic::scope::var_impl::VarState;
-use crate::semantic::scope::BuildVar;
-use crate::semantic::EType;
-use crate::semantic::{scope::var_impl::Var, Resolve, SemanticError, TypeOf};
+use super::{ForLoop, Loop, WhileLoop};
+use crate::ast::statements::block::{Block, BlockCommonApi};
+use crate::ast::statements::loops::ForInit;
+use crate::ast::statements::Statement;
+use crate::semantic::scope::scope::ScopeState;
+use crate::semantic::scope::static_types::{PrimitiveType, StaticType};
+use crate::semantic::{Desugar, EType};
+use crate::semantic::{Resolve, SemanticError, TypeOf};
 
 impl Resolve for Loop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -20,137 +22,178 @@ impl Resolve for Loop {
         Self: Sized,
     {
         match self {
-            Loop::For(value) => value.resolve::<G>(scope, context, extra),
-            Loop::While(value) => value.resolve::<G>(scope, context, extra),
+            Loop::For(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Loop::While(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Loop::Loop(value) => {
-                value.to_loop();
-                let _ = value.resolve::<G>(scope, &context, &mut Vec::default())?;
+                let inner_scope = value.init_from_parent(scope_manager, scope_id)?;
+                scope_manager
+                    .scope_states
+                    .insert(inner_scope, ScopeState::Loop);
+
+                let _ = value.resolve::<E>(scope_manager, scope_id, &context, &mut ())?;
                 Ok(())
             }
         }
     }
 }
-impl Resolve for ForIterator {
-    type Output = ();
-    type Context = ();
-    type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+
+impl Desugar<Statement> for Loop {
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        _context: &Self::Context,
-        extra: &mut Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        let _ = self.expr.resolve::<G>(scope, &None, &mut None)?;
-        let expr_type = self
-            .expr
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        if !expr_type.is_iterable() {
-            return Err(SemanticError::ExpectedIterable);
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        match self {
+            Loop::For(for_loop) => for_loop.desugar::<E>(scope_manager, scope_id),
+            Loop::While(while_loop) => while_loop.desugar::<E>(scope_manager, scope_id),
+            Loop::Loop(block) => {
+                let _: Option<Block> = block.desugar::<E>(scope_manager, scope_id)?;
+                Ok(None)
+            }
         }
-        Ok(())
-        // match self {
-        //     ForIterator::Id(value) => {
-        //         let borrowed_scope = block.borrow();
-        //         let (var, _) = borrowed_scope.find_var(value)?;
-        //         // check that the variable is iterable
-        //         let var_type = var.type_of(&block.borrow())?;
-        //         if !<EType as TypeChecking>::is_iterable(&var_type) {
-        //             return Err(SemanticError::ExpectedIterable);
-        //         }
-        //         Ok(())
-        //     }
-        //     ForIterator::Vec(value) => value.resolve::<crate::vm::vm::NoopGameEngine>(block, &None, &mut ()),
-        //     ForIterator::Slice(value) => value.resolve::<crate::vm::vm::NoopGameEngine>(block, &None, &mut ()),
-        //     ForIterator::Receive { addr, .. } => addr.resolve::<crate::vm::vm::NoopGameEngine>(block, &None, &mut ()),
-        // }
     }
 }
 
-impl Resolve for ForItem {
-    type Output = Vec<Var>;
-    type Context = Option<EType>;
-    type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+impl Desugar<Statement> for ForLoop {
+    fn desugar<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        context: &Self::Context,
-        extra: &mut Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        match self {
-            ForItem::Id(value) => {
-                let Some(item_type) = context else {
-                    return Err(SemanticError::CantInferType(format!(
-                        "of this variable {}",
-                        value
-                    )));
-                };
-                Ok(vec![<Var as BuildVar>::build_var(value, &item_type)])
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        for index in self.indices.iter_mut() {
+            match index {
+                ForInit::Assignation(assignation) => {
+                    if let Some(Statement::Assignation(output)) =
+                        assignation.desugar::<E>(scope_manager, scope_id)?
+                    {
+                        *index = ForInit::Assignation(output);
+                    }
+                }
+                ForInit::Declaration(declaration) => {
+                    if let Some(Statement::Declaration(output)) =
+                        declaration.desugar::<E>(scope_manager, scope_id)?
+                    {
+                        *index = ForInit::Declaration(output);
+                    }
+                }
             }
-            ForItem::Pattern(pattern) => pattern.resolve::<G>(scope, context, extra),
         }
+
+        if let Some(output) = self.block.desugar::<E>(scope_manager, scope_id)? {
+            self.block = Box::new(output);
+        }
+
+        if let Some(condition) = &mut self.condition {
+            if let Some(output) = condition.desugar::<E>(scope_manager, scope_id)? {
+                *condition = output;
+            }
+        }
+
+        for increment in self.increments.iter_mut() {
+            if let Some(Statement::Assignation(output)) =
+                increment.desugar::<E>(scope_manager, scope_id)?
+            {
+                *increment = output;
+            }
+        }
+
+        Ok(None)
+    }
+}
+impl Desugar<Statement> for WhileLoop {
+    fn desugar<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        let _: Option<Block> = self.block.desugar::<E>(scope_manager, scope_id)?;
+        self.condition.desugar::<E>(scope_manager, scope_id)?;
+        Ok(None)
     }
 }
 impl Resolve for ForLoop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
-        _extra: &mut Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.iterator.resolve::<G>(scope, &(), &mut ())?;
-        let item_type = self
-            .iterator
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let item_type = <EType as GetSubTypes>::get_item(&item_type);
-
-        let mut item_vars = self.item.resolve::<G>(scope, &item_type, &mut ())?;
-        for var in item_vars.iter_mut() {
-            var.state = VarState::Parameter;
-            var.is_declared = true;
+        for index in self.indices.iter_mut() {
+            match index {
+                ForInit::Assignation(assignation) => {
+                    let _ = assignation.resolve::<E>(scope_manager, scope_id, context, extra)?;
+                }
+                ForInit::Declaration(declaration) => {
+                    let _ = declaration.resolve::<E>(scope_manager, scope_id, context, extra)?;
+                }
+            }
         }
-        // attach the item to the block
-        self.scope.to_loop();
-        let _ = self.scope.resolve::<G>(scope, context, &mut item_vars)?;
+
+        if let Some(condition) = &mut self.condition {
+            let _ = condition.resolve::<E>(
+                scope_manager,
+                scope_id,
+                &Some(EType::Static(StaticType::Primitive(PrimitiveType::Bool))),
+                &mut None,
+            )?;
+            if EType::Static(StaticType::Primitive(PrimitiveType::Bool))
+                != condition.type_of(scope_manager, scope_id)?
+            {
+                return Err(SemanticError::IncompatibleTypes);
+            }
+        }
+
+        for increment in self.increments.iter_mut() {
+            let _ = increment.resolve::<E>(scope_manager, scope_id, context, extra)?;
+        }
+
+        let inner = self.block.init_from_parent(scope_manager, scope_id)?;
+        scope_manager.scope_states.insert(inner, ScopeState::Loop);
+
+        let _ = self
+            .block
+            .resolve::<E>(scope_manager, scope_id, context, extra)?;
+
         Ok(())
     }
 }
+
 impl Resolve for WhileLoop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.condition.resolve::<G>(scope, &None, &mut None)?;
-        // check that the condition is a boolean
-        let condition_type = self
+        let _ = self
             .condition
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        if !<EType as TypeChecking>::is_boolean(&condition_type) {
+            .resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+        // check that the condition is a boolean
+        let condition_type = self.condition.type_of(&scope_manager, scope_id)?;
+        if EType::Static(StaticType::Primitive(PrimitiveType::Bool)) != condition_type {
             return Err(SemanticError::ExpectedBoolean);
         }
-        self.scope.to_loop();
+        let inner_scope = self.block.init_from_parent(scope_manager, scope_id)?;
+        scope_manager
+            .scope_states
+            .insert(inner_scope, ScopeState::Loop);
         let _ = self
-            .scope
-            .resolve::<G>(scope, context, &mut Vec::default())?;
+            .block
+            .resolve::<E>(scope_manager, scope_id, context, &mut ())?;
         Ok(())
     }
 }
@@ -158,173 +201,9 @@ impl Resolve for WhileLoop {
 #[cfg(test)]
 mod tests {
 
-    use crate::{
-        ast::TryParse,
-        p_num,
-        semantic::scope::{scope, var_impl::Var},
-    };
+    use crate::{ast::TryParse, p_num, semantic::scope::scope};
 
     use super::*;
-
-    #[test]
-    fn valid_for_loop() {
-        let mut expr_loop = ForLoop::parse(
-            r##"
-        for i in [1,2,3] {
-            x = i;
-        }
-        "##
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let scope = scope::Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let mut expr_loop = ForLoop::parse(
-            r##"
-        for (i,j) in [(1,1),(2,2),(3,3)] {
-            x = j;
-        }
-        "##
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let scope = scope::Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
-        assert!(res.is_ok(), "{:?}", res);
-    }
-
-    #[test]
-    fn valid_for_loop_range() {
-        let mut expr_loop = ForLoop::parse(
-            r##"
-        for i in 0..10 {
-            x = i;
-        }
-        "##
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let scope = scope::Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
-        assert!(res.is_ok(), "{:?}", res);
-    }
-
-    #[test]
-    fn valid_for_loop_range_u64() {
-        let mut expr_loop = ForLoop::parse(
-            r##"
-        for i in 0u64..10u64 {
-            x = i;
-        }
-        "##
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let scope = scope::Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(U64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
-        assert!(res.is_ok(), "{:?}", res);
-    }
-
-    #[test]
-    fn robustness_for_loop() {
-        let mut expr_loop = ForLoop::parse(
-            r##"
-        for i in y {
-            x = i;
-        }
-        "##
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let scope = scope::Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
-        assert!(res.is_err());
-
-        let mut expr_loop = ForLoop::parse(
-            r##"
-        for i in y {
-            x = i;
-        }
-        "##
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let scope = scope::Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "y".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
-        assert!(res.is_err());
-    }
 
     #[test]
     fn valid_while_loop() {
@@ -338,17 +217,14 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = scope::ScopeManager::default();
+        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
+        let res = expr_loop.resolve::<crate::vm::external::test::NoopEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -364,17 +240,14 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = scope::ScopeManager::default();
+        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
+        let res = expr_loop.resolve::<crate::vm::external::test::NoopEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_err());
     }
 
@@ -390,17 +263,14 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = scope::ScopeManager::default();
+        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
+        let res = expr_loop.resolve::<crate::vm::external::test::NoopEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 }

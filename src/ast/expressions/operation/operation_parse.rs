@@ -3,19 +3,18 @@ use nom::{
     bytes::complete::take_while_m_n,
     character::complete::digit1,
     combinator::{cut, map, opt, peek, value},
-    multi::separated_list0,
-    sequence::{delimited, pair, preceded, terminated, tuple},
+    sequence::{delimited, preceded, tuple},
 };
 use nom_supreme::{error::ErrorTree, ParserExt};
 
 use crate::{
     ast::{
-        expressions::data::{Data, Variable},
+        expressions::data::CallArgs,
         types::Type,
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::{parse_id, wst},
+            strings::{wst, wst_closed},
         },
         TryParse,
     },
@@ -23,8 +22,8 @@ use crate::{
 };
 
 use super::{
-    Addition, Atomic, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Expression,
-    FieldAccess, FnCall, ListAccess, LogicalAnd, LogicalOr, Product, Range, Shift, Substraction,
+    Addition, Atomic, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, ExprCall,
+    Expression, FieldAccess, ListAccess, LogicalAnd, LogicalOr, Product, Shift, Substraction,
     TupleAccess, UnaryOperation,
 };
 
@@ -40,7 +39,8 @@ impl TryParse for UnaryOperation {
             map(
                 preceded(
                     wst(lexem::MINUS),
-                    cut(Expression::parse).context("Invalid negation expression"),
+                    cut(map(Atomic::parse, |v| Expression::Atomic(v)))
+                        .context("Invalid negation expression"),
                 ),
                 |value| UnaryOperation::Minus {
                     value: Box::new(value),
@@ -50,7 +50,8 @@ impl TryParse for UnaryOperation {
             map(
                 preceded(
                     wst(lexem::NEGATION),
-                    cut(Expression::parse).context("Invalid not expression"),
+                    cut(map(Atomic::parse, |v| Expression::Atomic(v)))
+                        .context("Invalid not expression"),
                 ),
                 |value| UnaryOperation::Not {
                     value: Box::new(value),
@@ -67,12 +68,72 @@ pub trait TryParseOperation {
         Self: Sized;
 }
 
+pub trait TryParseAtomicOperation {
+    fn parse_atomic(input: Span) -> PResult<Expression>
+    where
+        Self: Sized;
+}
+
+impl TryParseAtomicOperation for ExprCall {
+    fn parse_atomic(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, left) = map(Atomic::parse, Expression::Atomic)(input)?;
+        let (_, peeked) = opt(peek(wst(lexem::RANGE_SEP)))(remainder)?;
+        if peeked.is_some() {
+            return Ok((remainder, left));
+        }
+        let (remainder, dot_args) = opt(CallArgs::parse)(remainder)?;
+
+        if let Some(args) = dot_args {
+            Ok((
+                remainder,
+                Expression::ExprCall(ExprCall {
+                    var: Box::new(left),
+                    args,
+                    metadata: Metadata::default(),
+                }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
+impl TryParseOperation for ExprCall {
+    fn parse(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, left) = FieldAccess::parse_atomic(input)?;
+        let (_, peeked) = opt(peek(wst(lexem::RANGE_SEP)))(remainder)?;
+        if peeked.is_some() {
+            return Ok((remainder, left));
+        }
+        let (remainder, dot_args) = opt(CallArgs::parse)(remainder)?;
+
+        if let Some(args) = dot_args {
+            Ok((
+                remainder,
+                Expression::ExprCall(ExprCall {
+                    var: Box::new(left),
+                    args,
+                    metadata: Metadata::default(),
+                }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
 impl TryParseOperation for TupleAccess {
     fn parse(input: Span) -> PResult<Expression>
     where
         Self: Sized,
     {
-        let (remainder, left) = map(Atomic::parse, Expression::Atomic)(input)?;
+        let (remainder, left) = ExprCall::parse(input)?;
         let (_, peeked_result) = opt(peek(preceded(
             wst(lexem::DOT),
             take_while_m_n(1, usize::MAX, |c: char| c.is_digit(10)),
@@ -88,6 +149,7 @@ impl TryParseOperation for TupleAccess {
                         Expression::TupleAccess(TupleAccess {
                             var: Box::new(left),
                             index,
+                            offset: None,
                             metadata: Metadata::default(),
                         }),
                     ));
@@ -104,6 +166,73 @@ impl TryParseOperation for TupleAccess {
         }
     }
 }
+
+impl TryParseAtomicOperation for TupleAccess {
+    fn parse_atomic(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, left) = ExprCall::parse_atomic(input)?;
+        let (_, peeked_result) = opt(peek(preceded(
+            wst(lexem::DOT),
+            take_while_m_n(1, usize::MAX, |c: char| c.is_digit(10)),
+        )))(remainder)?;
+
+        if let Some(_) = peeked_result {
+            let (remainder, (_, num)) = tuple((wst(lexem::DOT), digit1))(remainder)?;
+
+            match num.parse::<usize>() {
+                Ok(index) => {
+                    return Ok((
+                        remainder,
+                        Expression::TupleAccess(TupleAccess {
+                            var: Box::new(left),
+                            index,
+                            offset: None,
+                            metadata: Metadata::default(),
+                        }),
+                    ));
+                }
+                Err(_) => {
+                    return Err(nom::Err::Error(ErrorTree::Base {
+                        location: remainder,
+                        kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
+                    }));
+                }
+            }
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
+impl TryParseAtomicOperation for ListAccess {
+    fn parse_atomic(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, left) = TupleAccess::parse_atomic(input)?;
+        let (remainder, index) = opt(delimited(
+            wst(lexem::SQ_BRA_O),
+            cut(Expression::parse.context("Invalid list accessing expression")),
+            cut(wst(lexem::SQ_BRA_C)),
+        ))(remainder)?;
+
+        if let Some(index) = index {
+            Ok((
+                remainder,
+                Expression::ListAccess(ListAccess {
+                    var: Box::new(left),
+                    index: Box::new(index),
+                    metadata: Metadata::default(),
+                }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
 impl TryParseOperation for ListAccess {
     fn parse(input: Span) -> PResult<Expression>
     where
@@ -130,6 +259,7 @@ impl TryParseOperation for ListAccess {
         }
     }
 }
+
 impl TryParseOperation for FieldAccess {
     fn parse(input: Span) -> PResult<Expression>
     where
@@ -158,6 +288,7 @@ impl TryParseOperation for FieldAccess {
                     Expression::TupleAccess(TupleAccess {
                         var: Box::new(left),
                         index,
+                        offset: None,
                         metadata: Metadata::default(),
                     }),
                 ));
@@ -178,183 +309,46 @@ impl TryParseOperation for FieldAccess {
     }
 }
 
-impl FnCall {
-    pub fn parse_statement(input: Span) -> PResult<Expression>
+impl TryParseAtomicOperation for FieldAccess {
+    fn parse_atomic(input: Span) -> PResult<Expression>
     where
         Self: Sized,
     {
-        let (remainder, opt_libcall) = opt(tuple((
-            parse_id,
-            wst(lexem::SEP),
-            parse_id,
-            wst(lexem::PAR_O),
-        )))(input)?;
-        let (remainder, lib, fn_var, opt_params) = if let Some((lib, _, func, _)) = opt_libcall {
-            let (remainder, opt_params) = opt(terminated(
-                separated_list0(wst(lexem::COMA), Expression::parse),
-                wst(lexem::PAR_C),
-            ))(remainder)?;
-            (
-                remainder,
-                Some(lib),
-                Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: func,
-                    metadata: Metadata::default(),
-                    from_field: false,
-                })))),
-                opt_params,
-            )
-        } else {
-            let (remainder, left) = FieldAccess::parse(input)?;
-            let (remainder, opt_params) = opt(delimited(
-                wst(lexem::PAR_O),
-                separated_list0(wst(lexem::COMA), Expression::parse),
-                wst(lexem::PAR_C),
-            ))(remainder)?;
-            (remainder, None, Box::new(left), opt_params)
-        };
-        if let Some(params) = opt_params {
-            let left = Expression::FnCall(FnCall {
-                lib,
-                fn_var,
-                params,
-                metadata: Metadata::default(),
-                platform: Default::default(),
-                is_dynamic_fn: Default::default(),
-            });
-            Ok((remainder, left))
-        } else {
-            return Err(nom::Err::Error(ErrorTree::Base {
-                location: remainder,
-                kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
-            }));
+        let (remainder, left) = ListAccess::parse_atomic(input)?;
+        let (_, peeked) = opt(peek(wst(lexem::RANGE_SEP)))(remainder)?;
+        if peeked.is_some() {
+            return Ok((remainder, left));
         }
-    }
-}
-impl TryParseOperation for FnCall {
-    fn parse(input: Span) -> PResult<Expression>
-    where
-        Self: Sized,
-    {
-        let (remainder, opt_libcall) = opt(tuple((
-            parse_id,
-            wst(lexem::SEP),
-            parse_id,
-            wst(lexem::PAR_O),
-        )))(input)?;
-        let (remainder, lib, fn_var, opt_params) = if let Some((lib, _, func, _)) = opt_libcall {
-            let (remainder, opt_params) = opt(terminated(
-                separated_list0(wst(lexem::COMA), Expression::parse),
-                wst(lexem::PAR_C),
-            ))(remainder)?;
-            (
-                remainder,
-                Some(lib),
-                Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: func,
-                    metadata: Metadata::default(),
-                    from_field: false,
-                })))),
-                opt_params,
-            )
-        } else {
-            let (remainder, left) = FieldAccess::parse(input)?;
-            let (remainder, opt_params) = opt(delimited(
-                wst(lexem::PAR_O),
-                separated_list0(wst(lexem::COMA), Expression::parse),
-                wst(lexem::PAR_C),
-            ))(remainder)?;
-            (remainder, None, Box::new(left), opt_params)
-        };
-        if let Some(params) = opt_params {
-            let (_, peeked) = opt(peek(wst(lexem::RANGE_SEP)))(remainder)?;
-            let left = Expression::FnCall(FnCall {
-                lib,
-                fn_var,
-                params,
-                metadata: Metadata::default(),
-                platform: Default::default(),
-                is_dynamic_fn: Default::default(),
-            });
-            if peeked.is_some() {
-                return Ok((remainder, left));
-            }
-            let (remainder, dot_field) = opt(wst(lexem::DOT))(remainder)?;
+        let (remainder, dot_field) = opt(wst(lexem::DOT))(remainder)?;
 
-            if let Some(_) = dot_field {
-                let (remainder, num) = opt(digit1)(remainder)?;
-                if let Some(try_num) = num {
-                    let index = try_num.parse::<usize>();
-                    if index.is_err() {
-                        return Err(nom::Err::Error(ErrorTree::Base {
-                            location: try_num,
-                            kind: nom_supreme::error::BaseErrorKind::Kind(
-                                nom::error::ErrorKind::Fail,
-                            ),
-                        }));
-                    }
-                    let index = index.unwrap();
-                    return Ok((
-                        remainder,
-                        Expression::TupleAccess(TupleAccess {
-                            var: Box::new(left),
-                            index,
-                            metadata: Metadata::default(),
-                        }),
-                    ));
+        if let Some(_) = dot_field {
+            let (remainder, num) = opt(digit1)(remainder)?;
+            if let Some(try_num) = num {
+                let index = try_num.parse::<usize>();
+                if index.is_err() {
+                    return Err(nom::Err::Error(ErrorTree::Base {
+                        location: try_num,
+                        kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
+                    }));
                 }
-                let (remainder, right) = FieldAccess::parse(remainder)?;
-                Ok((
+                let index = index.unwrap();
+                return Ok((
                     remainder,
-                    Expression::FieldAccess(FieldAccess {
+                    Expression::TupleAccess(TupleAccess {
                         var: Box::new(left),
-                        field: Box::new(right),
+                        index,
+                        offset: None,
                         metadata: Metadata::default(),
                     }),
-                ))
-            } else {
-                let (remainder, index) = opt(delimited(
-                    wst(lexem::SQ_BRA_O),
-                    Expression::parse,
-                    wst(lexem::SQ_BRA_C),
-                ))(remainder)?;
-
-                if let Some(index) = index {
-                    Ok((
-                        remainder,
-                        Expression::ListAccess(ListAccess {
-                            var: Box::new(left),
-                            index: Box::new(index),
-                            metadata: Metadata::default(),
-                        }),
-                    ))
-                } else {
-                    Ok((remainder, left))
-                }
+                ));
             }
-        } else {
-            Ok((remainder, *fn_var))
-        }
-    }
-}
-
-impl TryParseOperation for Range {
-    fn parse(input: Span) -> PResult<Expression> {
-        let (remainder, left) = LogicalOr::parse(input)?;
-        let (remainder, op) = opt(pair(wst(lexem::RANGE_SEP), opt(wst(lexem::EQUAL))))(remainder)?;
-
-        if let Some((_, inclusive)) = op {
-            let (remainder, upper) =
-                cut(LogicalOr::parse.context("Invalid range expression"))(remainder)?;
-            let lower = Box::new(left);
-            let upper = Box::new(upper);
+            let (remainder, right) =
+                cut(FieldAccess::parse.context("Invalid field accessing expression"))(remainder)?;
             Ok((
                 remainder,
-                Expression::Range(Range {
-                    lower,
-                    upper,
-                    incr: None,
-                    inclusive: inclusive.is_some(),
+                Expression::FieldAccess(FieldAccess {
+                    var: Box::new(left),
+                    field: Box::new(right),
                     metadata: Metadata::default(),
                 }),
             ))
@@ -477,8 +471,8 @@ impl TryParseOperation for Shift {
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = Addition::parse(input)?;
         let (remainder, op) = opt(alt((
-            value(ShiftOPERATOR::Left, wst(lexem::SHL)),
-            value(ShiftOPERATOR::Right, wst(lexem::SHR)),
+            value(ShiftOPERATOR::Left, wst_closed(lexem::SHL)),
+            value(ShiftOPERATOR::Right, wst_closed(lexem::SHR)),
         )))(remainder)?;
 
         if let Some(op) = op {
@@ -516,7 +510,7 @@ impl TryParseOperation for BitwiseAnd {
      */
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = Shift::parse(input)?;
-        let (remainder, op) = opt(wst(lexem::BAND))(remainder)?;
+        let (remainder, op) = opt(wst_closed(lexem::BAND))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) =
@@ -546,7 +540,7 @@ impl TryParseOperation for BitwiseXOR {
      */
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = BitwiseAnd::parse(input)?;
-        let (remainder, op) = opt(wst(lexem::XOR))(remainder)?;
+        let (remainder, op) = opt(wst_closed(lexem::XOR))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) =
@@ -576,7 +570,7 @@ impl TryParseOperation for BitwiseOR {
      */
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = BitwiseXOR::parse(input)?;
-        let (remainder, op) = opt(wst(lexem::BOR))(remainder)?;
+        let (remainder, op) = opt(wst_closed(lexem::BOR))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) =
@@ -605,8 +599,8 @@ impl TryParseOperation for Cast {
      * Cast := Atom as Type | Atom
      */
     fn parse(input: Span) -> PResult<Expression> {
-        let (remainder, left) = FnCall::parse(input)?;
-        let (remainder, op) = opt(wst(lexem::AS))(remainder)?;
+        let (remainder, left) = FieldAccess::parse(input)?;
+        let (remainder, op) = opt(wst_closed(lexem::AS))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) =
@@ -713,7 +707,7 @@ impl TryParseOperation for LogicalAnd {
      */
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = Comparaison::parse(input)?;
-        let (remainder, op) = opt(wst(lexem::AND))(remainder)?;
+        let (remainder, op) = opt(wst_closed(lexem::AND))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) =
@@ -743,7 +737,7 @@ impl TryParseOperation for LogicalOr {
      */
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = LogicalAnd::parse(input)?;
-        let (remainder, op) = opt(wst(lexem::OR))(remainder)?;
+        let (remainder, op) = opt(wst_closed(lexem::OR))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) =
@@ -768,7 +762,7 @@ impl TryParseOperation for LogicalOr {
 mod tests {
 
     use crate::{
-        ast::expressions::data::{Data, Number, Primitive},
+        ast::expressions::data::{Data, Primitive},
         v_num,
     };
 
@@ -1132,125 +1126,6 @@ mod tests {
                     Unresolved, 5
                 ))))),
                 metadata: Metadata::default()
-            }),
-            value
-        );
-    }
-
-    #[test]
-    fn valid_range() {
-        let res = Range::parse("1..10".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Expression::Range(Range {
-                lower: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::Unresolved(1).into())
-                )))),
-                upper: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::Unresolved(10).into())
-                )))),
-                incr: None,
-                inclusive: false,
-                metadata: Metadata::default()
-            }),
-            value
-        );
-
-        let res = Range::parse("1..=10".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Expression::Range(Range {
-                lower: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::Unresolved(1).into())
-                )))),
-                upper: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::Unresolved(10).into())
-                )))),
-                incr: None,
-                inclusive: true,
-                metadata: Metadata::default()
-            }),
-            value
-        );
-
-        let res = Range::parse("1u64..10u64".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Expression::Range(Range {
-                lower: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(1).into())
-                )))),
-                upper: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10).into())
-                )))),
-                incr: None,
-                inclusive: false,
-                metadata: Metadata::default()
-            }),
-            value
-        );
-    }
-
-    #[test]
-    fn valid_fn_call() {
-        let res = FnCall::parse("f(x,10)".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Expression::FnCall(FnCall {
-                lib: None,
-                fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "f".to_string().into(),
-                    metadata: Metadata::default(),
-                    from_field: false,
-                })))),
-                params: vec![
-                    Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".to_string().into(),
-                        metadata: Metadata::default(),
-                        from_field: false,
-                    }))),
-                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::Unresolved(10).into()
-                    ))))
-                ],
-                metadata: Metadata::default(),
-                platform: Default::default(),
-                is_dynamic_fn: Default::default(),
-            }),
-            value
-        );
-    }
-
-    #[test]
-    fn valid_lib_call() {
-        let res = FnCall::parse("core::f(x,10)".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Expression::FnCall(FnCall {
-                lib: Some("core".to_string().into()),
-                fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "f".to_string().into(),
-                    metadata: Metadata::default(),
-                    from_field: false,
-                })))),
-                params: vec![
-                    Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".to_string().into(),
-                        metadata: Metadata::default(),
-                        from_field: false,
-                    }))),
-                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::Unresolved(10).into()
-                    ))))
-                ],
-                metadata: Metadata::default(),
-                platform: Default::default(),
-                is_dynamic_fn: Default::default(),
             }),
             value
         );

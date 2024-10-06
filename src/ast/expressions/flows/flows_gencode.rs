@@ -1,450 +1,492 @@
 use num_traits::ToBytes;
 
-use ulid::Ulid;
+use std::fmt::Debug;
 
-use crate::arw_read;
-use crate::semantic::scope::scope::Scope;
-use crate::semantic::SemanticError;
-use crate::vm::casm::alloc::StackFrame;
-use crate::vm::casm::branch::BranchTry;
-use crate::vm::casm::data;
-use crate::vm::platform::stdlib::strings::{JoinCasm, StringsCasm, ToStrCasm};
-use crate::vm::platform::stdlib::StdCasm;
-use crate::vm::platform::LibCasm;
+use crate::ast::statements::block::BlockCommonApi;
+use crate::ast::TryParse;
+use crate::semantic::scope::scope::{ScopeState, VariableInfo};
+use crate::semantic::scope::static_types::POINTER_SIZE;
+use crate::semantic::Resolve;
+use crate::vm::asm::branch::{BranchTry, CloseFrame, Return};
+use crate::vm::asm::mem::Mem;
+use crate::vm::asm::operation::{Equal, Operation, StrEqual};
+use crate::vm::core::ERROR_VALUE;
+use crate::vm::{CodeGenerationContext, CodeGenerationError, GenerateCode};
 use crate::{
-    ast::expressions::data::{Number, Primitive},
-    semantic::{
-        scope::{
-            static_types::StaticType,
-            user_type_impl::{Enum, Union, UserType},
-            var_impl::VarState,
-        },
-        Either, SizeOf, TypeOf,
-    },
-    vm::{
-        casm::{
-            branch::{BranchIf, BranchTable, Call, Goto, Label},
-            data::Data,
-            Casm, CasmProgram,
-        },
-        vm::{CodeGenerationError, GenerateCode},
+    semantic::{SizeOf, TypeOf},
+    vm::asm::{
+        branch::{BranchIf, Goto, Label},
+        data::Data,
+        Asm,
     },
 };
 
-use super::{ExprFlow, FCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
+use super::{EnumCase, ExprFlow, IfExpr, MatchExpr, PrimitiveCase, StringCase, TryExpr, UnionCase};
 
 impl GenerateCode for ExprFlow {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
-            ExprFlow::If(value) => value.gencode(scope, instructions),
-            ExprFlow::Match(value) => value.gencode(scope, instructions),
-            ExprFlow::Try(value) => value.gencode(scope, instructions),
+            ExprFlow::If(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            ExprFlow::Match(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            ExprFlow::Try(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
             ExprFlow::SizeOf(value, _metadata) => {
                 let value = value
-                    .type_of(&crate::arw_read!(
-                        scope,
-                        CodeGenerationError::ConcurrencyError
-                    )?)
+                    .type_of(scope_manager, scope_id)
                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
-                instructions.push(Casm::Data(Data::Serialized {
+                instructions.push(Asm::Data(Data::Serialized {
                     data: (value.size_of() as u64).to_le_bytes().into(),
                 }));
                 Ok(())
             }
-            ExprFlow::FCall(value) => value.gencode(scope, instructions),
         }
     }
 }
 
 impl GenerateCode for IfExpr {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        let Some(_return_size) = self.metadata.signature().map(|t| t.size_of()) else {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        let else_label = Label::gen();
+        let end_label = Label::gen();
+
+        let _ = self
+            .condition
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+
+        instructions.push(Asm::If(BranchIf { else_label }));
+        let _ = self
+            .then_branch
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        instructions.push(Asm::Goto(Goto {
+            label: Some(end_label),
+        }));
+
+        instructions.push_label_by_id(else_label, "else".to_string().into());
+        let _ = self
+            .else_branch
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        instructions.push(Asm::Goto(Goto {
+            label: Some(end_label),
+        }));
+
+        instructions.push_label_by_id(end_label, "end_if".to_string().into());
+
+        Ok(())
+    }
+}
+
+impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + PartialEq> GenerateCode
+    for PrimitiveCase<B>
+{
+    fn gencode<E: crate::vm::external::Engine>(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        let block_label = Label::gen();
+        let mut else_label = Label::gen();
+
+        for (i, value) in self.patterns.iter().enumerate() {
+            instructions.push_label_by_id(else_label, format!("case_{}", i));
+            instructions.push(Asm::Mem(Mem::Dup(value.size_of())));
+
+            value.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+
+            instructions.push(Asm::Operation(Operation {
+                kind: crate::vm::asm::operation::OperationKind::Equal(Equal {
+                    left: value.size_of(),
+                    right: value.size_of(),
+                }),
+            }));
+
+            else_label = Label::gen();
+            instructions.push(Asm::If(BranchIf { else_label }));
+            instructions.push(Asm::Pop(value.size_of()));
+            instructions.push(Asm::Goto(Goto {
+                label: Some(block_label),
+            }));
+        }
+
+        instructions.push_label_by_id(block_label, "match_block".to_string());
+        self.block
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        instructions.push(Asm::Goto(Goto {
+            label: context.break_label,
+        }));
+        instructions.push_label_by_id(else_label, "fallthrough".to_string());
+
+        Ok(())
+    }
+}
+
+impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + PartialEq> GenerateCode
+    for StringCase<B>
+{
+    fn gencode<E: crate::vm::external::Engine>(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        let block_label = Label::gen();
+        let mut else_label = Label::gen();
+
+        for (i, value) in self.patterns.iter().enumerate() {
+            instructions.push_label_by_id(else_label, format!("case_{}", i));
+            instructions.push(Asm::Mem(Mem::Dup(POINTER_SIZE)));
+
+            value.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+
+            instructions.push(Asm::Operation(Operation {
+                kind: crate::vm::asm::operation::OperationKind::StrEqual(StrEqual),
+            }));
+
+            else_label = Label::gen();
+            instructions.push(Asm::If(BranchIf { else_label }));
+            instructions.push(Asm::Pop(POINTER_SIZE));
+            instructions.push(Asm::Goto(Goto {
+                label: Some(block_label),
+            }));
+        }
+
+        instructions.push_label_by_id(block_label, "match_block".to_string());
+        self.block
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        instructions.push(Asm::Goto(Goto {
+            label: context.break_label,
+        }));
+        instructions.push_label_by_id(else_label, "fallthrough".to_string());
+
+        Ok(())
+    }
+}
+
+impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + PartialEq> GenerateCode
+    for EnumCase<B>
+{
+    fn gencode<E: crate::vm::external::Engine>(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        let block_label = Label::gen();
+        let mut else_label = Label::gen();
+
+        for (i, (_, _, value)) in self.patterns.iter().enumerate() {
+            instructions.push_label_by_id(else_label, format!("case_{}", i));
+            instructions.push(Asm::Mem(Mem::Dup(POINTER_SIZE)));
+
+            let Some(value) = value else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
+            instructions.push(Asm::Data(Data::Serialized {
+                data: (*value).to_le_bytes().into(),
+            }));
+
+            instructions.push(Asm::Operation(Operation {
+                kind: crate::vm::asm::operation::OperationKind::Equal(Equal { left: 8, right: 8 }),
+            }));
+
+            else_label = Label::gen();
+            instructions.push(Asm::If(BranchIf { else_label }));
+            instructions.push(Asm::Pop(POINTER_SIZE));
+            instructions.push(Asm::Goto(Goto {
+                label: Some(block_label),
+            }));
+        }
+
+        instructions.push_label_by_id(block_label, "match_block".to_string());
+        self.block
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        instructions.push(Asm::Goto(Goto {
+            label: context.break_label,
+        }));
+        instructions.push_label_by_id(else_label, "fallthrough".to_string());
+
+        Ok(())
+    }
+}
+
+impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + PartialEq> GenerateCode
+    for UnionCase<B>
+{
+    fn gencode<E: crate::vm::external::Engine>(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        let block_label = Label::gen();
+        let else_label = Label::gen();
+
+        let Some(value) = self.pattern.variant_value else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let else_label = Label::gen();
-        let if_scope_label = Label::gen();
-        let end_if_scope_label = Label::gen();
-        let else_scope_label = Label::gen();
-        let end_else_scope_label = Label::gen();
-        let end_ifelse_label = Label::gen();
+        instructions.push(Asm::Mem(Mem::Dup(POINTER_SIZE)));
 
-        let _if_label = instructions.push_label("if".to_string().into());
-
-        let _ = self.condition.gencode(scope, instructions)?;
-
-        instructions.push(Casm::If(BranchIf { else_label }));
-        instructions.push(Casm::Goto(Goto {
-            label: Some(end_if_scope_label),
-        }));
-        instructions.push_label_id(if_scope_label, "if_scope".to_string().into());
-
-        let _ = self.then_branch.gencode(scope, instructions)?;
-
-        instructions.push_label_id(end_if_scope_label, "end_if_scope".to_string().into());
-        instructions.push(Casm::Call(Call::From {
-            label: if_scope_label,
-            param_size: 0,
-        }));
-        instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
-        instructions.push(Casm::Goto(Goto {
-            label: Some(end_ifelse_label),
+        instructions.push(Asm::Data(Data::Serialized {
+            data: value.to_le_bytes().into(),
         }));
 
-        instructions.push_label_id(else_label, "else".to_string().into());
-        instructions.push(Casm::Goto(Goto {
-            label: Some(end_else_scope_label),
-        }));
-        instructions.push_label_id(else_scope_label, "else_scope".to_string().into());
-
-        let _ = self.else_branch.gencode(scope, instructions)?;
-
-        instructions.push_label_id(end_else_scope_label, "end_else_scope".to_string().into());
-        instructions.push(Casm::Call(Call::From {
-            label: else_scope_label,
-            param_size: 0,
-        }));
-        instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
-        instructions.push(Casm::Goto(Goto {
-            label: Some(end_ifelse_label),
+        instructions.push(Asm::Operation(Operation {
+            kind: crate::vm::asm::operation::OperationKind::Equal(Equal { left: 8, right: 8 }),
         }));
 
-        instructions.push_label_id(end_ifelse_label, "end_if_else".to_string().into());
+        instructions.push(Asm::If(BranchIf { else_label }));
+        // clean up padding + variant_value
+        instructions.push(Asm::Pop(
+            POINTER_SIZE + self.pattern.variant_padding.unwrap_or(0),
+        ));
 
+        instructions.push_label_by_id(block_label, "match_block".to_string());
+
+        let Some(ids) = &self.pattern.vars_id else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+
+        let Some(inner_scope) = self.block.scope() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+
+        if ScopeState::IIFE
+            == *scope_manager
+                .scope_states
+                .get(&inner_scope)
+                .unwrap_or(&ScopeState::Inline)
+        {
+            // IIFE : the created vars are left on the stack to be picked up by the IIFE
+        } else {
+            for id in ids.iter().rev() {
+                let Some(VariableInfo { address, ctype, .. }) =
+                    scope_manager.find_var_by_id(*id).ok()
+                else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Asm::Mem(Mem::Store {
+                    size: ctype.size_of(),
+                    address: (*address)
+                        .try_into()
+                        .map_err(|_| CodeGenerationError::UnresolvedError)?,
+                }));
+            }
+        }
+
+        self.block
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        instructions.push(Asm::Goto(Goto {
+            label: context.break_label,
+        }));
+        instructions.push_label_by_id(else_label, "fallthrough".to_string());
         Ok(())
     }
 }
 
 impl GenerateCode for MatchExpr {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        let Some(_return_size) = self.metadata.signature().map(|t| t.size_of()) else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        let break_label = Label::gen();
+        instructions.push_label("start_match".to_string());
+        let _ = self
+            .expr
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-        let Some(expr_type) = self.expr.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let exhaustive_cases = match expr_type {
-            Either::Static(ref value) => match value.as_ref() {
-                StaticType::Primitive(_) => None,
-                StaticType::String(_) => None,
-                StaticType::StrSlice(_) => None,
-                _ => return Err(CodeGenerationError::UnresolvedError),
-            },
-            Either::User(ref value) => match value.as_ref() {
-                UserType::Struct(_) => return Err(CodeGenerationError::UnresolvedError),
-                UserType::Enum(Enum { id: _, values }) => Some(values.clone()),
-                UserType::Union(Union { id: _, variants }) => {
-                    Some(variants.iter().map(|(v, _)| v).cloned().collect())
+        match &self.cases {
+            crate::ast::expressions::flows::Cases::Primitive { cases } => {
+                for case in cases {
+                    case.gencode::<E>(
+                        scope_manager,
+                        scope_id,
+                        instructions,
+                        &CodeGenerationContext {
+                            return_label: None,
+                            break_label: Some(break_label),
+                            continue_label: None,
+                        },
+                    )?;
                 }
-            },
-        };
-
-        let end_match_label = Label::gen();
-        let _match_label = instructions.push_label("Match".to_string().into());
-
-        let mut cases: Vec<Ulid> = Vec::with_capacity(self.patterns.len());
-
-        let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.patterns.len());
-
-        // let mut table: Vec<(u64, Ulid)> = Vec::with_capacity(self.patterns.len());
-        // let mut switch: Vec<(Vec<u8>, Ulid)> = Vec::with_capacity(self.patterns.len());
-
-        let switch_size = match &expr_type {
-            Either::User(value) => match value.as_ref() {
-                UserType::Enum(_) | UserType::Union(_) => 8,
-                _ => expr_type.size_of(),
-            },
-            _ => expr_type.size_of(),
-        };
-
-        for PatternExpr { patterns, .. } in &self.patterns {
-            let label: Ulid = Label::gen();
-            for pattern in patterns {
-                cases.push(label);
-                match pattern {
-                    Pattern::Enum { value, .. } => {
-                        if let Some(idx) = exhaustive_cases
-                            .as_ref()
-                            .map(|e| {
-                                e.iter()
-                                    .enumerate()
-                                    .find_map(|(idx, id)| (id == value).then(|| idx))
-                            })
-                            .flatten()
-                        {
-                            dump_data.push((idx as u64).to_le_bytes().into());
-                        }
-                    }
-                    Pattern::Union { variant, .. } => {
-                        if let Some(idx) = exhaustive_cases
-                            .as_ref()
-                            .map(|e| {
-                                e.iter()
-                                    .enumerate()
-                                    .find_map(|(idx, id)| (id == variant).then(|| idx))
-                            })
-                            .flatten()
-                        {
-                            dump_data.push((idx as u64).to_le_bytes().into());
-                        }
-                    }
-                    Pattern::Primitive(value) => {
-                        let data = match value {
-                            Primitive::Number(data) => match data {
-                                Number::U8(data) => data.to_le_bytes().into(),
-                                Number::U16(data) => data.to_le_bytes().into(),
-                                Number::U32(data) => data.to_le_bytes().into(),
-                                Number::U64(data) => data.to_le_bytes().into(),
-                                Number::U128(data) => data.to_le_bytes().into(),
-                                Number::I8(data) => data.to_le_bytes().into(),
-                                Number::I16(data) => data.to_le_bytes().into(),
-                                Number::I32(data) => data.to_le_bytes().into(),
-                                Number::I64(data) => data.to_le_bytes().into(),
-                                Number::I128(data) => data.to_le_bytes().into(),
-                                Number::F64(data) => data.to_le_bytes().into(),
-                                _ => return Err(CodeGenerationError::UnresolvedError),
-                            },
-                            Primitive::Bool(data) => [*data as u8].into(),
-                            Primitive::Char(data) => {
-                                let mut buffer = [0u8; 4];
-                                let _ = data.encode_utf8(&mut buffer);
-                                buffer.into()
-                            }
-                        };
-                        dump_data.push(data);
-                    }
-                    Pattern::String(value) => {
-                        let mut data: Vec<u8> = value.value.as_bytes().to_vec();
-                        data.extend_from_slice(&(data.len() as u64).to_le_bytes());
-                        dump_data.push(data.into());
-                    }
+            }
+            crate::ast::expressions::flows::Cases::String { cases } => {
+                for case in cases {
+                    case.gencode::<E>(
+                        scope_manager,
+                        scope_id,
+                        instructions,
+                        &CodeGenerationContext {
+                            return_label: None,
+                            break_label: Some(break_label),
+                            continue_label: None,
+                        },
+                    )?;
+                }
+            }
+            crate::ast::expressions::flows::Cases::Enum { cases } => {
+                for case in cases {
+                    case.gencode::<E>(
+                        scope_manager,
+                        scope_id,
+                        instructions,
+                        &CodeGenerationContext {
+                            return_label: None,
+                            break_label: Some(break_label),
+                            continue_label: None,
+                        },
+                    )?;
+                }
+            }
+            crate::ast::expressions::flows::Cases::Union { cases } => {
+                for case in cases {
+                    case.gencode::<E>(
+                        scope_manager,
+                        scope_id,
+                        instructions,
+                        &CodeGenerationContext {
+                            return_label: None,
+                            break_label: Some(break_label),
+                            continue_label: None,
+                        },
+                    )?;
                 }
             }
         }
 
-        let else_label = match &self.else_branch {
-            Some(_) => Some(Label::gen()),
-            None => None,
-        };
-
-        let dump_data_label = instructions.push_data(Data::Dump {
-            data: dump_data.into(),
-        });
-        let table_data_label = instructions.push_data(Data::Table {
-            data: cases.clone().into(),
-        });
-
-        // gencode of matched expression
-        let _ = self.expr.gencode(scope, instructions)?;
-
-        instructions.push(Casm::Switch(BranchTable::Swith {
-            size: Some(switch_size),
-            data_label: Some(dump_data_label),
-            else_label: else_label,
-        }));
-        instructions.push(Casm::Switch(BranchTable::Table {
-            table_label: Some(table_data_label),
-            else_label: else_label,
-        }));
-
-        for (idx, (PatternExpr { patterns: _, expr }, label)) in
-            self.patterns.iter().zip(cases).enumerate()
-        {
-            instructions.push_label_id(label, format!("match_case_{}", idx).into());
-            let end_scope_label = Label::gen();
-            instructions.push(Casm::Goto(Goto {
-                label: Some(end_scope_label),
-            }));
-            let scope_label = instructions.push_label("Scope".to_string().into());
-            let _ = expr.gencode(scope, instructions)?;
-
-            // let param_size = expr
-            //     .parameters_size()
-            //     .map_err(|_| CodeGenerationError::UnresolvedError)?;
-            let scope = expr
-                .scope()
-                .map_err(|_| CodeGenerationError::UnresolvedError)?;
-            let borrowed_scope = arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
-            let param_size = borrowed_scope
-                .vars()
-                .filter_map(|(v, _)| {
-                    if let Ok(borrowed) = arw_read!(v, SemanticError::ConcurrencyError) {
-                        (borrowed.state == VarState::Parameter).then(|| borrowed.type_sig.size_of())
-                    } else {
-                        None
-                    }
-                })
-                .sum::<usize>();
-            instructions.push_label_id(end_scope_label, "End_Scope".to_string().into());
-            instructions.push(Casm::Call(Call::From {
-                label: scope_label,
-                param_size,
-            }));
-            instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
-            instructions.push(Casm::Goto(Goto {
-                label: Some(end_match_label),
-            }));
-        }
-        match &self.else_branch {
-            Some(else_branch) => {
-                instructions.push_label_id(else_label.unwrap(), "else_case".to_string().into());
-                let end_scope_label = Label::gen();
-                instructions.push(Casm::Goto(Goto {
-                    label: Some(end_scope_label),
-                }));
-                let scope_label = instructions.push_label("Scope".to_string().into());
-                let _ = else_branch.gencode(scope, instructions)?;
-
-                instructions.push_label_id(end_scope_label, "End_Scope".to_string().into());
-                instructions.push(Casm::Call(Call::From {
-                    label: scope_label,
-                    param_size: 0,
-                }));
-                instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
-                instructions.push(Casm::Goto(Goto {
-                    label: Some(end_match_label),
-                }));
-            }
-            None => {}
+        if let Some(block) = &self.else_branch {
+            block.gencode::<E>(scope_manager, scope_id, instructions, context)?;
         }
 
-        instructions.push_label_id(end_match_label, "end_match_else".to_string().into());
+        instructions.push_label_by_id(break_label, "end_match".to_string());
+
         Ok(())
     }
 }
 
 impl GenerateCode for TryExpr {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(return_size) = self.metadata.signature().map(|t| t.size_of()) else {
             return Err(CodeGenerationError::UnresolvedError);
         };
 
         let else_label = Label::gen();
-        let try_scope_label = Label::gen();
-        let end_try_scope_label = Label::gen();
-        let else_scope_label = Label::gen();
         let recover_else_label = Label::gen();
-        let end_else_scope_label = Label::gen();
-        let end_tryelse_label = Label::gen();
-        let end_try_label = Label::gen();
+        let end_label = Label::gen();
 
-        let try_label = instructions.push_label("try".to_string().into());
-        // instructions.push(Casm::Mem(Mem::GetReg(UReg::R2)));
-        // instructions.push(Casm::Mem(Mem::LabelOffset(else_label)));
-        instructions.push(Casm::Try(BranchTry::StartTry {
+        let _ = instructions.push_label("try".to_string().into());
+
+        instructions.push(Asm::Try(BranchTry::StartTry {
             else_label: recover_else_label,
         }));
-        instructions.push(Casm::Goto(Goto {
-            label: Some(end_try_scope_label),
-        }));
-        instructions.push_label_id(try_scope_label, "try_scope".to_string().into());
 
-        let _ = self.try_branch.gencode(scope, instructions)?;
-
-        instructions.push_label_id(end_try_scope_label, "end_try_scope".to_string().into());
-        instructions.push(Casm::Call(Call::From {
-            label: try_scope_label,
-            param_size: 0,
-        }));
-        instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
+        let _ = self.try_branch.gencode::<E>(
+            scope_manager,
+            scope_id,
+            instructions,
+            &CodeGenerationContext::default(),
+        )?;
+        // (1)
 
         if self.pop_last_err {
+            let next = Label::gen();
             /* Pop the error */
-            instructions.push(Casm::If(BranchIf {
-                else_label: end_try_label,
-            }));
-            instructions.push(Casm::Pop(return_size)); // discard error value
-            instructions.push(Casm::Goto(Goto {
+            instructions.push(Asm::If(BranchIf { else_label: next }));
+            instructions.push(Asm::Pop(return_size)); // discard error value
+            instructions.push(Asm::Goto(Goto {
                 label: Some(else_label),
-            }))
+            }));
+            instructions.push_label_by_id(next, "else".to_string().into());
+        } else {
         }
-        instructions.push_label_id(end_try_label, "end_try".to_string().into());
-        instructions.push(Casm::Try(BranchTry::EndTry));
 
-        instructions.push(Casm::Goto(Goto {
-            label: Some(end_tryelse_label),
+        instructions.push(Asm::Try(BranchTry::EndTry));
+
+        instructions.push(Asm::Goto(Goto {
+            label: Some(end_label),
         }));
-        instructions.push_label_id(recover_else_label, "recover_else".to_string().into());
-        instructions.push(Casm::StackFrame(StackFrame::SoftClean));
+        instructions.push_label_by_id(recover_else_label, "recover_else".to_string().into());
 
-        instructions.push_label_id(else_label, "else".to_string().into());
-        instructions.push(Casm::Try(BranchTry::EndTry));
-        instructions.push(Casm::Goto(Goto {
-            label: Some(end_else_scope_label),
-        }));
-        instructions.push_label_id(else_scope_label, "else_scope".to_string().into());
+        if self.pop_last_err {
+            if let Some(inner_scope) = self.try_branch.scope {
+                match scope_manager.scope_states.get(&inner_scope) {
+                    Some(ScopeState::IIFE) => {
+                        // Push dummy data that will be returned
+                        let mut dummy_data = vec![0; return_size];
+                        dummy_data.push(ERROR_VALUE);
 
-        match &self.else_branch {
-            Some(else_branch) => {
-                let _ = else_branch.gencode(scope, instructions)?;
-                instructions
-                    .push_label_id(end_else_scope_label, "end_else_scope".to_string().into());
-                instructions.push(Casm::Call(Call::From {
-                    label: else_scope_label,
-                    param_size: 0,
-                }));
-                instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
-                instructions.push(Casm::Goto(Goto {
-                    label: Some(end_tryelse_label),
-                }));
+                        instructions.push(Asm::Data(Data::Serialized {
+                            data: dummy_data.into(),
+                        }));
+                        // Once return the cursor will go back to (1)
+                        instructions.push(Asm::Return(Return { size: return_size }));
+                    }
+                    Some(ScopeState::Inline) => {
+                        instructions.push(Asm::Goto(Goto {
+                            label: Some(else_label),
+                        }));
+                    }
+                    _ => return Err(CodeGenerationError::UnresolvedError),
+                }
+            } else {
+                return Err(CodeGenerationError::UnresolvedError);
             }
-            None => {
-                instructions
-                    .push_label_id(end_else_scope_label, "end_else_scope".to_string().into());
-                instructions.push(Casm::Goto(Goto {
-                    label: Some(end_tryelse_label),
-                }));
+        } else {
+            if let Some(inner_scope) = self.try_branch.scope {
+                match scope_manager.scope_states.get(&inner_scope) {
+                    Some(ScopeState::IIFE) => {
+                        // Once return the cursor will go back to (1)
+                        instructions.push(Asm::CloseFrame(CloseFrame));
+                    }
+                    Some(ScopeState::Inline) => {
+                        instructions.push(Asm::Goto(Goto {
+                            label: Some(else_label),
+                        }));
+                    }
+                    _ => return Err(CodeGenerationError::UnresolvedError),
+                }
+            } else {
+                return Err(CodeGenerationError::UnresolvedError);
             }
         }
 
-        instructions.push_label_id(end_tryelse_label, "end_try_else".to_string().into());
-        Ok(())
-    }
-}
-impl GenerateCode for FCall {
-    fn gencode(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        for item in &self.value {
-            match item {
-                super::FormatItem::Str(string) => {
-                    let str_bytes: Box<[u8]> = string.as_bytes().into();
-                    let size = (&str_bytes).len() as u64;
-                    instructions.push(Casm::Data(data::Data::Serialized { data: str_bytes }));
-                    instructions.push(Casm::Data(data::Data::Serialized {
-                        data: size.to_le_bytes().into(),
-                    }));
-                    instructions.push(Casm::Platform(LibCasm::Std(StdCasm::Strings(
-                        StringsCasm::ToStr(ToStrCasm::ToStrStrSlice),
-                    ))));
-                }
-                super::FormatItem::Expr(expr) => {
-                    let _ = expr.gencode(scope, instructions)?;
-                }
-            }
+        instructions.push_label_by_id(else_label, "else".to_string().into());
+        instructions.push(Asm::Try(BranchTry::EndTry));
+
+        if let Some(block) = &self.else_branch {
+            block.gencode::<E>(scope_manager, scope_id, instructions, context)?;
         }
-        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::Strings(
-            StringsCasm::Join(JoinCasm::NoSepFromSlice(Some(self.value.len()))),
-        ))));
+
+        instructions.push_label_by_id(end_label, "end_try".to_string().into());
         Ok(())
     }
 }
@@ -452,1218 +494,259 @@ impl GenerateCode for FCall {
 #[cfg(test)]
 mod tests {
 
-    use crate::{
-        ast::{
-            expressions::{
-                data::{Data, Number, Primitive, Struct},
-                Atomic, Expression,
-            },
-            statements::Statement,
-            TryParse,
-        },
-        clear_stack, compile_statement, p_num,
-        semantic::{
-            scope::{
-                scope::Scope,
-                static_types::{NumberType, PrimitiveType},
-                user_type_impl::{self, UserType},
-            },
-            Resolve,
-        },
-        v_num,
-        vm::vm::{DeserializeFrom, Executable, Runtime},
-    };
-
-    use super::*;
+    use crate::{test_extract_variable, test_statements};
 
     #[test]
-    fn valid_if_basic() {
-        let mut statement_then = IfExpr::parse(
-            r##"
-           if true then 420 else 69 
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+    fn valid_if() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
-        let scope = Scope::new();
-        let _ = statement_then
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
-        // Code generation.
-        let mut instructions_then = CasmProgram::default();
-        statement_then
-            .gencode(&scope, &mut instructions_then)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions_then.len() > 0);
-        // Execute the instructions.
-
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions_then);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_if_basic_else() {
-        let mut statement_else = IfExpr::parse(
-            r##"
-           if false then 420 else 69 
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = statement_else
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let mut instructions_else = CasmProgram::default();
-        statement_else
-            .gencode(&scope, &mut instructions_else)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions_else.len() > 0);
-        // Execute the instructions.
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions_else);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 69));
-    }
-
-    #[test]
-    fn valid_if_basic_scope() {
-        let mut statement_then = IfExpr::parse(
-            r##"
-           if true then { 
-               let x = 420;
-               return x;
-           } else 69 
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = statement_then
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let mut instructions_then = CasmProgram::default();
-        statement_then
-            .gencode(&scope, &mut instructions_then)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions_then.len() > 0);
-        // Execute the instructions.
-
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions_then);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_if_basic_scope_else() {
-        let mut statement_else = IfExpr::parse(
-            r##"
-           if false then 420 else { 
-            let x = 69;
-            return x;
-            } 
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-
-        let _ = statement_else
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-
-        let mut instructions_else = CasmProgram::default();
-        statement_else
-            .gencode(&scope, &mut instructions_else)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions_else.len() > 0);
-        // Execute the instructions.
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions_else);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 69));
-    }
-
-    #[test]
-    fn valid_if_complex() {
-        let user_type = user_type_impl::Struct {
-            id: "Point".to_string().into(),
-            fields: {
-                let mut res = Vec::new();
-                res.push(("x".to_string().into(), p_num!(I64)));
-                res.push(("y".to_string().into(), p_num!(I64)));
-                res
-            },
-        };
-        let mut statement_then = IfExpr::parse(
-            r##"
-        if true then {
-            let point:Point;
-            point.x = 420;
-            point.y = 420;
-            return point;
-        } else Point {
-            x : 69,
-            y : 69
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            true
         }
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
 
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(
-                &"Point".to_string().into(),
-                UserType::Struct(user_type.clone()),
-            )
-            .expect("Registering of user type should have succeeded");
-        let _ = statement_then
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
+        test_statements(
+            r##"
 
-        // Code generation.
-        let mut instructions_then = CasmProgram::default();
-        statement_then
-            .gencode(&scope, &mut instructions_then)
-            .expect("Code generation should have succeeded");
-        assert!(instructions_then.len() > 0);
-        // Execute the instructions.
+        let res1 = if true then {
+            1
+        } else {
+            2
+        };
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions_then);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let res2 = if false then {
+            1
+        } else {
+            2
+        };
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
+    #[test]
+    fn valid_if_with_inner_var() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
-        let result: Struct = user_type
-            .deserialize_from(&data)
-            .expect("Deserialization should have succeeded");
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6);
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+            true
+        }
 
-        for (r_id, res) in &result.fields {
-            match res {
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x {
-                        Number::I64(res) => {
-                            if **r_id == "x" {
-                                assert_eq!(420, *res);
-                            } else if **r_id == "y" {
-                                assert_eq!(420, *res);
-                            }
-                        }
-                        _ => assert!(false, "Expected i64"),
-                    }
-                }
-                _ => assert!(false, "Expected i64"),
+        test_statements(
+            r##"
+
+        let res1 = if true then {
+            let x = 5;
+            x + 1
+        } else {
+            2
+        };
+
+        let res2 = if false then {
+            1
+        } else {
+            let x = 5;
+            x + 2
+        };
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_if_with_inner_var_in_local_scope() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6);
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            true
+        }
+
+        test_statements(
+            r##"
+
+        let res1 = {
+            let y = if true then {
+                let x = 5;
+                x + 1
+            } else {
+                2
+            };
+            y
+        };
+
+        let res2 = {
+            let y = if false then {
+                1
+            } else {
+                2
+            };
+            y
+        };
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_match() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            let res = test_extract_variable::<i64>("res3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            let res = test_extract_variable::<u32>("res4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            true
+        }
+
+        test_statements(
+            r##"
+
+        union Test {
+            Point {
+                x : i64,
+                y : i64,
+            },
+            Point2 {
+                x : u32,
+                y : i64,
             }
         }
-    }
 
-    #[test]
-    fn valid_if_complex_else() {
-        let user_type = user_type_impl::Struct {
-            id: "Point".to_string().into(),
-            fields: {
-                let mut res = Vec::new();
-                res.push(("x".to_string().into(), p_num!(I64)));
-                res.push(("y".to_string().into(), p_num!(I64)));
-                res
-            },
-        };
-        let mut statement_else = IfExpr::parse(
-            r##"
-        if false then {
-            let point:Point;
-            point.x = 420;
-            point.y = 420;
-            return point;
-        } else Point {
-            x : 69,
-            y : 69
-        }
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(
-                &"Point".to_string().into(),
-                UserType::Struct(user_type.clone()),
-            )
-            .expect("Registering of user type should have succeeded");
-        let _ = statement_else
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let mut instructions_else = CasmProgram::default();
-        statement_else
-            .gencode(&scope, &mut instructions_else)
-            .expect("Code generation should have succeeded");
-        assert!(instructions_else.len() > 0);
-        // Execute the instructions.
-
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions_else);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result: Struct = user_type
-            .deserialize_from(&data)
-            .expect("Deserialization should have succeeded");
-
-        for (r_id, res) in &result.fields {
-            match res {
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x {
-                        Number::I64(res) => {
-                            if **r_id == "x" {
-                                assert_eq!(69, *res);
-                            } else if **r_id == "y" {
-                                assert_eq!(69, *res);
-                            }
-                        }
-                        _ => assert!(false, "Expected i64"),
-                    }
-                }
-                _ => assert!(false, "Expected i64"),
-            }
-        }
-    }
-
-    #[test]
-    fn valid_if_complex_outvar() {
-        let mut statement_then = Statement::parse(
-            r##"
-        let x = {
-            let y = true;
-            return if y then 420 else 69;
-        };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = statement_then
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let mut instructions_then = CasmProgram::default();
-        statement_then
-            .gencode(&scope, &mut instructions_then)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions_then.len() > 0);
-        // Execute the instructions.
-
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions_then);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_match_union() {
-        let user_type = user_type_impl::Union {
-            id: "Geo".to_string().into(),
-            variants: {
-                let mut res = Vec::new();
-                res.push((
-                    "Point".to_string().into(),
-                    user_type_impl::Struct {
-                        id: "Point".to_string().into(),
-                        fields: vec![
-                            ("x".to_string().into(), p_num!(I64)),
-                            ("y".to_string().into(), p_num!(I64)),
-                        ],
-                    },
-                ));
-                res.push((
-                    "Axe".to_string().into(),
-                    user_type_impl::Struct {
-                        id: "Axe".to_string().into(),
-                        fields: {
-                            let mut res = Vec::new();
-                            res.push(("x".to_string().into(), p_num!(I64)));
-                            res
-                        },
-                    },
-                ));
-                res
-            },
-        };
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let geo = Geo::Point {
-                    x : 420,
-                    y: 69,
-                };
-                let z = 27;
-                return match geo {
-                    case Geo::Point {x,y} => x,
-                    case Geo::Axe {x} => z,
-                };
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(&"Geo".to_string().into(), UserType::Union(user_type))
-            .expect("Registering of user type should have succeeded");
-        let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &mut instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_match_enum() {
-        let user_type = user_type_impl::Enum {
-            id: "Geo".to_string().into(),
-            values: vec![
-                "Point".to_string().into(),
-                "Axe".to_string().into(),
-                "Other".to_string().into(),
-            ],
-        };
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let geo = Geo::Point;
-                let z = 27;
-                return match geo {
-                    case Geo::Point => 420,
-                    case Geo::Axe => 69,
-                    case Geo::Other => 69,
-                };
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(&"Geo".to_string().into(), UserType::Enum(user_type))
-            .expect("Registering of user type should have succeeded");
-        let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &mut instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_match_enum_else() {
-        let user_type = user_type_impl::Enum {
-            id: "Geo".to_string().into(),
-            values: vec![
-                "Point".to_string().into(),
-                "Axe".to_string().into(),
-                "Other".to_string().into(),
-            ],
-        };
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let geo = Geo::Other;
-                let z = 27;
-                return match geo {
-                    case Geo::Point => 420,
-                    case Geo::Axe => 420,
-                    else => 69,
-                };
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(&"Geo".to_string().into(), UserType::Enum(user_type))
-            .expect("Registering of user type should have succeeded");
-        let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &mut instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 69));
-    }
-
-    #[test]
-    fn valid_match_union_else() {
-        let user_type = user_type_impl::Union {
-            id: "Geo".to_string().into(),
-            variants: {
-                let mut res = Vec::new();
-                res.push((
-                    "Point".to_string().into(),
-                    user_type_impl::Struct {
-                        id: "Point".to_string().into(),
-                        fields: vec![
-                            ("x".to_string().into(), p_num!(I64)),
-                            ("y".to_string().into(), p_num!(I64)),
-                        ],
-                    },
-                ));
-                res.push((
-                    "Axe".to_string().into(),
-                    user_type_impl::Struct {
-                        id: "Axe".to_string().into(),
-                        fields: {
-                            let mut res = Vec::new();
-                            res.push(("x".to_string().into(), p_num!(I64)));
-                            res
-                        },
-                    },
-                ));
-                res
-            },
-        };
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let geo = Geo::Point {
-                    x : 420,
-                    y: 69,
-                };
-                let z = 27;
-                return match geo {
-                    case Geo::Axe {x} => x,
-                    else => z,
-                };
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(&"Geo".to_string().into(), UserType::Union(user_type))
-            .expect("Registering of user type should have succeeded");
-        let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &mut instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 27));
-    }
-
-    #[test]
-    fn valid_match_number() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = match 69 {
-                case 69 => 420,
-                else => 69
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_match_number_else() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = match 420 {
-                case 69 => 420,
-                else => 69
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 69));
-    }
-
-    #[test]
-    fn valid_match_string() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = match "Hello world" {
-                case "Hello world" => 420,
-                else => 69
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_match_string_else() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = match "CipherPool" {
-                case "Hello world" => 420,
-                else => 69
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 69));
-    }
-
-    #[test]
-    fn valid_match_multiple_case_strslice() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = match "CipherPool" {
-                case "Hello world" | "CipherPool" => 420,
-                else => 69
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-    #[test]
-    fn valid_match_multiple_case_num() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = match 500 {
-                case 86 | 500 => 420,
-                else => 69
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_match_union_mult() {
-        let user_type = user_type_impl::Union {
-            id: "Geo".to_string().into(),
-            variants: {
-                let mut res = Vec::new();
-                res.push((
-                    "Point".to_string().into(),
-                    user_type_impl::Struct {
-                        id: "Point".to_string().into(),
-                        fields: vec![("x".to_string().into(), p_num!(I64))],
-                    },
-                ));
-                res.push((
-                    "Axe".to_string().into(),
-                    user_type_impl::Struct {
-                        id: "Axe".to_string().into(),
-                        fields: vec![("x".to_string().into(), p_num!(I64))],
-                    },
-                ));
-                res.push((
-                    "Other".to_string().into(),
-                    user_type_impl::Struct {
-                        id: "Axe".to_string().into(),
-                        fields: vec![("x".to_string().into(), p_num!(I64))],
-                    },
-                ));
-                res
-            },
-        };
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let geo = Geo::Point {
-                    x : 420,
-                };
-                let z = 27;
-                return match geo {
-                    case Geo::Axe {x} | Geo::Point {x} => x,
-                    else => z,
-                };
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(&"Geo".to_string().into(), UserType::Union(user_type))
-            .expect("Registering of user type should have succeeded");
-        let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &mut instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_match_enum_mult() {
-        let user_type = user_type_impl::Enum {
-            id: "Geo".to_string().into(),
-            values: vec![
-                "Point".to_string().into(),
-                "Axe".to_string().into(),
-                "Other".to_string().into(),
-            ],
-        };
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let geo = Geo::Axe;
-                let z = 27;
-                return match geo {
-                    case Geo::Point | Geo::Axe => 420,
-                    else => 69,
-                };
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(&"Geo".to_string().into(), UserType::Enum(user_type))
-            .expect("Registering of user type should have succeeded");
-        let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &mut instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_try_tuple() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let res = try (10,Ok()) else 20;
-            return res;
+        let res1 = match 1 {
+            case 1 | 2 => { 5 },
+            else => { 10 }
         };
 
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
 
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(U64, 10));
-    }
-    #[test]
-    fn valid_try_tuple_else() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let res = try (10,Err()) else 20;
-            return res;
+        let var2 = Test::Point { x : 1, y : 5 };
+        let res2 = match var2 {
+            case Test::Point { x, y } => { y },
+            else => { 10 }
         };
 
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+        let res3 = {  
+            let var3 = Test::Point { x : 1, y : 5 };
+            let res3 = match var3 {
+                case Test::Point { x, y } => { y },
+                else => { 10 }
+            };
+            res3
+        };
 
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(U64, 20));
+        let res4 = { 
+            let var4 = Test::Point2 { x : 1, y : 5 };
+            let res4 = match var4 {
+                case Test::Point { x, y } => { y as u32 },
+                case Test::Point2 { x, y } => { x },
+                else => { 10u32 }
+            };
+            res4
+        };
+        "##,
+            &mut engine,
+            assert_fn,
+        );
     }
 
     #[test]
-    fn valid_try_tuple_catch_err_string_access() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let buf = string("aaaabbbbcc");
-            let res = try buf[16] else 'a';
-            return res;
-        };
+    fn valid_try() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result =
-            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Char('a'));
-    }
-
-    #[test]
-    fn valid_try_tuple_catch_err_strslice_access() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let buf = "aaaabbbbcc";
-            let res = try buf[16] else 'a';
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result =
-            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+            assert_eq!(res, 0);
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Char('a'));
-    }
+            assert_eq!(res, 3);
+            let res = test_extract_variable::<i64>("res3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 0);
+            let res = test_extract_variable::<i64>("res4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            let res = test_extract_variable::<i64>("res5", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 0);
+            let res = test_extract_variable::<i64>("res6", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            true
+        }
 
-    #[test]
-    fn valid_try_tuple_catch_err_slice_access() {
-        let mut statement = Statement::parse(
+        test_statements(
             r##"
-        let x = {
-            let buf = [1,5,3,8];
-            let res = try buf[16] else 10;
-            return res;
-        };
 
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+        let arr = [1,2,3];
+        let res1 = try { arr[4] } else { 0 };
+        let res2 = try { arr[2] } else { 0 };
 
-        let data = compile_statement!(statement);
+        let res3 = try { 
+            let x = 1;
+            arr[4] 
+        } else { 0 };
 
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 10));
-    }
+        let res4 = try { 
+            let x = 2;
+            arr[2] 
+        } else { 0 };
 
-    #[test]
-    fn valid_try_tuple_catch_err_vec_access() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let buf = vec[1,5,3,8];
-            let res = try buf[16] else 10;
-            return res;
-        };
+         
+        let res5 = try { (5,Err()) } else { 0 };
+        let res6 = try { (5,Ok()) } else { 0 };
 
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 10));
+        "##,
+            &mut engine,
+            assert_fn,
+        );
     }
 }

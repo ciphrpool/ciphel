@@ -6,7 +6,7 @@ use nom::{
 };
 
 use crate::ast::{
-    statements::{block::Block, declaration::TypedVar},
+    statements::{block::FunctionBlock, declaration::TypedVar},
     types::Type,
     utils::{
         error::squash,
@@ -63,7 +63,11 @@ impl TryParse for StructDef {
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 )),
             ),
-            |(id, fields)| StructDef { id, fields },
+            |(id, fields)| StructDef {
+                id,
+                fields,
+                signature: None,
+            },
         )(input)
     }
 }
@@ -100,7 +104,11 @@ impl TryParse for UnionDef {
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 )),
             ),
-            |(id, variants)| UnionDef { id, variants },
+            |(id, variants)| UnionDef {
+                id,
+                variants,
+                signature: None,
+            },
         )(input)
     }
 }
@@ -124,7 +132,11 @@ impl TryParse for EnumDef {
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 )),
             ),
-            |(id, values)| EnumDef { id, values },
+            |(id, values)| EnumDef {
+                id,
+                values,
+                signature: None,
+            },
         )(input)
     }
 }
@@ -145,11 +157,15 @@ impl TryParse for FnDef {
                     separated_list0(wst(lexem::COMA), TypedVar::parse),
                     wst(lexem::PAR_C),
                 )),
-                cut(preceded(wst(lexem::ARROW), Type::parse)),
-                Block::parse,
+                map(
+                    opt(preceded(wst(lexem::ARROW), Type::parse)),
+                    |opt_return_type| opt_return_type.unwrap_or(Type::Unit),
+                ),
+                FunctionBlock::parse,
             )),
-            |(id, params, ret, scope)| FnDef {
-                id,
+            |(name, params, ret, scope)| FnDef {
+                name,
+                id: None,
                 params,
                 ret: Box::new(ret),
                 scope,
@@ -161,15 +177,13 @@ impl TryParse for FnDef {
 #[cfg(test)]
 mod tests {
 
-    use std::sync::{Arc, RwLock};
-
     use crate::{
         ast::{
             expressions::{data::Data, Atomic, Expression},
-            statements::{Return, Statement},
+            statements::{block::FunctionBlock, Return, Statement},
             types::{NumberType, PrimitiveType},
         },
-        semantic::{scope::ClosureState, Metadata},
+        semantic::Metadata,
         v_num,
     };
 
@@ -200,7 +214,8 @@ mod tests {
                         "y".to_string().into(),
                         Type::Primitive(PrimitiveType::Number(NumberType::U64))
                     )
-                ]
+                ],
+                signature: None,
             },
             value
         );
@@ -236,7 +251,8 @@ mod tests {
                             Type::Primitive(PrimitiveType::Number(NumberType::U64))
                         )
                     ]
-                ),]
+                ),],
+                signature: None,
             },
             value
         );
@@ -261,7 +277,8 @@ mod tests {
                 values: vec![
                     "Football".to_string().into(),
                     "Basketball".to_string().into()
-                ]
+                ],
+                signature: None,
             },
             value
         );
@@ -281,27 +298,20 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             FnDef {
-                id: "f".to_string().into(),
+                name: "f".to_string(),
+                id: None,
                 params: vec![TypedVar {
-                    id: "x".to_string().into(),
-                    rec: false,
+                    name: "x".to_string(),
+                    id: None,
                     signature: Type::Primitive(PrimitiveType::Number(NumberType::U64))
                 }],
                 ret: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U64))),
-                scope: Block {
-                    metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
-                            Unresolved, 10
-                        ))))),
-                        metadata: Metadata::default()
-                    })],
-                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                    is_loop: Default::default(),
-
-                    caller: Default::default(),
-                    inner_scope: None,
-                }
+                scope: FunctionBlock::new(vec![Statement::Return(Return::Expr {
+                    expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                        Unresolved, 10
+                    ))))),
+                    metadata: Metadata::default()
+                })])
             },
             value
         );

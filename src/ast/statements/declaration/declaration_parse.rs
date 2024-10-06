@@ -1,14 +1,15 @@
 use nom::{
     branch::alt,
-    combinator::{cut, map, opt},
+    combinator::{cut, map},
     multi::separated_list1,
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
 use nom_supreme::ParserExt;
 
 use crate::ast::{
+    expressions::data::{Closure, Lambda},
     statements::assignation::AssignValue,
-    types::Type,
+    types::{ClosureType, LambdaType, Type},
     utils::{
         error::squash,
         io::{PResult, Span},
@@ -43,7 +44,69 @@ impl TryParse for Declaration {
                     separated_pair(DeclaredVar::parse, wst(lexem::EQUAL), AssignValue::parse),
                     |(left, right)| Declaration::Assigned { left, right },
                 ),
+                map(
+                    separated_pair(
+                        preceded(
+                            wst_closed(lexem::REC),
+                            separated_pair(
+                                parse_id,
+                                wst(lexem::COLON),
+                                ClosureType::parse.context("Invalid type"),
+                            ),
+                        ),
+                        wst(lexem::EQUAL),
+                        terminated(Closure::parse, wst(lexem::SEMI_COLON)),
+                    ),
+                    |((name, signature), right)| Declaration::RecClosure {
+                        id: None,
+                        name,
+                        signature,
+                        right,
+                    },
+                ),
+                map(
+                    separated_pair(
+                        preceded(
+                            wst_closed(lexem::REC),
+                            separated_pair(
+                                parse_id,
+                                wst(lexem::COLON),
+                                LambdaType::parse.context("Invalid type"),
+                            ),
+                        ),
+                        wst(lexem::EQUAL),
+                        terminated(Lambda::parse, wst(lexem::SEMI_COLON)),
+                    ),
+                    |((name, signature), right)| Declaration::RecLambda {
+                        id: None,
+                        name,
+                        signature,
+                        right,
+                    },
+                ),
             ))),
+        )(input)
+    }
+}
+
+impl Declaration {
+    /*
+     * @desc Parse Declaration
+     *
+     * @grammar
+     * Declaration := let DeclaredVar = AssignValue
+     */
+    pub fn parse_without_semicolon(input: Span) -> PResult<Self> {
+        preceded(
+            wst_closed(lexem::LET),
+            cut(map(
+                separated_pair(
+                    DeclaredVar::parse,
+                    wst(lexem::EQUAL),
+                    AssignValue::parse_without_semicolon,
+                ),
+                |(left, right)| Declaration::Assigned { left, right },
+            )),
         )(input)
     }
 }
@@ -58,14 +121,14 @@ impl TryParse for TypedVar {
     fn parse(input: Span) -> PResult<Self> {
         map(
             separated_pair(
-                pair(opt(wst_closed(lexem::REC)), parse_id),
+                parse_id,
                 wst(lexem::COLON),
                 Type::parse.context("Invalid type"),
             ),
-            |((rec, id), signature)| TypedVar {
-                id,
+            |(name, signature)| TypedVar {
+                id: None,
                 signature,
-                rec: rec.is_some(),
+                name,
             },
         )(input)
     }
@@ -83,7 +146,7 @@ impl TryParse for DeclaredVar {
             alt((
                 map(TypedVar::parse, |value| DeclaredVar::Typed(value)),
                 map(PatternVar::parse, |value| DeclaredVar::Pattern(value)),
-                map(parse_id, |value| DeclaredVar::Id(value)),
+                map(parse_id, |name| DeclaredVar::Id { name, id: None }),
             )),
             "Expected a valid variable or pattern",
         )(input)
@@ -113,7 +176,11 @@ impl TryParse for PatternVar {
                         wst(lexem::BRA_C),
                     ),
                 ),
-                |(typename, vars)| PatternVar::StructFields { typename, vars },
+                |(typename, vars)| PatternVar::StructFields {
+                    typename,
+                    vars,
+                    ids: None,
+                },
             ),
             map(
                 delimited(
@@ -121,7 +188,7 @@ impl TryParse for PatternVar {
                     separated_list1(wst(lexem::COMA), parse_id),
                     wst(lexem::PAR_C),
                 ),
-                |value| PatternVar::Tuple(value),
+                |names| PatternVar::Tuple { names, ids: None },
             ),
         ))(input)
     }
@@ -150,9 +217,9 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Declared(TypedVar {
-                id: "x".to_string().into(),
+                id: None,
                 signature: Type::Primitive(PrimitiveType::Number(NumberType::U64)),
-                rec: false,
+                name: "x".to_string()
             }),
             value
         );
@@ -166,9 +233,9 @@ mod tests {
         assert_eq!(
             Declaration::Assigned {
                 left: DeclaredVar::Typed(TypedVar {
-                    id: "x".to_string().into(),
+                    name: "x".to_string(),
+                    id: None,
                     signature: Type::Primitive(PrimitiveType::Number(NumberType::U64)),
-                    rec: false,
                 }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(v_num!(Unresolved, 10))
@@ -182,7 +249,10 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Assigned {
-                left: DeclaredVar::Id("x".to_string().into()),
+                left: DeclaredVar::Id {
+                    name: "x".to_string().into(),
+                    id: None
+                },
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(v_num!(Unresolved, 10))
                 ))))
@@ -195,10 +265,10 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Assigned {
-                left: DeclaredVar::Pattern(PatternVar::Tuple(vec![
-                    "x".to_string().into(),
-                    "y".to_string().into()
-                ])),
+                left: DeclaredVar::Pattern(PatternVar::Tuple {
+                    names: vec!["x".to_string().into(), "y".to_string().into()],
+                    ids: None
+                }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(Data::Tuple(
                     Tuple {
                         value: vec![

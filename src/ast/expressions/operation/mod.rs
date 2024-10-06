@@ -1,10 +1,6 @@
-use crate::{
-    ast::{types::Type, utils::strings::ID},
-    semantic::{ArcRwLock, Metadata},
-    vm::platform::Lib,
-};
+use crate::{ast::types::Type, semantic::Metadata};
 
-use super::{data::Number, Atomic, Expression};
+use super::{data::CallArgs, Atomic, Expression};
 pub mod operation_gencode;
 pub mod operation_parse;
 pub mod operation_resolve;
@@ -32,6 +28,7 @@ pub struct FieldAccess {
 pub struct TupleAccess {
     pub var: Box<Expression>,
     pub index: usize,
+    pub offset: Option<usize>,
     pub metadata: Metadata,
 }
 
@@ -42,32 +39,10 @@ pub struct ListAccess {
     pub metadata: Metadata,
 }
 
-#[derive(Debug, Clone)]
-pub struct FnCall {
-    pub lib: Option<ID>,
-    pub fn_var: Box<Expression>,
-    pub params: Vec<Expression>,
-    pub metadata: Metadata,
-    pub platform: ArcRwLock<Option<Lib>>,
-    pub is_dynamic_fn: Option<String>,
-}
-
-impl PartialEq for FnCall {
-    fn eq(&self, other: &Self) -> bool {
-        self.lib == other.lib
-            && self.fn_var == other.fn_var
-            && self.params == other.params
-            && self.metadata == other.metadata
-        // && self.platform == other.platform
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
-pub struct Range {
-    pub lower: Box<Expression>,
-    pub upper: Box<Expression>,
-    pub incr: Option<Number>,
-    pub inclusive: bool,
+pub struct ExprCall {
+    pub var: Box<Expression>,
+    pub args: CallArgs,
     pub metadata: Metadata,
 }
 

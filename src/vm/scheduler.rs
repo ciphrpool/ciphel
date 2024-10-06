@@ -1,563 +1,310 @@
-use std::{
-    ops::ControlFlow,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, Mutex,
-    },
-};
+use std::ops::ControlFlow;
 
-use crate::vm::{
-    casm::Casm,
-    platform::core::thread::{
-        sig_close, sig_exit, sig_join, sig_sleep, sig_spawn, sig_wait, sig_wake,
-    },
-    vm::{Signal, Thread, ThreadState, MAX_THREAD_COUNT},
-};
+use ulid::Ulid;
 
 use super::{
-    allocator::heap::Heap,
-    platform::core::thread::sig_wait_stdin,
-    stdio::StdIO,
-    vm::{CasmMetadata, Executable, GameEngineStaticFn, Player, Runtime, RuntimeError, Tid},
+    error_handler::ErrorHandler,
+    external::{ExternExecutionContext, ExternThreadIdentifier},
+    program::{Instruction, Program},
+    runtime::{RuntimeError, ThreadState},
+    AsmName, AsmWeight, Weight,
 };
 
-pub const INSTRUCTION_MAX_COUNT: usize = 64;
-
-#[derive(Debug, Clone, Copy)]
-pub enum WaitingStatus {
-    Join {
-        join_tid: Tid,
-        to_be_completed_tid: Tid,
-    },
-    ForStdin(Tid),
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExecutionContext<C: ExternExecutionContext, TID: ExternThreadIdentifier> {
+    pub external: C,
+    pub tid: TID,
 }
 
-#[derive(Debug, Clone)]
-pub struct SchedulerContext {
-    pub threads: [bool; MAX_THREAD_COUNT],
-    pub wakingup_tid: [bool; MAX_THREAD_COUNT],
-    pub spawned_tid: [bool; MAX_THREAD_COUNT],
-    pub closed_tid: [bool; MAX_THREAD_COUNT],
-}
-
-impl SchedulerContext {
-    pub fn new() -> Self {
+impl<C: ExternExecutionContext, TID: ExternThreadIdentifier> Default for ExecutionContext<C, TID> {
+    fn default() -> Self {
         Self {
-            threads: [false; MAX_THREAD_COUNT],
-            wakingup_tid: [false; MAX_THREAD_COUNT],
-            spawned_tid: [false; MAX_THREAD_COUNT],
-            closed_tid: [false; MAX_THREAD_COUNT],
-        }
-    }
-
-    pub fn thread_count(&self) -> usize {
-        self.threads.iter().filter(|t| **t).count()
-    }
-
-    pub fn is_alive(&self, tid: Tid) -> Result<bool, RuntimeError> {
-        if tid >= MAX_THREAD_COUNT {
-            return Err(RuntimeError::InvalidTID(tid));
-        }
-        Ok(self.threads[tid])
-    }
-
-    pub fn request_spawn(&mut self) -> Result<Tid, RuntimeError> {
-        let mut tid = None;
-        for i in 0..MAX_THREAD_COUNT {
-            if !self.threads[i] && !self.spawned_tid[i] {
-                tid = Some(i);
-                self.spawned_tid[i] = true;
-                break;
-            }
-        }
-        tid.ok_or(RuntimeError::TooManyThread)
-    }
-    pub fn request_close(&mut self, tid: Tid) -> Result<(), RuntimeError> {
-        if tid >= MAX_THREAD_COUNT {
-            return Err(RuntimeError::InvalidTID(tid));
-        }
-        if self.threads[tid] && !self.closed_tid[tid] {
-            self.closed_tid[tid] = true;
-            Ok(())
-        } else {
-            Err(RuntimeError::InvalidTID(tid))
-        }
-    }
-
-    pub fn request_wake(&mut self, tid: Tid) -> Result<(), RuntimeError> {
-        if tid >= MAX_THREAD_COUNT {
-            return Err(RuntimeError::InvalidTID(tid));
-        }
-        if self.threads[tid] {
-            self.wakingup_tid[tid] = true;
-            Ok(())
-        } else {
-            Err(RuntimeError::InvalidTID(tid))
+            external: C::default(),
+            tid: TID::default(),
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Scheduler {
-    p1_context: SchedulerContext,
-    p2_context: SchedulerContext,
-    p1_waiting_list: Arc<Mutex<Vec<WaitingStatus>>>,
-    p2_waiting_list: Arc<Mutex<Vec<WaitingStatus>>>,
-}
-
-impl Scheduler {
-    pub fn new() -> Self {
-        Self {
-            p1_waiting_list: Default::default(),
-            p2_waiting_list: Default::default(),
-            p1_context: SchedulerContext::new(),
-            p2_context: SchedulerContext::new(),
-        }
-    }
-
-    pub fn prepare(&mut self, runtime: &mut Runtime) {
-        self.p1_context.threads = runtime.p1_manager.alive();
-        self.p1_context.wakingup_tid = [false; MAX_THREAD_COUNT];
-        self.p1_context.spawned_tid = [false; MAX_THREAD_COUNT];
-        self.p1_context.closed_tid = [false; MAX_THREAD_COUNT];
-
-        self.p2_context.threads = runtime.p2_manager.alive();
-        self.p2_context.wakingup_tid = [false; MAX_THREAD_COUNT];
-        self.p2_context.spawned_tid = [false; MAX_THREAD_COUNT];
-        self.p2_context.closed_tid = [false; MAX_THREAD_COUNT];
-    }
-
-    fn run_minor_frame<G: crate::GameEngineStaticFn>(
-        &mut self,
-        player: crate::vm::vm::Player,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        thread: &mut Thread,
-    ) -> Result<(), RuntimeError> {
-        thread.state.init_mif(engine, &thread.program);
-
-        match self.wake_waiting_threads(player, &mut thread.state, &thread.tid)? {
-            ControlFlow::Continue(_) => {}
-            ControlFlow::Break(weight) => {
-                thread.current_maf_instruction_count += weight;
-                if thread.current_maf_instruction_count >= INSTRUCTION_MAX_COUNT {
-                    thread.state.to(ThreadState::COMPLETED_MAF);
-                }
-                return Ok(());
-            }
-        }
-
-        let context = match player {
-            Player::P1 => &mut self.p1_context,
-            Player::P2 => &mut self.p2_context,
-        };
-        stdio.push_casm_info(engine, &format!("MINOR FRAME ::tid {0}\n", thread.tid));
-        while thread.current_maf_instruction_count < INSTRUCTION_MAX_COUNT {
-            if thread.program.cursor_is_at_end() {
-                let _ = thread.state.to(ThreadState::IDLE);
-                break;
-            }
-            let return_status = thread.program.evaluate(|program, instruction| {
-                instruction.name(stdio, program, engine);
-                let weight = <Casm as CasmMetadata<G>>::weight(instruction).get();
-
-                engine.consume_energy(weight)?;
-
-                thread.current_maf_instruction_count += weight;
-
-                match instruction.execute(
-                    program,
-                    &mut thread.stack,
-                    heap,
-                    stdio,
-                    engine,
-                    thread.tid,
-                ) {
-                    Ok(_) => Ok(()),
-                    Err(RuntimeError::Signal(signal)) => match signal {
-                        Signal::SPAWN => sig_spawn(context, program, &mut thread.stack),
-                        Signal::CLOSE(tid) => sig_close(tid, context, program, &mut thread.stack),
-                        Signal::WAIT => sig_wait(&mut thread.state, program),
-                        Signal::WAKE(wake_tid) => {
-                            sig_wake(wake_tid, context, program, &mut thread.stack)
-                        }
-                        Signal::SLEEP(nb_maf) => sig_sleep(&nb_maf, &mut thread.state, program),
-                        Signal::JOIN(join_tid) => {
-                            let mut waiting_list = match player {
-                                Player::P1 => self
-                                    .p1_waiting_list
-                                    .as_ref()
-                                    .lock()
-                                    .map_err(|_| RuntimeError::ConcurrencyError)?,
-
-                                Player::P2 => self
-                                    .p2_waiting_list
-                                    .as_ref()
-                                    .lock()
-                                    .map_err(|_| RuntimeError::ConcurrencyError)?,
-                            };
-
-                            let _ = sig_join(
-                                thread.tid,
-                                join_tid,
-                                context,
-                                &mut thread.state,
-                                program,
-                                &mut thread.stack,
-                                &mut waiting_list,
-                            )?;
-                            drop(waiting_list);
-                            Ok(())
-                        }
-                        Signal::EXIT => {
-                            let mut waiting_list = match player {
-                                Player::P1 => self
-                                    .p1_waiting_list
-                                    .as_ref()
-                                    .lock()
-                                    .map_err(|_| RuntimeError::ConcurrencyError)?,
-
-                                Player::P2 => self
-                                    .p2_waiting_list
-                                    .as_ref()
-                                    .lock()
-                                    .map_err(|_| RuntimeError::ConcurrencyError)?,
-                            };
-                            let _ = sig_exit(
-                                thread.tid,
-                                context,
-                                &mut thread.state,
-                                &mut waiting_list,
-                            )?;
-                            drop(waiting_list);
-                            Ok(())
-                        }
-                        Signal::WAIT_STDIN => {
-                            let mut waiting_list = match player {
-                                Player::P1 => self
-                                    .p1_waiting_list
-                                    .as_ref()
-                                    .lock()
-                                    .map_err(|_| RuntimeError::ConcurrencyError)?,
-
-                                Player::P2 => self
-                                    .p2_waiting_list
-                                    .as_ref()
-                                    .lock()
-                                    .map_err(|_| RuntimeError::ConcurrencyError)?,
-                            };
-
-                            let _ =
-                                sig_wait_stdin(thread.tid, &mut thread.state, &mut waiting_list)?;
-                            drop(waiting_list);
-                            Ok(())
-                        }
-                    },
-                    Err(err) => {
-                        stdio.push_casm_info(
-                            engine,
-                            &format!("RUNTIME ERROR :: {:?} in {:?}", err, instruction),
-                        );
-                        program.catch(err)
-                    }
-                }
-            });
-
-            match return_status {
-                Ok(_) => {
-                    if thread.program.cursor_is_at_end() {
-                        let _ = thread.state.to(ThreadState::IDLE);
-                    }
-                }
-                Err(RuntimeError::Signal(signal)) => match signal {
-                    Signal::EXIT
-                    | Signal::WAIT
-                    | Signal::SLEEP(_)
-                    | Signal::JOIN(_)
-                    | Signal::WAIT_STDIN => {
-                        break;
-                    }
-                    _ => {}
-                },
-                Err(e @ RuntimeError::AssertError) => {
-                    return Err(e);
-                }
-                Err(e) => {
-                    thread.program.cursor_to_end();
-                    let _ = thread.state.to(ThreadState::IDLE);
-
-                    return Err(e);
-                }
-            }
-            if thread.current_maf_instruction_count >= INSTRUCTION_MAX_COUNT {
-                thread.state.to(ThreadState::COMPLETED_MAF);
-            }
-        }
-        Ok(())
-    }
-
-    pub fn run_major_frame<G: crate::GameEngineStaticFn>(
-        &mut self,
-        runtime: &mut Runtime,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-    ) -> Result<(), RuntimeError> {
-        // Wake thread waiting on stdin
-        self.wake_for_stdin(Player::P1, runtime, stdio, engine)?;
-        self.wake_for_stdin(Player::P2, runtime, stdio, engine)?;
-
-        let info = runtime.tid_info();
-        stdio.push_casm_info(engine, &format!("MAJOR FRAME START : {info}"));
-
-        for (p1, p2) in runtime.iter_mut() {
-            if let Some(p1) = p1 {
-                p1.state.init_maf(engine, &p1.program);
-                p1.current_maf_instruction_count = 0;
-            }
-
-            if let Some(p2) = p2 {
-                p2.state.init_maf(engine, &p2.program);
-                p2.current_maf_instruction_count = 0;
-            }
-        }
-
-        loop {
-            for (p1, p2) in runtime.iter_mut() {
-                if let Some(p1) = p1 {
-                    let result = self.run_minor_frame(Player::P1, heap, stdio, engine, p1);
-                    if let Err(err) = result {
-                        stdio.print_stderr(engine, &err.to_string());
-                        if let RuntimeError::NotEnoughEnergy = err {
-                            let _ = p1.state.to(ThreadState::STARVED);
-                        }
-                    }
-                }
-                if let Some(p2) = p2 {
-                    let result = self.run_minor_frame(Player::P2, heap, stdio, engine, p2);
-                    if let Err(err) = result {
-                        stdio.print_stderr(engine, &err.to_string());
-                        if let RuntimeError::NotEnoughEnergy = err {
-                            let _ = p2.state.to(ThreadState::STARVED);
-                        }
-                    }
-                }
-            }
-
-            // Waking up needed thread
-            for (p1, p2) in runtime.iter_mut() {
-                if let Some(p1) = p1 {
-                    if p1.tid > MAX_THREAD_COUNT {
-                        return Err(RuntimeError::InvalidTID(p1.tid));
-                    }
-                    if self.p1_context.wakingup_tid[p1.tid] {
-                        let _ = p1.state.to(ThreadState::ACTIVE);
-                        self.p1_context.wakingup_tid[p1.tid] = false;
-                    }
-                }
-                if let Some(p2) = p2 {
-                    if p2.tid > MAX_THREAD_COUNT {
-                        return Err(RuntimeError::InvalidTID(p2.tid));
-                    }
-                    if self.p2_context.wakingup_tid[p2.tid] {
-                        let _ = p2.state.to(ThreadState::ACTIVE);
-                        self.p2_context.wakingup_tid[p2.tid] = false;
-                    }
-                }
-            }
-            if runtime.p1_manager.all_noop() && runtime.p2_manager.all_noop() {
-                break;
-            }
-        }
-        stdio.push_casm_info(engine, "MAJOR FRAME END".into());
-        self.conclude(runtime, engine)?;
-        Ok(())
-    }
-
-    fn conclude<G: GameEngineStaticFn>(
-        &mut self,
-        runtime: &mut Runtime,
-        engine: &mut G,
-    ) -> Result<(), RuntimeError> {
-        // Waking up needed thread
-        for (p1, p2) in runtime.iter_mut() {
-            if let Some(p1) = p1 {
-                if p1.tid > MAX_THREAD_COUNT {
-                    return Err(RuntimeError::InvalidTID(p1.tid));
-                }
-                if self.p1_context.wakingup_tid[p1.tid] {
-                    let _ = p1.state.to(ThreadState::ACTIVE);
-                    self.p1_context.wakingup_tid[p1.tid] = false;
-                }
-            }
-            if let Some(p2) = p2 {
-                if p2.tid > MAX_THREAD_COUNT {
-                    return Err(RuntimeError::InvalidTID(p2.tid));
-                }
-                if self.p2_context.wakingup_tid[p2.tid] {
-                    let _ = p2.state.to(ThreadState::ACTIVE);
-                    self.p2_context.wakingup_tid[p2.tid] = false;
-                }
-            }
-        }
-        // spawn and close the needed thread
-        for (tid, to_spawn) in self.p1_context.spawned_tid.iter().enumerate() {
-            if *to_spawn {
-                let _ = runtime.spawn_with_tid(super::vm::Player::P1, tid, engine)?;
-            }
-        }
-        for (tid, to_spawn) in self.p2_context.spawned_tid.iter().enumerate() {
-            if *to_spawn {
-                let _ = runtime.spawn_with_tid(super::vm::Player::P2, tid, engine)?;
-            }
-        }
-        for (tid, to_close) in self.p1_context.closed_tid.iter().enumerate() {
-            if *to_close {
-                let _ = runtime.close(super::vm::Player::P1, tid, engine)?;
-            }
-        }
-        for (tid, to_close) in self.p2_context.closed_tid.iter().enumerate() {
-            if *to_close {
-                let _ = runtime.close(super::vm::Player::P2, tid, engine)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn wake_for_stdin<G: GameEngineStaticFn>(
+pub trait Executable<E: crate::vm::external::Engine> {
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
-        player: crate::vm::vm::Player,
-        runtime: &mut Runtime,
-        stdio: &mut StdIO,
-        engine: &mut G,
-    ) -> Result<(), RuntimeError> {
-        let stdin_data = engine.stdin_scan();
-        let Some(data) = stdin_data else {
-            return Ok(());
-        };
-        stdio.stdin.write(data);
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+    ) -> Result<(), super::runtime::RuntimeError>;
+}
 
-        let mut waiting_list = match player {
-            Player::P1 => self
-                .p1_waiting_list
-                .as_ref()
-                .lock()
-                .map_err(|_| RuntimeError::ConcurrencyError)?,
+pub trait SchedulingPolicy: Default {
+    fn weight_to_energy(&self, weight: Weight) -> usize;
 
-            Player::P2 => self
-                .p2_waiting_list
-                .as_ref()
-                .lock()
-                .map_err(|_| RuntimeError::ConcurrencyError)?,
-        };
+    fn accept<E: crate::vm::external::Engine>(&self, energy: usize, engine: &E) -> bool;
+    fn defer<E: crate::vm::external::Engine>(&mut self, energy: usize, engine: &mut E);
 
-        let mut idx_tid_list: Vec<(usize, usize)> = waiting_list
-            .iter()
-            .enumerate()
-            .filter(|(_, status)| match status {
-                WaitingStatus::Join { .. } => false,
-                WaitingStatus::ForStdin(_) => true,
-            })
-            .map(|(idx, status)| {
-                (
-                    idx,
-                    match status {
-                        WaitingStatus::Join { join_tid, .. } => *join_tid, // unreachable,
-                        WaitingStatus::ForStdin(id) => *id,
-                    },
-                )
-            })
-            .collect();
-        idx_tid_list.sort_by(|left, right| left.0.cmp(&right.0));
-        for (idx, wtid) in idx_tid_list.iter().rev() {
-            waiting_list.remove(*idx);
-            for (p1, p2) in runtime.iter_mut() {
-                match player {
-                    Player::P1 => {
-                        if let Some(p1) = p1 {
-                            if *wtid == p1.tid {
-                                let _ = p1.state.to(ThreadState::ACTIVE);
-                            }
-                        }
-                    }
-                    Player::P2 => {
-                        if let Some(p2) = p2 {
-                            if *wtid == p2.tid {
-                                let _ = p2.state.to(ThreadState::ACTIVE);
-                            }
-                        }
-                    }
-                }
+    fn init_maf<E: crate::vm::external::Engine>(
+        &mut self,
+        tid: &E::TID,
+        state: &super::runtime::ThreadState<E::TID>,
+    );
+
+    fn init_watchdog(&mut self);
+    fn watchdog(&mut self) -> ControlFlow<(), ()>;
+
+    fn schedule<'a, E: crate::vm::external::Engine>(
+        input: impl Iterator<Item = (&'a E::TID, &'a mut super::runtime::Thread<Self>)>,
+    ) -> impl Iterator<Item = (&'a E::TID, &'a mut super::runtime::Thread<Self>)>
+    where
+        Self: 'a,
+        <E as super::external::ExternThreadHandler>::TID: 'a;
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum ProgramCursor {
+    Idle(usize),
+    Running(usize),
+}
+
+impl Default for ProgramCursor {
+    fn default() -> Self {
+        Self::Running(0)
+    }
+}
+
+impl ProgramCursor {
+    pub fn get(&self) -> usize {
+        match *self {
+            ProgramCursor::Idle(cursor) => cursor,
+            ProgramCursor::Running(cursor) => cursor,
+        }
+    }
+    pub fn update<E: crate::vm::external::Engine>(
+        &mut self,
+        program: &Program<E>,
+        state: &mut ThreadState<E::TID>,
+    ) {
+        let cursor = self.get();
+        if program.instructions.get(cursor).is_none() {
+            *self = ProgramCursor::Idle(cursor);
+            *state = ThreadState::IDLE;
+        } else if let ProgramCursor::Idle(cursor) = self {
+            *self = ProgramCursor::Running(*cursor);
+            if ThreadState::IDLE == *state {
+                *state = ThreadState::RUNNING;
             }
         }
-        drop(waiting_list);
-        Ok(())
+    }
+}
+
+pub struct Scheduler<P: SchedulingPolicy> {
+    pub cursor: ProgramCursor,
+    error_handler: ErrorHandler,
+    pub policy: P,
+}
+
+impl<P: SchedulingPolicy> Default for Scheduler<P> {
+    fn default() -> Self {
+        Self {
+            cursor: ProgramCursor::default(),
+            error_handler: ErrorHandler::default(),
+            policy: P::default(),
+        }
+    }
+}
+
+impl<P: SchedulingPolicy> Scheduler<P> {
+    pub fn next(&mut self) {
+        match self.cursor {
+            ProgramCursor::Idle(cursor) => self.cursor = ProgramCursor::Running(cursor + 1),
+            ProgramCursor::Running(cursor) => self.cursor = ProgramCursor::Running(cursor + 1),
+        }
+    }
+    pub fn jump(&mut self, to: usize) {
+        match self.cursor {
+            ProgramCursor::Idle(_) => self.cursor = ProgramCursor::Running(to),
+            ProgramCursor::Running(_) => self.cursor = ProgramCursor::Running(to),
+        }
+    }
+    pub fn push_catch(&mut self, label: &Ulid) {
+        self.error_handler.push_catch(label);
     }
 
-    fn wake_waiting_threads(
+    pub fn pop_catch(&mut self) {
+        self.error_handler.pop_catch();
+    }
+
+    pub fn prepare(&mut self) {}
+
+    fn select<'a, E: crate::vm::external::Engine>(
+        &self,
+        program: &'a Program<E>,
+    ) -> Result<Option<&'a Instruction<E>>, RuntimeError> {
+        let ProgramCursor::Running(cursor) = self.cursor else {
+            return Ok(None);
+        };
+        let Some(instruction) = program.instructions.get(cursor) else {
+            return Err(RuntimeError::CodeSegmentation);
+        };
+        Ok(Some(instruction))
+    }
+
+    pub fn run<E: crate::vm::external::Engine>(
         &mut self,
-        player: crate::vm::vm::Player,
-        state: &mut ThreadState,
-        tid: &usize,
-    ) -> Result<ControlFlow<usize, ()>, RuntimeError> {
-        match *state {
-            ThreadState::IDLE | ThreadState::EXITED => {
-                // Wake up all threads that are waiting on tid
-                let mut waiting_list = match player {
-                    Player::P1 => self
-                        .p1_waiting_list
-                        .as_ref()
-                        .lock()
-                        .map_err(|_| RuntimeError::ConcurrencyError)?,
+        tid: E::TID,
+        state: &mut ThreadState<E::TID>,
+        program: &Program<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        signal_handler: &mut super::signal::SignalHandler<E>,
+        // context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+    ) -> Result<ControlFlow<(), ()>, RuntimeError> {
+        let Some(instruction) = self.select(program)? else {
+            return Ok(ControlFlow::Break(()));
+        };
 
-                    Player::P2 => self
-                        .p2_waiting_list
-                        .as_ref()
-                        .lock()
-                        .map_err(|_| RuntimeError::ConcurrencyError)?,
-                };
-                let mut idx_tid_list: Vec<(usize, usize)> = waiting_list
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, status)| match status {
-                        WaitingStatus::Join {
-                            to_be_completed_tid,
-                            ..
-                        } => *to_be_completed_tid == *tid,
-                        WaitingStatus::ForStdin(_) => false,
-                    })
-                    .map(|(idx, status)| {
-                        (
-                            idx,
-                            match status {
-                                WaitingStatus::Join { join_tid, .. } => *join_tid,
-                                WaitingStatus::ForStdin(id) => *id, // unreachable,
-                            },
-                        )
-                    })
-                    .collect();
-                idx_tid_list.sort_by(|left, right| left.0.cmp(&right.0));
+        let weight = instruction.weight();
+        let energy = self.policy.weight_to_energy(weight);
+        if self.policy.accept::<E>(energy, engine) {
+            self.policy.defer(energy, engine);
 
-                let context = match player {
-                    Player::P1 => &mut self.p1_context,
-                    Player::P2 => &mut self.p2_context,
-                };
-                for (idx, tid) in idx_tid_list.iter().rev() {
-                    waiting_list.remove(*idx);
-                    context.request_wake(*tid)?;
-                }
-                drop(waiting_list);
-                //if idx_tid_list.len() > 0 {
-                //    return Ok(ControlFlow::Break(0));
-                //}
-                return Ok(ControlFlow::Break(INSTRUCTION_MAX_COUNT));
+            instruction.name(stdio, program, engine);
+            match instruction.execute(
+                program,
+                self,
+                signal_handler,
+                stack,
+                heap,
+                stdio,
+                engine,
+                &crate::vm::scheduler::ExecutionContext {
+                    external: E::FunctionContext::default(),
+                    tid,
+                },
+            ) {
+                Ok(_) => {}
+                Err(error) => self.jump(self.error_handler.catch(error, program)?),
             }
-            ThreadState::WAITING => return Ok(ControlFlow::Break(0)),
-            ThreadState::SLEEPING(_) => return Ok(ControlFlow::Break(0)),
-            ThreadState::COMPLETED_MAF => return Ok(ControlFlow::Break(0)),
-            ThreadState::ACTIVE => return Ok(ControlFlow::Continue(())),
-            ThreadState::STARVED => return Ok(ControlFlow::Break(INSTRUCTION_MAX_COUNT)),
+            self.cursor.update(program, state);
+
+            Ok(ControlFlow::Continue(()))
+        } else {
+            Ok(ControlFlow::Break(()))
         }
+    }
+}
+
+pub struct ToCompletion;
+
+impl Default for ToCompletion {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
+impl SchedulingPolicy for ToCompletion {
+    fn weight_to_energy(&self, weight: Weight) -> usize {
+        1
+    }
+
+    fn accept<E: crate::vm::external::Engine>(&self, energy: usize, engine: &E) -> bool {
+        true
+    }
+
+    fn defer<E: crate::vm::external::Engine>(&mut self, energy: usize, engine: &mut E) {}
+
+    fn init_watchdog(&mut self) {}
+
+    fn watchdog(&mut self) -> ControlFlow<(), ()> {
+        ControlFlow::Continue(())
+    }
+
+    fn schedule<'a, E: crate::vm::external::Engine>(
+        input: impl Iterator<Item = (&'a E::TID, &'a mut super::runtime::Thread<Self>)>,
+    ) -> impl Iterator<Item = (&'a E::TID, &'a mut super::runtime::Thread<Self>)>
+    where
+        Self: 'a,
+        <E as super::external::ExternThreadHandler>::TID: 'a,
+    {
+        input
+    }
+
+    fn init_maf<E: crate::vm::external::Engine>(
+        &mut self,
+        tid: &E::TID,
+        state: &super::runtime::ThreadState<E::TID>,
+    ) {
+    }
+}
+
+pub struct QueuePolicy {
+    balance: usize,
+}
+
+impl Default for QueuePolicy {
+    fn default() -> Self {
+        Self {
+            balance: Self::MAX_BALANCE,
+        }
+    }
+}
+impl QueuePolicy {
+    pub const MAX_BALANCE: usize = 64;
+}
+
+impl SchedulingPolicy for QueuePolicy {
+    fn weight_to_energy(&self, weight: Weight) -> usize {
+        match weight {
+            Weight::ZERO => 0,
+            Weight::MAX => Self::MAX_BALANCE,
+            Weight::CUSTOM(w) => w,
+            Weight::LOW => 1,
+            Weight::MEDIUM => 2,
+            Weight::HIGH => 4,
+            Weight::EXTREME => 8,
+            Weight::END => {
+                if self.balance > 0 {
+                    self.balance
+                } else {
+                    1
+                }
+            }
+        }
+    }
+
+    fn accept<E: crate::vm::external::Engine>(&self, energy: usize, engine: &E) -> bool {
+        self.balance.checked_sub(energy).is_some()
+    }
+
+    fn defer<E: crate::vm::external::Engine>(&mut self, energy: usize, engine: &mut E) {
+        self.balance = self.balance.checked_sub(energy).unwrap_or(0);
+    }
+
+    fn init_watchdog(&mut self) {}
+
+    fn watchdog(&mut self) -> ControlFlow<(), ()> {
+        ControlFlow::Continue(())
+    }
+
+    fn schedule<'a, E: crate::vm::external::Engine>(
+        input: impl Iterator<Item = (&'a E::TID, &'a mut super::runtime::Thread<Self>)>,
+    ) -> impl Iterator<Item = (&'a E::TID, &'a mut super::runtime::Thread<Self>)>
+    where
+        Self: 'a,
+        <E as super::external::ExternThreadHandler>::TID: 'a,
+    {
+        input
+    }
+
+    fn init_maf<E: crate::vm::external::Engine>(
+        &mut self,
+        tid: &E::TID,
+        state: &super::runtime::ThreadState<E::TID>,
+    ) {
+        self.balance = Self::MAX_BALANCE;
     }
 }

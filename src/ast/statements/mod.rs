@@ -1,34 +1,24 @@
-use nom::{
-    branch::alt,
-    combinator::{eof, map},
-    multi::{many0, many1},
-    sequence::terminated,
-    Finish, Parser,
-};
-use nom_supreme::error::{BaseErrorKind, ErrorTree, Expectation, GenericErrorTree, StackContext};
+use nom::{branch::alt, combinator::map, multi::many0, Finish, Parser};
 
 use self::return_stat::Return;
-use crate::{semantic::scope::scope::Scope, CompilationError};
+use crate::{
+    semantic::{Desugar, Metadata},
+    vm::{external::ExternThreadIdentifier, GenerateCode},
+    CompilationError,
+};
 
 use super::{
+    expressions::Expression,
     utils::{
         error::{generate_error_report, squash},
-        strings::eater,
+        strings::eater::{self, ws},
     },
     TryParse,
 };
 use crate::{
     ast::utils::io::{PResult, Span},
-    semantic::{scope::static_types::StaticType, EType, Either, Resolve, SemanticError, TypeOf},
-    vm::{
-        casm::{
-            branch::{Call, Goto, Label},
-            Casm, CasmProgram,
-        },
-        vm::CodeGenerationError,
-    },
+    semantic::{scope::static_types::StaticType, EType, Resolve, SemanticError, TypeOf},
 };
-use crate::{semantic::scope::BuildStaticType, vm::vm::GenerateCode};
 
 pub mod assignation;
 pub mod block;
@@ -49,26 +39,41 @@ impl<T: Resolve> Resolve for WithLine<T> {
     type Context = T::Context;
     type Extra = T::Extra;
 
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        self.inner.resolve::<G>(scope, context, extra)
+        self.inner
+            .resolve::<E>(scope_manager, scope_id, context, extra)
+    }
+}
+
+impl<T: Desugar<()>> Desugar<()> for WithLine<T> {
+    fn desugar<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<()>, SemanticError> {
+        self.inner.desugar::<E>(scope_manager, scope_id)
     }
 }
 
 impl<T: GenerateCode> GenerateCode for WithLine<T> {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        self.inner.gencode(scope, instructions)
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        self.inner
+            .gencode::<E>(scope_manager, scope_id, instructions, context)
     }
 }
 
@@ -83,11 +88,11 @@ pub enum Statement {
     Return(Return),
 }
 
-pub fn parse_statements(
+pub fn parse_statements<TID: ExternThreadIdentifier>(
     input: Span,
     line_offset: usize,
-) -> Result<Vec<WithLine<Statement>>, CompilationError> {
-    let mut parser = many1(|input| {
+) -> Result<Vec<WithLine<Statement>>, CompilationError<TID>> {
+    let mut parser = ws(many0(|input| {
         let (input, statement) = Statement::parse(input)?;
         let line = input.location_line();
         Ok((
@@ -97,7 +102,7 @@ pub fn parse_statements(
                 line: line as usize + line_offset,
             },
         ))
-    });
+    }));
 
     match parser(input).finish() {
         Ok((remaining, statements)) => {
@@ -129,6 +134,12 @@ impl TryParse for Statement {
                 map(definition::Definition::parse, Statement::Definition),
                 map(loops::Loop::parse, Statement::Loops),
                 map(assignation::Assignation::parse, Statement::Assignation),
+                map(Expression::parse, |expr| {
+                    Statement::Return(Return::Inline {
+                        expr: Box::new(expr),
+                        metadata: Metadata::default(),
+                    })
+                }),
             )),
             "expected a valid statements",
         ))(input)
@@ -138,81 +149,122 @@ impl Resolve for Statement {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
+        if let Some(output) = self.desugar::<E>(scope_manager, scope_id)? {
+            *self = output;
+        }
+
         match self {
             Statement::Scope(value) => {
-                let _ = value.resolve::<G>(scope, context, &mut Vec::default())?;
-                Ok(())
+                value.resolve::<E>(scope_manager, scope_id, context, &mut ())
             }
-            Statement::Flow(value) => value.resolve::<G>(scope, context, extra),
-            Statement::Assignation(value) => value.resolve::<G>(scope, context, extra),
-            Statement::Declaration(value) => value.resolve::<G>(scope, context, extra),
-            Statement::Definition(value) => value.resolve::<G>(scope, context, extra),
-            Statement::Loops(value) => value.resolve::<G>(scope, context, extra),
-            Statement::Return(value) => value.resolve::<G>(scope, context, extra),
+            Statement::Flow(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Statement::Assignation(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
+            }
+            Statement::Declaration(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
+            }
+            Statement::Definition(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
+            }
+            Statement::Loops(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
+            Statement::Return(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
         }
     }
 }
 
+impl Desugar<Statement> for Statement {
+    fn desugar<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        let output = match self {
+            Statement::Scope(block) => block.desugar::<E>(scope_manager, scope_id)?,
+            Statement::Flow(flow) => flow.desugar::<E>(scope_manager, scope_id)?,
+            Statement::Assignation(assignation) => {
+                assignation.desugar::<E>(scope_manager, scope_id)?
+            }
+            Statement::Declaration(declaration) => {
+                declaration.desugar::<E>(scope_manager, scope_id)?
+            }
+            Statement::Definition(definition) => {
+                definition.desugar::<E>(scope_manager, scope_id)?
+            }
+            Statement::Loops(loops) => loops.desugar::<E>(scope_manager, scope_id)?,
+            Statement::Return(returns) => returns.desugar::<E>(scope_manager, scope_id)?,
+        };
+
+        if let Some(output) = output {
+            *self = output;
+        }
+
+        Ok(None)
+    }
+}
+
 impl TypeOf for Statement {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
-            Statement::Scope(value) => value.type_of(&scope),
-            Statement::Flow(value) => value.type_of(&scope),
-            Statement::Assignation(value) => value.type_of(&scope),
-            Statement::Declaration(value) => value.type_of(&scope),
-            Statement::Definition(_value) => Ok(Either::Static(
-                <StaticType as BuildStaticType>::build_unit().into(),
-            )),
-            Statement::Loops(value) => value.type_of(&scope),
-            Statement::Return(value) => value.type_of(&scope),
+            Statement::Scope(value) => value.type_of(&scope_manager, scope_id),
+            Statement::Flow(value) => value.type_of(&scope_manager, scope_id),
+            Statement::Assignation(value) => value.type_of(&scope_manager, scope_id),
+            Statement::Declaration(value) => value.type_of(&scope_manager, scope_id),
+            Statement::Definition(_value) => Ok(EType::Static(StaticType::Unit)),
+            Statement::Loops(value) => value.type_of(&scope_manager, scope_id),
+            Statement::Return(value) => value.type_of(&scope_manager, scope_id),
         }
     }
 }
 
 impl GenerateCode for Statement {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             Statement::Scope(value) => {
-                let scope_label = Label::gen();
-                let end_scope_label = Label::gen();
-
-                instructions.push(Casm::Goto(Goto {
-                    label: Some(end_scope_label),
-                }));
-                instructions.push_label_id(scope_label, "block".to_string().into());
-
-                let _ = value.gencode(scope, instructions)?;
-
-                instructions.push_label_id(end_scope_label, "end_scope".to_string().into());
-                instructions.push(Casm::Call(Call::From {
-                    label: scope_label,
-                    param_size: 0,
-                }));
-                instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)?;
                 Ok(())
             }
-            Statement::Flow(value) => value.gencode(scope, instructions),
-            Statement::Assignation(value) => value.gencode(scope, instructions),
-            Statement::Declaration(value) => value.gencode(scope, instructions),
-            Statement::Definition(value) => value.gencode(scope, instructions),
-            Statement::Loops(value) => value.gencode(scope, instructions),
-            Statement::Return(value) => value.gencode(scope, instructions),
+            Statement::Flow(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Statement::Assignation(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Statement::Declaration(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Statement::Definition(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Statement::Loops(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
+            Statement::Return(value) => {
+                value.gencode::<E>(scope_manager, scope_id, instructions, context)
+            }
         }
     }
 }

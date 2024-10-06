@@ -7,7 +7,7 @@ use nom_supreme::ParserExt;
 
 use crate::ast::{
     expressions::Expression,
-    statements::block::Block,
+    statements::block::ExprBlock,
     utils::{
         io::{PResult, Span},
         lexem,
@@ -40,6 +40,28 @@ impl TryParse for Assignation {
     }
 }
 
+impl Assignation {
+    /*
+     * @desc Parse assignation
+     *
+     * @grammar
+     * Assignation :=
+     *      | Access = Scope | Expr ;
+     *      | * Expr = Scope | Expr ;
+     * Access := ID . Access | ID
+     */
+    pub fn parse_without_semicolon(input: Span) -> PResult<Self> {
+        map(
+            separated_pair(
+                Expression::parse,
+                wst(lexem::EQUAL),
+                cut(AssignValue::parse_without_semicolon),
+            ),
+            |(left, right)| Assignation { left, right },
+        )(input)
+    }
+}
+
 impl TryParse for AssignValue {
     /*
      * @desc Parse assigned value
@@ -50,13 +72,27 @@ impl TryParse for AssignValue {
     fn parse(input: Span) -> PResult<Self> {
         terminated(
             alt((
-                map(Block::parse, |value| AssignValue::Scope(value)),
+                map(ExprBlock::parse, |value| AssignValue::Block(value)),
                 map(Expression::parse, |value| {
                     AssignValue::Expr(Box::new(value))
                 }),
             )),
             wst(lexem::SEMI_COLON).context("expected a ;"),
         )(input)
+    }
+}
+
+impl AssignValue {
+    /*
+     * @desc Parse assigned value
+     *
+     * @grammar
+     * Scope | Expr
+     */
+    pub fn parse_without_semicolon(input: Span) -> PResult<Self> {
+        map(Expression::parse, |value| {
+            AssignValue::Expr(Box::new(value))
+        })(input)
     }
 }
 
@@ -83,9 +119,9 @@ mod tests {
         assert_eq!(
             Assignation {
                 left: Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
-                    from_field: false,
+                    name: "x".to_string().into(),
                     metadata: Metadata::default(),
+                    state: None,
                 }))),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(v_num!(Unresolved, 10))
@@ -102,9 +138,9 @@ mod tests {
                 left: Expression::Atomic(Atomic::Data(Data::PtrAccess(
                     crate::ast::expressions::data::PtrAccess {
                         value: Atomic::Data(Data::Variable(Variable {
-                            id: "x".to_string().into(),
-                            from_field: false,
+                            name: "x".to_string().into(),
                             metadata: Metadata::default(),
+                            state: None,
                         }))
                         .into(),
                         metadata: Metadata::default()
@@ -124,14 +160,14 @@ mod tests {
             Assignation {
                 left: Expression::FieldAccess(FieldAccess {
                     var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".to_string().into(),
-                        from_field: false,
+                        name: "x".to_string().into(),
                         metadata: Metadata::default(),
+                        state: None,
                     })))),
                     field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "y".to_string().into(),
-                        from_field: false,
+                        name: "y".to_string().into(),
                         metadata: Metadata::default(),
+                        state: None,
                     })))),
                     metadata: Metadata::default()
                 }),

@@ -1,18 +1,21 @@
-use crate::semantic::scope::scope::Scope;
-use crate::semantic::ArcRwLock;
+use std::collections::HashMap;
+
+use ulid::Ulid;
+
+use crate::ast::statements::block::{ClosureBlock, LambdaBlock};
+use crate::semantic::SizeOf;
+use crate::vm::allocator::MemoryAddress;
+use crate::vm::core::Core;
 use crate::{
-    ast::{self, statements::declaration::TypedVar, utils::strings::ID},
+    ast::{statements::declaration::TypedVar, utils::strings::ID},
     e_static, p_num,
     semantic::{
-        scope::{
-            static_types::{PrimitiveType, StaticType},
-            ClosureState,
-        },
-        EType, Either, Metadata, SemanticError,
+        scope::static_types::{PrimitiveType, StaticType},
+        EType, Metadata,
     },
 };
 
-use super::{Atomic, Expression};
+use super::{Atomic, CompletePath, Expression, Path};
 
 pub mod data_gencode;
 pub mod data_parse;
@@ -26,10 +29,14 @@ pub enum Data {
     StrSlice(StrSlice),
     Vec(Vector),
     Closure(Closure),
+    Lambda(Lambda),
     Tuple(Tuple),
     Address(Address),
     PtrAccess(PtrAccess),
     Variable(Variable),
+    Call(Call),
+    Printf(Printf),
+    Format(Format),
     Unit,
     Map(Map),
     Struct(Struct),
@@ -38,9 +45,15 @@ pub enum Data {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum VariableState {
+    Variable { id: u64 },
+    Field { offset: usize, size: usize },
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Variable {
-    pub id: ID,
-    pub from_field: bool,
+    pub name: String,
+    pub state: Option<VariableState>,
     pub metadata: Metadata,
 }
 
@@ -70,13 +83,15 @@ pub enum Number {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Slice {
     pub value: MultiData,
+    pub size: usize,
+    pub address: Option<MemoryAddress>,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrSlice {
     pub value: String,
-    pub padding: usize,
+    pub address: Option<MemoryAddress>,
     pub metadata: Metadata,
 }
 
@@ -97,48 +112,30 @@ pub struct Tuple {
 pub type MultiData = Vec<Expression>;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ClosureReprData {
+    closure_label: Ulid,
+    bucket_size: usize,
+    offsets: HashMap<u64, usize>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Closure {
     params: Vec<ClosureParam>,
-    pub scope: ExprScope,
-    pub closed: bool,
+    pub block: ClosureBlock,
+    pub repr_data: Option<ClosureReprData>,
+    pub name: Option<String>,
+    pub id: Option<u64>,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ExprScope {
-    Scope(ast::statements::block::Block),
-    Expr(ast::statements::block::Block),
+pub struct Lambda {
+    params: Vec<ClosureParam>,
+    pub block: LambdaBlock,
+    pub name: Option<String>,
+    pub id: Option<u64>,
+    pub metadata: Metadata,
 }
-
-impl ExprScope {
-    pub fn scope(&self) -> Result<ArcRwLock<Scope>, SemanticError> {
-        match self {
-            ExprScope::Scope(scope) => scope.scope(),
-            ExprScope::Expr(scope) => scope.scope(),
-        }
-    }
-    pub fn to_capturing(&self, state: ClosureState) -> Result<(), SemanticError> {
-        match self {
-            ExprScope::Scope(value) => value.to_capturing(state),
-            ExprScope::Expr(value) => value.to_capturing(state),
-        }
-    }
-}
-//     pub fn env_vars(&self) -> Result<&Vec<Rc<Var>>, SemanticError> {
-//         match self {
-//             ExprScope::Scope(block) => block.env_vars(),
-//             ExprScope::Expr(block) => block.env_vars(),
-//         }
-//     }
-
-//     // pub fn parameters_size(&self) -> Result<usize, SemanticError> {
-//     //     match self {
-//     //         ExprScope::Scope(value) => value.parameters_size(),
-//     //         ExprScope::Expr(value) => value.parameters_size(),
-//     //     }
-//     // }
-
-// }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClosureParam {
@@ -160,6 +157,7 @@ pub struct PtrAccess {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct {
+    pub path: Path,
     pub id: ID,
     pub fields: Vec<(ID, Expression)>,
     pub metadata: Metadata,
@@ -167,6 +165,7 @@ pub struct Struct {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Union {
+    pub path: Path,
     pub typename: ID,
     pub variant: ID,
     pub fields: Vec<(ID, Expression)>,
@@ -175,6 +174,7 @@ pub struct Union {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Enum {
+    pub path: Path,
     pub typename: ID,
     pub value: ID,
     pub metadata: Metadata,
@@ -186,84 +186,105 @@ pub struct Map {
     pub metadata: Metadata,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CallArgs {
+    pub args: Vec<Expression>,
+    pub size: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Call {
+    pub path: LeftCall,
+    pub args: CallArgs,
+    pub metadata: Metadata,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FormatItem {
+    Str(String),
+    Expr(Expression),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Printf {
+    pub args: Vec<FormatItem>,
+    pub metadata: Metadata,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Format {
+    pub args: Vec<FormatItem>,
+    pub metadata: Metadata,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LeftCall {
+    VarCall(VarCall),
+    ExternCall(ExternCall),
+    CoreCall(CoreCall),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VarCall {
+    pub path: CompletePath,
+    pub id: Option<u64>,
+    pub is_closure: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExternCall {
+    pub path: CompletePath,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoreCall {
+    pub path: Core,
+}
+
 impl Data {
     pub fn metadata(&self) -> Option<&Metadata> {
         match self {
             Data::Primitive(_) => None,
-            Data::Slice(Slice { value: _, metadata }) => Some(metadata),
-            Data::Vec(Vector {
-                value: _,
-                metadata,
-                length: _,
-                capacity: _,
-            }) => Some(metadata),
+            Data::Slice(Slice { metadata, .. }) => Some(metadata),
+            Data::Vec(Vector { metadata, .. }) => Some(metadata),
             Data::Closure(Closure { metadata, .. }) => Some(metadata),
             Data::Tuple(Tuple { value: _, metadata }) => Some(metadata),
             Data::Address(Address { value: _, metadata }) => Some(metadata),
             Data::PtrAccess(PtrAccess { value: _, metadata }) => Some(metadata),
             Data::Variable(Variable { metadata, .. }) => Some(metadata),
             Data::Unit => None,
-            Data::Map(Map {
-                fields: _,
-                metadata,
-            }) => Some(metadata),
-            Data::Struct(Struct {
-                id: _,
-                fields: _,
-                metadata,
-            }) => Some(metadata),
-            Data::Union(Union {
-                typename: _,
-                variant: _,
-                fields: _,
-                metadata,
-            }) => Some(metadata),
-            Data::Enum(Enum {
-                typename: _,
-                value: _,
-                metadata,
-            }) => Some(metadata),
+            Data::Map(Map { metadata, .. }) => Some(metadata),
+            Data::Struct(Struct { metadata, .. }) => Some(metadata),
+            Data::Union(Union { metadata, .. }) => Some(metadata),
+            Data::Enum(Enum { metadata, .. }) => Some(metadata),
             Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
+            Data::Call(Call { metadata, .. }) => Some(metadata),
+            Data::Lambda(Lambda { metadata, .. }) => Some(metadata),
+            Data::Printf(Printf { metadata, .. }) => Some(metadata),
+            Data::Format(Format { metadata, .. }) => Some(metadata),
         }
     }
 
     pub fn metadata_mut(&mut self) -> Option<&mut Metadata> {
         match self {
             Data::Primitive(_) => None,
-            Data::Slice(Slice { value: _, metadata }) => Some(metadata),
-            Data::Vec(Vector {
-                value: _,
-                metadata,
-                length: _,
-                capacity: _,
-            }) => Some(metadata),
+            Data::Slice(Slice { metadata, .. }) => Some(metadata),
+            Data::Vec(Vector { metadata, .. }) => Some(metadata),
             Data::Closure(Closure { metadata, .. }) => Some(metadata),
             Data::Tuple(Tuple { value: _, metadata }) => Some(metadata),
             Data::Address(Address { value: _, metadata }) => Some(metadata),
             Data::PtrAccess(PtrAccess { value: _, metadata }) => Some(metadata),
             Data::Variable(Variable { metadata, .. }) => Some(metadata),
             Data::Unit => None,
-            Data::Map(Map {
-                fields: _,
-                metadata,
-            }) => Some(metadata),
-            Data::Struct(Struct {
-                id: _,
-                fields: _,
-                metadata,
-            }) => Some(metadata),
-            Data::Union(Union {
-                typename: _,
-                variant: _,
-                fields: _,
-                metadata,
-            }) => Some(metadata),
-            Data::Enum(Enum {
-                typename: _,
-                value: _,
-                metadata,
-            }) => Some(metadata),
+            Data::Map(Map { metadata, .. }) => Some(metadata),
+            Data::Struct(Struct { metadata, .. }) => Some(metadata),
+            Data::Union(Union { metadata, .. }) => Some(metadata),
+            Data::Enum(Enum { metadata, .. }) => Some(metadata),
             Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
+            Data::Call(Call { metadata, .. }) => Some(metadata),
+            Data::Lambda(Lambda { metadata, .. }) => Some(metadata),
+            Data::Printf(Printf { metadata, .. }) => Some(metadata),
+            Data::Format(Format { metadata, .. }) => Some(metadata),
         }
     }
 
@@ -284,47 +305,115 @@ impl Data {
                     Number::F64(_) => Some(p_num!(F64)),
                     Number::Unresolved(_) => None,
                 },
-                Primitive::Bool(_) => Some(Either::Static(
+                Primitive::Bool(_) => Some(EType::Static(
                     StaticType::Primitive(PrimitiveType::Bool).into(),
                 )),
-                Primitive::Char(_) => Some(Either::Static(
+                Primitive::Char(_) => Some(EType::Static(
                     StaticType::Primitive(PrimitiveType::Char).into(),
                 )),
             },
-            Data::Slice(Slice { value: _, metadata }) => metadata.signature(),
-            Data::Vec(Vector {
-                value: _,
-                metadata,
-                length: _,
-                capacity: _,
-            }) => metadata.signature(),
+            Data::Slice(Slice { metadata, .. }) => metadata.signature(),
+            Data::Vec(Vector { metadata, .. }) => metadata.signature(),
             Data::Closure(Closure { metadata, .. }) => metadata.signature(),
             Data::Tuple(Tuple { value: _, metadata }) => metadata.signature(),
             Data::Address(Address { value: _, metadata }) => metadata.signature(),
             Data::PtrAccess(PtrAccess { value: _, metadata }) => metadata.signature(),
             Data::Variable(Variable { metadata, .. }) => metadata.signature(),
             Data::Unit => Some(e_static!(StaticType::Unit)),
-            Data::Map(Map {
-                fields: _,
-                metadata,
-            }) => metadata.signature(),
-            Data::Struct(Struct {
-                id: _,
-                fields: _,
-                metadata,
-            }) => metadata.signature(),
-            Data::Union(Union {
-                typename: _,
-                variant: _,
-                fields: _,
-                metadata,
-            }) => metadata.signature(),
-            Data::Enum(Enum {
-                typename: _,
-                value: _,
-                metadata,
-            }) => metadata.signature(),
+            Data::Map(Map { metadata, .. }) => metadata.signature(),
+            Data::Struct(Struct { metadata, .. }) => metadata.signature(),
+            Data::Union(Union { metadata, .. }) => metadata.signature(),
+            Data::Enum(Enum { metadata, .. }) => metadata.signature(),
             Data::StrSlice(StrSlice { metadata, .. }) => metadata.signature(),
+            Data::Call(Call { metadata, .. }) => metadata.signature(),
+            Data::Lambda(Lambda { metadata, .. }) => metadata.signature(),
+            Data::Printf(Printf { metadata, .. }) => metadata.signature(),
+            Data::Format(Format { metadata, .. }) => metadata.signature(),
+        }
+    }
+}
+
+impl Primitive {
+    pub fn size_of(&self) -> usize {
+        match self {
+            Primitive::Number(Number::U8(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::U8,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::U16(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::U16,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::U32(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::U32,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::U64(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::U64,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::U128(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::U128,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::I8(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::I8,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::I16(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::I16,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::I32(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::I32,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::I64(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::I64,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::I128(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::I128,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::F64(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::F64,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::Unresolved(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::I64,
+                )
+                .size_of()
+            }
+            Primitive::Bool(_) => {
+                crate::semantic::scope::static_types::PrimitiveType::Bool.size_of()
+            }
+            Primitive::Char(_) => {
+                crate::semantic::scope::static_types::PrimitiveType::Char.size_of()
+            }
         }
     }
 }

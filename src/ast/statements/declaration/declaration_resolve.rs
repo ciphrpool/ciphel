@@ -1,25 +1,18 @@
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
-use crate::ast::expressions::data::{Data, ExprScope};
-use crate::ast::expressions::{Atomic, Expression};
-use crate::ast::statements::assignation::AssignValue;
-use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::static_types::ClosureType;
-use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
-use crate::semantic::scope::BuildVar;
-use crate::semantic::{
-    scope::{static_types::StaticType, var_impl::Var},
-    Resolve, SemanticError, TypeOf,
-};
-use crate::semantic::{CompatibleWith, EType, Either};
-use crate::{arw_read, arw_write};
+use crate::ast::statements::Statement;
+use crate::semantic::scope::static_types::TupleType;
+use crate::semantic::scope::user_types::{Struct, UserType};
+use crate::semantic::{scope::static_types::StaticType, Resolve, SemanticError, TypeOf};
+use crate::semantic::{CompatibleWith, Desugar, EType};
 
 impl Resolve for Declaration {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         _context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -28,130 +21,157 @@ impl Resolve for Declaration {
     {
         match self {
             Declaration::Declared(value) => {
-                let _ = value.resolve::<G>(scope, &(), &mut ())?;
-                let var_type = value
-                    .signature
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = value.resolve::<E>(scope_manager, scope_id, &(), &mut ())?;
+                let var_type = value.signature.type_of(&scope_manager, scope_id)?;
 
-                let var = <Var as BuildVar>::build_var(&value.id, &var_type);
-                let _ = arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
+                let var_id = scope_manager.register_var(value.name.as_str(), var_type, scope_id)?;
+                let _ = value.id.insert(var_id);
                 Ok(())
             }
             Declaration::Assigned {
                 left: DeclaredVar::Typed(value),
                 right,
             } => {
-                let _ = value.resolve::<G>(scope, &(), &mut ())?;
-                let var_type = value
+                let _ = value
                     .signature
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let var = <Var as BuildVar>::build_var(&value.id, &var_type);
-                if var_type.is_any() {
+                    .resolve::<E>(scope_manager, scope_id, &(), &mut ())?;
+                let var_type = value.signature.type_of(&scope_manager, scope_id)?;
+                if EType::Static(StaticType::Any) == var_type {
                     return Err(SemanticError::CantInferType(format!(
                         "of this variable {}",
-                        value.id
+                        value.name
                     )));
                 }
-                if value.rec {
-                    /* update params size */
-                    let var_type = match var_type {
-                        Either::Static(value) => match value.as_ref() {
-                            StaticType::Closure(ClosureType {
-                                params,
-                                ret,
-                                closed,
-                                scope_params_size,
-                            }) => Either::Static(
-                                StaticType::Closure(ClosureType {
-                                    params: params.clone(),
-                                    ret: ret.clone(),
-                                    closed: closed.clone(),
-                                    scope_params_size: scope_params_size + 8,
-                                })
-                                .into(),
-                            ),
-                            _ => {
-                                return Err(SemanticError::IncompatibleTypes);
-                            }
-                        },
-                        _ => {
-                            return Err(SemanticError::IncompatibleTypes);
-                        }
-                    };
-                    let mut var = <Var as BuildVar>::build_var(&value.id, &var_type);
-                    var.is_declared = true;
-                    match right {
-                        AssignValue::Expr(expr) => match expr.as_ref() {
-                            Expression::Atomic(Atomic::Data(Data::Closure(closure))) => {
-                                match &closure.scope {
-                                    ExprScope::Scope(s) => s.set_caller(var.clone())?,
-                                    ExprScope::Expr(s) => s.set_caller(var.clone())?,
-                                }
-                            }
-                            _ => {
-                                return Err(SemanticError::IncompatibleTypes);
-                            }
-                        },
-                        _ => {
-                            return Err(SemanticError::IncompatibleTypes);
-                        }
-                    }
-                    let _ =
-                        arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
-                    let _ = right.resolve::<G>(scope, &Some(var_type.clone()), &mut ())?;
-                    let _ = var_type.compatible_with(
-                        right,
-                        &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-                    )?;
-                } else {
-                    let _ = right.resolve::<G>(scope, &Some(var_type.clone()), &mut ())?;
-                    let _ =
-                        arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
-                    let _ = var_type.compatible_with(
-                        right,
-                        &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-                    )?;
-                }
+                let var_id =
+                    scope_manager.register_var(value.name.as_str(), var_type.clone(), scope_id)?;
+                let _ = value.id.insert(var_id);
+
+                let _ = right.resolve::<E>(
+                    scope_manager,
+                    scope_id,
+                    &Some(var_type.clone()),
+                    &mut (),
+                )?;
+                let _ = var_type.compatible_with(
+                    &right.type_of(scope_manager, scope_id)?,
+                    &scope_manager,
+                    scope_id,
+                )?;
 
                 Ok(())
             }
             Declaration::Assigned { left, right } => {
-                let _ = right.resolve::<G>(scope, &None, extra)?;
-                let right_type =
-                    right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let vars = left.resolve::<G>(scope, &Some(right_type), &mut ())?;
-                for var in vars {
-                    let _ =
-                        arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
-                }
+                let _ = right.resolve::<E>(scope_manager, scope_id, &None, extra)?;
+                let right_type = right.type_of(&scope_manager, scope_id)?;
+                let _ = left.resolve::<E>(scope_manager, scope_id, &Some(right_type), &mut ())?;
+                Ok(())
+            }
+            Declaration::RecClosure {
+                name,
+                id,
+                signature,
+                right,
+            } => {
+                let _ = signature.resolve::<E>(scope_manager, scope_id, &(), extra)?;
+                let fn_type @ EType::Static(StaticType::Closure(_)) =
+                    signature.type_of(scope_manager, scope_id)?
+                else {
+                    return Err(SemanticError::ExpectedCallable);
+                };
+                let _ = right.name.insert(name.clone());
+                let _ =
+                    right.resolve::<E>(scope_manager, scope_id, &Some(fn_type.clone()), extra)?;
+
+                let var_id = scope_manager.register_var(name, fn_type, scope_id)?;
+                let _ = id.insert(var_id);
+                Ok(())
+            }
+            Declaration::RecLambda {
+                name,
+                id,
+                signature,
+                right,
+            } => {
+                let _ = signature.resolve::<E>(scope_manager, scope_id, &(), extra)?;
+                let fn_type @ EType::Static(StaticType::Lambda(_)) =
+                    signature.type_of(scope_manager, scope_id)?
+                else {
+                    return Err(SemanticError::ExpectedCallable);
+                };
+                let _ = right.name.insert(name.clone());
+                let _ =
+                    right.resolve::<E>(scope_manager, scope_id, &Some(fn_type.clone()), extra)?;
+
+                let var_id = scope_manager.register_var(name, fn_type, scope_id)?;
+                let _ = id.insert(var_id);
                 Ok(())
             }
         }
     }
 }
+
+impl Desugar<Statement> for Declaration {
+    fn desugar<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        match self {
+            Declaration::Declared(typed_var) => Ok(None),
+            Declaration::Assigned { left, right } => {
+                if let Some(output) = right.desugar::<E>(scope_manager, scope_id)? {
+                    *right = output;
+                }
+                Ok(None)
+            }
+            Declaration::RecClosure {
+                name,
+                id,
+                signature,
+                right,
+            } => {
+                let _ = right.desugar::<E>(scope_manager, scope_id)?;
+                Ok(None)
+            }
+            Declaration::RecLambda {
+                name,
+                id,
+                signature,
+                right,
+            } => {
+                let _ = right.desugar::<E>(scope_manager, scope_id)?;
+                Ok(None)
+            }
+        }
+    }
+}
+
 impl Resolve for TypedVar {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        self.signature.resolve::<G>(scope, context, extra)
+        self.signature
+            .resolve::<E>(scope_manager, scope_id, context, extra)
     }
 }
 impl Resolve for DeclaredVar {
-    type Output = Vec<Var>;
+    type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -159,39 +179,40 @@ impl Resolve for DeclaredVar {
         Self: Sized,
     {
         match self {
-            DeclaredVar::Id(id) => {
-                let mut vars = Vec::with_capacity(1);
+            DeclaredVar::Id { name, id } => {
                 let Some(var_type) = context else {
                     return Err(SemanticError::CantInferType(format!(
                         "of this variable {}",
-                        id
+                        name
                     )));
                 };
-                if var_type.is_any() {
+                if EType::Static(StaticType::Any) == *var_type {
                     return Err(SemanticError::CantInferType(format!(
                         "of this variable {}",
-                        id
+                        name
                     )));
                 }
-
-                let var = <Var as BuildVar>::build_var(id, var_type);
-                vars.push(var);
-                Ok(vars)
+                let var_id = scope_manager.register_var(name, var_type.clone(), scope_id)?;
+                id.insert(var_id);
+                Ok(())
             }
             DeclaredVar::Typed(_) => {
                 unreachable!("Path already covered in Declaration::resolve")
             }
-            DeclaredVar::Pattern(value) => value.resolve::<G>(scope, context, extra),
+            DeclaredVar::Pattern(value) => {
+                value.resolve::<E>(scope_manager, scope_id, context, extra)
+            }
         }
     }
 }
 impl Resolve for PatternVar {
-    type Output = Vec<Var>;
+    type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -199,62 +220,50 @@ impl Resolve for PatternVar {
         Self: Sized,
     {
         match self {
-            PatternVar::StructFields { typename, vars } => {
-                let borrowed_scope = arw_read!(scope, SemanticError::ConcurrencyError)?;
-                let user_type = borrowed_scope.find_type(typename)?;
-                let user_type = user_type
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) = <EType as GetSubTypes>::get_fields(&user_type) else {
-                    return Err(SemanticError::InvalidPattern);
+            PatternVar::StructFields {
+                ref typename,
+                vars,
+                ids,
+            } => {
+                let Some(EType::User { id: type_id, .. }) = context else {
+                    return Err(SemanticError::IncompatibleTypes);
                 };
+
+                let UserType::Struct(Struct { fields, .. }) =
+                    scope_manager.find_type_by_id(*type_id, scope_id)?.clone()
+                else {
+                    return Err(SemanticError::ExpectedStruct);
+                };
+
                 if vars.len() != fields.len() {
                     return Err(SemanticError::InvalidPattern);
                 }
-                for (field_name, field_type) in fields.iter() {
-                    let Some(var_name) = vars.iter().find(|name| {
-                        field_name
-                            .clone()
-                            .map(|inner| if inner == **name { Some(()) } else { None })
-                            .flatten()
-                            .is_some()
-                    }) else {
-                        return Err(SemanticError::InvalidPattern);
-                    };
-                    if field_type.is_any() {
-                        return Err(SemanticError::CantInferType(format!(
-                            "of this field {}",
-                            var_name
-                        )));
-                    }
-                    scope_vars.push(<Var as BuildVar>::build_var(var_name, field_type));
+
+                let buffer = ids.insert(Vec::with_capacity(vars.len()));
+
+                for (field_name, field_type) in fields {
+                    let id = scope_manager.register_var(&field_name, field_type, scope_id)?;
+                    buffer.push(id);
                 }
-                Ok(scope_vars)
+                Ok(())
             }
-            PatternVar::Tuple(value) => {
-                let mut scope_vars = Vec::with_capacity(value.len());
-                let Some(user_type) = context else {
-                    return Err(SemanticError::CantInferType(format!("of this tuple")));
-                };
-                let Some(fields) = <EType as GetSubTypes>::get_fields(user_type) else {
-                    return Err(SemanticError::InvalidPattern);
+            PatternVar::Tuple { names, ids } => {
+                let Some(EType::Static(StaticType::Tuple(TupleType(types)))) = context else {
+                    return Err(SemanticError::IncompatibleTypes);
                 };
 
-                if value.len() != fields.len() {
+                if names.len() != types.len() {
                     return Err(SemanticError::InvalidPattern);
                 }
-                for (index, (_, field_type)) in fields.iter().enumerate() {
-                    let var_name = &value[index];
-                    if field_type.is_any() {
-                        return Err(SemanticError::CantInferType(format!(
-                            "of this variable {}",
-                            var_name
-                        )));
-                    }
 
-                    scope_vars.push(<Var as BuildVar>::build_var(var_name, field_type));
+                let buffer = ids.insert(Vec::with_capacity(names.len()));
+
+                for (var_name, var_type) in names.iter().zip(types) {
+                    let id = scope_manager.register_var(&var_name, var_type.clone(), scope_id)?;
+                    buffer.push(id);
                 }
-                Ok(scope_vars)
+
+                Ok(())
             }
         }
     }
@@ -267,9 +276,8 @@ mod tests {
         ast::TryParse,
         e_static, p_num,
         semantic::scope::{
-            scope::Scope,
             static_types::{PrimitiveType, StaticType},
-            user_type_impl::{Struct, UserType},
+            user_types::{Struct, UserType},
         },
     };
 
@@ -279,37 +287,44 @@ mod tests {
     fn valid_declaration() {
         let mut decl = Declaration::parse("let x:u64 = 1;".into()).unwrap().1;
 
-        let scope = Scope::new();
-        let res = decl.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = decl.resolve::<crate::vm::external::test::NoopEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let binding = arw_read!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_var(&"x".to_string().into())
-            .unwrap();
-        let x_type = binding.read().unwrap();
-        assert_eq!(p_num!(U64), x_type.type_sig);
+        let variable = scope_manager.find_var_by_name("x", None, None).unwrap();
+        assert_eq!(p_num!(U64), variable.ctype);
 
         let mut decl = Declaration::parse("let x = 1.0;".into()).unwrap().1;
 
-        let scope = Scope::new();
-        let res = decl.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = decl.resolve::<crate::vm::external::test::NoopEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let binding = arw_read!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_var(&"x".to_string().into())
-            .unwrap();
-        let x_type = binding.read().unwrap();
-        assert_eq!(p_num!(F64), x_type.type_sig);
+        let variable = scope_manager.find_var_by_name("x", None, None).unwrap();
+        assert_eq!(p_num!(F64), variable.ctype);
     }
 
     #[test]
     fn robustness_declaration() {
         let mut decl = Declaration::parse("let x:char = 1;".into()).unwrap().1;
 
-        let scope = Scope::new();
-        let res = decl.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = decl.resolve::<crate::vm::external::test::NoopEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_err());
     }
 
@@ -317,24 +332,22 @@ mod tests {
     fn valid_declaration_pattern() {
         let mut decl = Declaration::parse("let (x,y) = (1,'a');".into()).unwrap().1;
 
-        let scope = Scope::new();
-        let res = decl.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = decl.resolve::<crate::vm::external::test::NoopEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let binding = arw_read!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_var(&"x".to_string().into())
-            .unwrap();
-        let x_type = binding.read().unwrap();
-        assert_eq!(p_num!(I64), x_type.type_sig);
-        let binding = arw_read!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_var(&"y".to_string().into())
-            .unwrap();
-        let y_type = binding.read().unwrap();
+        let variable = scope_manager.find_var_by_name("x", None, None).unwrap();
+        assert_eq!(p_num!(I64), variable.ctype);
+
+        let variable = scope_manager.find_var_by_name("y", None, None).unwrap();
         assert_eq!(
             e_static!(StaticType::Primitive(PrimitiveType::Char)),
-            y_type.type_sig
+            variable.ctype
         );
     }
 
@@ -344,11 +357,10 @@ mod tests {
             .unwrap()
             .1;
 
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
             .register_type(
-                &"Point".to_string().into(),
+                "Point",
                 UserType::Struct(Struct {
                     id: "Point".to_string().into(),
                     fields: {
@@ -358,22 +370,20 @@ mod tests {
                         res
                     },
                 }),
+                None,
             )
             .unwrap();
-        let res = decl.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let res = decl.resolve::<crate::vm::external::test::NoopEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let binding = arw_read!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_var(&"x".to_string().into())
-            .unwrap();
-        let x_type = binding.read().unwrap();
-        assert_eq!(p_num!(I64), x_type.type_sig);
-        let binding = arw_read!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_var(&"y".to_string().into())
-            .unwrap();
-        let y_type = binding.read().unwrap();
-        assert_eq!(p_num!(I64), y_type.type_sig);
+        let variable = scope_manager.find_var_by_name("x", None, None).unwrap();
+        assert_eq!(p_num!(I64), variable.ctype);
+        let variable = scope_manager.find_var_by_name("y", None, None).unwrap();
+        assert_eq!(p_num!(I64), variable.ctype);
     }
 }

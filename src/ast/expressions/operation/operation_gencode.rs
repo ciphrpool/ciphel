@@ -1,65 +1,49 @@
-use crate::arw_read;
-use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::static_types::{ClosureType, SliceType, StrSliceType};
-use crate::semantic::scope::type_traits::GetSubTypes;
-use crate::semantic::AccessLevel;
-use crate::vm::allocator::stack::Offset;
-use crate::vm::allocator::MemoryAddress;
-use crate::vm::casm::alloc::{Access, CheckIndex};
-use crate::vm::casm::branch::Call;
-use crate::vm::casm::data;
-use crate::vm::casm::locate::{Locate, LocateUTF8Char};
-use crate::vm::casm::mem::Mem;
-use crate::vm::vm::Locatable;
+use crate::ast::expressions::locate::Locatable;
+use crate::semantic::scope::static_types::{SliceType, POINTER_SIZE};
+use crate::vm::asm::alloc::Access;
+use crate::vm::asm::locate::{LocateIndex, LocateOffset};
+use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
-    semantic::{
-        scope::static_types::{NumberType, RangeType, StaticType},
-        Either, SizeOf, TypeOf,
-    },
-    vm::{
-        casm::{
-            data::Data,
-            operation::{
-                Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Division, Equal, Greater,
-                GreaterEqual, Less, LessEqual, LogicalAnd, LogicalOr, Minus, Mod, Mult, Not,
-                NotEqual, OpPrimitive, Operation, OperationKind, ShiftLeft, ShiftRight,
-                Substraction,
-            },
-            Casm, CasmProgram,
+    semantic::{scope::static_types::StaticType, EType, SizeOf, TypeOf},
+    vm::asm::{
+        operation::{
+            Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Division, Equal, Greater,
+            GreaterEqual, Less, LessEqual, LogicalAnd, LogicalOr, Minus, Mod, Mult, Not, NotEqual,
+            OpPrimitive, Operation, OperationKind, ShiftLeft, ShiftRight, Substraction,
         },
-        vm::{CodeGenerationError, GenerateCode},
+        Asm,
     },
 };
 
-use super::{FieldAccess, ListAccess, Range, TupleAccess};
+use super::{ExprCall, FieldAccess, ListAccess, TupleAccess};
 
 impl GenerateCode for super::UnaryOperation {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             super::UnaryOperation::Minus { value, metadata: _ } => {
                 let Some(value_type) = value.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = value.gencode(scope, instructions)?;
+                let _ = value.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Minus(Minus {
                         data_type: value_type.try_into()?,
                     }),
-                    // result: OpPrimitive::Number(NumberType::U64),
                 }));
                 Ok(())
             }
             super::UnaryOperation::Not { value, metadata: _ } => {
-                let _ = value.gencode(scope, instructions)?;
+                let _ = value.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Not(Not()),
-                    // result: OpPrimitive::Number(NumberType::U64),
                 }));
                 Ok(())
             }
@@ -67,511 +51,175 @@ impl GenerateCode for super::UnaryOperation {
     }
 }
 
-impl Locatable for TupleAccess {
-    fn locate(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        let _ = self.var.locate(scope, instructions)?;
-        let Some(from_type) = self.var.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let Some(offset) = from_type.get_inline_field_offset(self.index) else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        instructions.push(Casm::Data(data::Data::Serialized {
-            data: (offset as u64).to_le_bytes().into(),
-        }));
-        instructions.push(Casm::Operation(Operation {
-            kind: OperationKind::Addition(Addition {
-                left: OpPrimitive::Number(NumberType::U64),
-                right: OpPrimitive::Number(NumberType::U64),
-            }),
-        }));
-        Ok(())
-    }
-
-    fn is_assignable(&self) -> bool {
-        true
-    }
-
-    fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
-        self.var.most_left_id()
-    }
-}
 impl GenerateCode for TupleAccess {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        let _ = self.var.locate(scope, instructions)?;
-        let Some(from_type) = self.var.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        let Some(item_type) = self.metadata.signature() else {
+            return Err(CodeGenerationError::Unlocatable);
         };
-        let Some(offset) = from_type.get_inline_field_offset(self.index) else {
-            return Err(CodeGenerationError::UnresolvedError);
+
+        let Some(offset) = self.offset else {
+            return Err(CodeGenerationError::Unlocatable);
         };
-        let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        instructions.push(Casm::Data(data::Data::Serialized {
-            data: (offset as u64).to_le_bytes().into(),
-        }));
-        instructions.push(Casm::Operation(Operation {
-            kind: OperationKind::Addition(Addition {
-                left: OpPrimitive::Number(NumberType::U64),
-                right: OpPrimitive::Number(NumberType::U64),
-            }),
-        }));
-        if size == 0 {
-            return Ok(());
+
+        let size = item_type.size_of();
+
+        match self.var.locate(scope_manager, scope_id, instructions)? {
+            Some(address) => {
+                // the address is static
+                instructions.push(Asm::Access(Access::Static {
+                    address: address.add(offset),
+                    size,
+                }))
+            }
+            None => {
+                // the address was pushed on the stack
+                instructions.push(Asm::Offset(LocateOffset { offset }));
+                instructions.push(Asm::Access(Access::Runtime { size: Some(size) }));
+            }
         }
-        instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
         Ok(())
     }
 }
 
-impl Locatable for ListAccess {
-    fn locate(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        // Locate the variable
-        let _ = self.var.locate(scope, instructions)?;
-        if let Some(signature) = self.var.signature() {
-            match signature {
-                Either::Static(signature) => match signature.as_ref() {
-                    StaticType::String(_) | StaticType::Vec(_) => {
-                        instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-        }
-        // Access the field
-        let _ = self.index.gencode(scope, instructions)?;
-
-        let is_utf8_access = match self
-            .var
-            .signature()
-            .ok_or(CodeGenerationError::UnresolvedError)?
-        {
-            Either::Static(value) => match value.as_ref() {
-                StaticType::String(_) | StaticType::StrSlice(_) => true,
-                _ => false,
-            },
-            _ => false,
-        };
-
-        let len = match self
-            .var
-            .signature()
-            .ok_or(CodeGenerationError::UnresolvedError)?
-        {
-            Either::Static(value) => match value.as_ref() {
-                StaticType::Slice(SliceType { size, .. }) => Some(*size),
-                StaticType::StrSlice(StrSliceType { size }) => Some(*size),
-                _ => None,
-            },
-            _ => None,
-        };
-
-        if is_utf8_access {
-            instructions.push(Casm::LocateUTF8Char(LocateUTF8Char::RuntimeAtIdx { len }));
-        } else {
-            let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
-            if size == 0 {
-                instructions.push(Casm::Pop(8)); //Pop index
-                return Ok(());
-            }
-            instructions.push(Casm::AccessIdx(CheckIndex {
-                item_size: size,
-                len,
-            }));
-        }
-
-        Ok(())
-    }
-
-    fn is_assignable(&self) -> bool {
-        true
-    }
-
-    fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
-        self.var.most_left_id()
-    }
-}
 impl GenerateCode for ListAccess {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        // Locate the variable
-        let _ = self.var.locate(scope, instructions)?;
-        if let Some(signature) = self.var.signature() {
-            match signature {
-                Either::Static(signature) => match signature.as_ref() {
-                    StaticType::String(_) | StaticType::Vec(_) => {
-                        instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-        }
-        // Access the field
-        let _ = self.index.gencode(scope, instructions)?;
-
-        let is_utf8_access = match self
-            .var
-            .signature()
-            .ok_or(CodeGenerationError::UnresolvedError)?
-        {
-            Either::Static(value) => match value.as_ref() {
-                StaticType::String(_) | StaticType::StrSlice(_) => true,
-                _ => false,
-            },
-            _ => false,
-        };
-
-        let len = match self
-            .var
-            .signature()
-            .ok_or(CodeGenerationError::UnresolvedError)?
-        {
-            Either::Static(value) => match value.as_ref() {
-                StaticType::Slice(SliceType { size, .. }) => Some(*size),
-                StaticType::StrSlice(StrSliceType { size }) => Some(*size),
-                _ => None,
-            },
-            _ => None,
-        };
-
-        if is_utf8_access {
-            instructions.push(Casm::Access(Access::RuntimeCharUTF8AtIdx { len }));
-        } else {
-            let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
-            if size == 0 {
-                instructions.push(Casm::Pop(8)); //Pop index
-                return Ok(());
-            }
-            instructions.push(Casm::AccessIdx(CheckIndex {
-                item_size: size,
-                len,
-            }));
-            instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
-        }
-
-        Ok(())
-    }
-}
-
-impl Locatable for FieldAccess {
-    fn locate(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        // Locate the variable
-        let _ = self.var.locate(scope, instructions)?;
-
-        // Access the field
-        let Some(from_type) = self.var.signature() else {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        let Some(item_type) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Some(offset) = from_type.get_field_offset(
-            &self
-                .field
-                .most_left_id()
-                .ok_or(CodeGenerationError::UnresolvedError)?,
-        ) else {
+        let Some(array_type) = self.var.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        instructions.push(Casm::Data(data::Data::Serialized {
-            data: (offset as u64).to_le_bytes().into(),
-        }));
-        instructions.push(Casm::Operation(Operation {
-            kind: OperationKind::Addition(Addition {
-                left: OpPrimitive::Number(NumberType::U64),
-                right: OpPrimitive::Number(NumberType::U64),
-            }),
-        }));
-        let _ = self.field.locate(scope, instructions)?;
-        Ok(())
-    }
-
-    fn is_assignable(&self) -> bool {
-        true
-    }
-
-    fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
-        self.var.most_left_id()
-    }
-}
-impl GenerateCode for FieldAccess {
-    fn gencode(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        // Locate the variable
-        let _ = self.var.locate(scope, instructions)?;
-        // Access the field
-        let Some(from_type) = self.var.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let Some(offset) = from_type.get_field_offset(
-            &self
-                .field
-                .most_left_id()
-                .ok_or(CodeGenerationError::UnresolvedError)?,
-        ) else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        instructions.push(Casm::Data(data::Data::Serialized {
-            data: (offset as u64).to_le_bytes().into(),
-        }));
-        instructions.push(Casm::Operation(Operation {
-            kind: OperationKind::Addition(Addition {
-                left: OpPrimitive::Number(NumberType::U64),
-                right: OpPrimitive::Number(NumberType::U64),
-            }),
-        }));
-        let _ = self.field.gencode(scope, instructions)?;
-        Ok(())
-    }
-}
-
-impl GenerateCode for Range {
-    fn gencode(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        let Some(signature) = self.metadata.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-
-        let (_num_type, incr_data) = match signature {
-            Either::Static(value) => match value.as_ref() {
-                StaticType::Range(RangeType { num, .. }) => (
-                    num.size_of(),
-                    match num {
-                        NumberType::U8 => (1u8).to_le_bytes().into(),
-                        NumberType::U16 => (1u16).to_le_bytes().into(),
-                        NumberType::U32 => (1u32).to_le_bytes().into(),
-                        NumberType::U64 => (1u64).to_le_bytes().into(),
-                        NumberType::U128 => (1u128).to_le_bytes().into(),
-                        NumberType::I8 => (1i8).to_le_bytes().into(),
-                        NumberType::I16 => (1i16).to_le_bytes().into(),
-                        NumberType::I32 => (1i32).to_le_bytes().into(),
-                        NumberType::I64 => (1i64).to_le_bytes().into(),
-                        NumberType::I128 => (1i128).to_le_bytes().into(),
-                        NumberType::F64 => (1f64).to_le_bytes().into(),
-                    },
-                ),
-                _ => return Err(CodeGenerationError::UnresolvedError),
-            },
+        let (offset, len) = match array_type {
+            EType::Static(StaticType::Vec(_)) => (crate::vm::core::vector::VEC_HEADER, None),
+            EType::Static(StaticType::Slice(SliceType { size, .. })) => (0, Some(size)),
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
 
-        let _ = self.lower.gencode(scope, instructions)?;
-        let _ = self.upper.gencode(scope, instructions)?;
-        instructions.push(Casm::Data(Data::Serialized { data: incr_data }));
+        let size = item_type.size_of();
+
+        match self.var.locate(scope_manager, scope_id, instructions)? {
+            Some(address) => {
+                // the address is static
+                let _ = self
+                    .index
+                    .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+
+                instructions.push(Asm::OffsetIdx(LocateIndex {
+                    size,
+                    len,
+                    base_address: Some(address),
+                    offset: Some(offset),
+                }));
+
+                instructions.push(Asm::Access(Access::Runtime { size: Some(size) }));
+            }
+            None => {
+                // the address was pushed on the stack
+                instructions.push(Asm::Access(Access::Runtime {
+                    size: Some(POINTER_SIZE),
+                }));
+
+                let _ = self
+                    .index
+                    .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+
+                instructions.push(Asm::OffsetIdx(LocateIndex {
+                    size,
+                    len,
+                    base_address: None,
+                    offset: Some(offset),
+                }));
+                instructions.push(Asm::Access(Access::Runtime { size: Some(size) }));
+            }
+        }
         Ok(())
     }
 }
 
-impl Locatable for super::FnCall {
-    fn locate(
+impl GenerateCode for FieldAccess {
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        let _ = self.gencode(scope, instructions)?;
-        let Some(value_type) = self.metadata.signature() else {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        match self.var.locate(scope_manager, scope_id, instructions)? {
+            Some(address) => {
+                // the address is static
+                self.field
+                    .access_from(scope_manager, scope_id, instructions, address)?;
+            }
+            None => {
+                // the address was pushed on the stack
+                self.field
+                    .runtime_access(scope_manager, scope_id, instructions)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl GenerateCode for ExprCall {
+    fn gencode<E: crate::vm::external::Engine>(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        for arg in self.args.args.iter() {
+            arg.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        }
+        self.var
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+
+        let Some(param_size) = self.args.size else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        instructions.push(Casm::Locate(Locate {
-            address: MemoryAddress::Stack {
-                offset: Offset::ST(-(value_type.size_of() as isize)),
-                level: AccessLevel::Direct,
-            },
-        }));
+
+        let Some(var_type) = self.var.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+
+        match var_type {
+            EType::Static(StaticType::Closure(_)) => {
+                instructions.push(Asm::Call(crate::vm::asm::branch::Call::Closure {
+                    param_size,
+                }));
+            }
+            EType::Static(StaticType::Function(_) | StaticType::Lambda(_)) => {
+                instructions.push(Asm::Call(crate::vm::asm::branch::Call::Function {
+                    param_size,
+                }));
+            }
+            _ => return Err(CodeGenerationError::UnresolvedError),
+        }
+
         Ok(())
     }
-
-    fn is_assignable(&self) -> bool {
-        false
-    }
-
-    fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
-        self.fn_var.most_left_id()
-    }
 }
 
-impl GenerateCode for super::FnCall {
-    fn gencode(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        let params_size: usize = self
-            .params
-            .iter()
-            .map(|p| p.signature().map_or(0, |s| s.size_of()))
-            .sum();
-
-        if let Some(dynamic_fn_id) = &self.is_dynamic_fn {
-            for param in &self.params {
-                let _ = param.gencode(scope, instructions)?;
-            }
-            instructions.push(Casm::Platform(crate::vm::platform::LibCasm::Engine(
-                dynamic_fn_id.clone(),
-            )));
-            return Ok(());
-        }
-
-        let borrowed_platform = arw_read!(self.platform, CodeGenerationError::ConcurrencyError)?;
-        if let Some(platform_api) = borrowed_platform.as_ref() {
-            for param in &self.params {
-                let _ = param.gencode(scope, instructions)?;
-            }
-            platform_api.gencode(scope, instructions)
-        } else {
-            let Some(Either::Static(fn_sig)) = self.fn_var.signature() else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
-            let Some(signature) = self.metadata.signature() else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
-            let sig_params_size = match fn_sig.as_ref() {
-                StaticType::Closure(value) => value.scope_params_size,
-                StaticType::StaticFn(value) => value.scope_params_size,
-                _ => return Err(CodeGenerationError::UnresolvedError),
-            };
-            let _return_size = signature.size_of();
-
-            match fn_sig.as_ref() {
-                StaticType::Closure(ClosureType { closed: false, .. })
-                | StaticType::StaticFn(_) => {
-                    /* Call static function */
-                    // Load Param
-                    for param in &self.params {
-                        let _ = param.gencode(scope, instructions)?;
-                    }
-                    let _ = self.fn_var.gencode(scope, instructions)?;
-                    if let Some(8) = sig_params_size.checked_sub(params_size) {
-                        // Load function address
-                        instructions.push(Casm::Mem(Mem::Dup(8)));
-                    }
-                    // Call function
-                    // Load param size
-                    instructions.push(Casm::Data(Data::Serialized {
-                        data: (sig_params_size as u64).to_le_bytes().into(),
-                    }));
-
-                    instructions.push(Casm::Call(Call::Stack));
-                    instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
-                }
-                StaticType::Closure(ClosureType { closed: true, .. }) => {
-                    // Load Param
-                    for param in &self.params {
-                        let _ = param.gencode(scope, instructions)?;
-                    }
-
-                    let _ = self.fn_var.gencode(scope, instructions)?;
-                    match sig_params_size.checked_sub(params_size) {
-                        Some(16) => {
-                            /* Rec and closed */
-                            /* PARAMS + [8] heap pointer to fn + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
-                            instructions.push(Casm::Mem(Mem::Dup(8)));
-                            // Load Env heap address
-                            instructions.push(Casm::Data(Data::Serialized {
-                                data: (16u64).to_le_bytes().into(),
-                            }));
-                            instructions.push(Casm::Operation(Operation {
-                                kind: OperationKind::Addition(Addition {
-                                    left: OpPrimitive::Number(NumberType::U64),
-                                    right: OpPrimitive::Number(NumberType::U64),
-                                }),
-                            }));
-                            instructions.push(Casm::Mem(Mem::Dup(8)));
-                            instructions.push(Casm::Data(Data::Serialized {
-                                data: (16u64).to_le_bytes().into(),
-                            }));
-                            instructions.push(Casm::Operation(Operation {
-                                kind: OperationKind::Substraction(Substraction {
-                                    left: OpPrimitive::Number(NumberType::U64),
-                                    right: OpPrimitive::Number(NumberType::U64),
-                                }),
-                            }));
-                            instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                        }
-                        Some(8) => {
-                            /* closed */
-                            /* PARAMS + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
-                            // Load Env heap address
-                            instructions.push(Casm::Data(Data::Serialized {
-                                data: (16u64).to_le_bytes().into(),
-                            }));
-                            instructions.push(Casm::Operation(Operation {
-                                kind: OperationKind::Addition(Addition {
-                                    left: OpPrimitive::Number(NumberType::U64),
-                                    right: OpPrimitive::Number(NumberType::U64),
-                                }),
-                            }));
-                            instructions.push(Casm::Mem(Mem::Dup(8)));
-                            instructions.push(Casm::Data(Data::Serialized {
-                                data: (16u64).to_le_bytes().into(),
-                            }));
-                            instructions.push(Casm::Operation(Operation {
-                                kind: OperationKind::Substraction(Substraction {
-                                    left: OpPrimitive::Number(NumberType::U64),
-                                    right: OpPrimitive::Number(NumberType::U64),
-                                }),
-                            }));
-                            instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                        }
-                        _ => return Err(CodeGenerationError::UnresolvedError),
-                    }
-
-                    // Call function
-
-                    // Load param size
-                    instructions.push(Casm::Data(Data::Serialized {
-                        data: (sig_params_size).to_le_bytes().into(),
-                    }));
-
-                    instructions.push(Casm::Call(Call::Stack));
-                    instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
-                }
-                _ => {
-                    return Err(CodeGenerationError::UnresolvedError);
-                }
-            }
-            Ok(())
-        }
-    }
-}
 impl GenerateCode for super::Product {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             super::Product::Mult {
                 left,
@@ -584,10 +232,10 @@ impl GenerateCode for super::Product {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Mult(Mult {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -607,10 +255,10 @@ impl GenerateCode for super::Product {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Div(Division {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -630,10 +278,10 @@ impl GenerateCode for super::Product {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Mod(Mod {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -647,21 +295,27 @@ impl GenerateCode for super::Product {
 }
 
 impl GenerateCode for super::Addition {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let Some(right_type) = self.right.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-        instructions.push(Casm::Operation(Operation {
+        instructions.push(Asm::Operation(Operation {
             kind: OperationKind::Addition(Addition {
                 left: left_type.try_into()?,
                 right: right_type.try_into()?,
@@ -673,21 +327,27 @@ impl GenerateCode for super::Addition {
 }
 
 impl GenerateCode for super::Substraction {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let Some(right_type) = self.right.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-        instructions.push(Casm::Operation(Operation {
+        instructions.push(Asm::Operation(Operation {
             kind: OperationKind::Substraction(Substraction {
                 left: left_type.try_into()?,
                 right: right_type.try_into()?,
@@ -699,11 +359,13 @@ impl GenerateCode for super::Substraction {
 }
 
 impl GenerateCode for super::Shift {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             super::Shift::Left {
                 left,
@@ -716,10 +378,10 @@ impl GenerateCode for super::Shift {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::ShiftLeft(ShiftLeft {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -739,10 +401,10 @@ impl GenerateCode for super::Shift {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::ShiftRight(ShiftRight {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -756,21 +418,27 @@ impl GenerateCode for super::Shift {
 }
 
 impl GenerateCode for super::BitwiseAnd {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let Some(right_type) = self.right.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-        instructions.push(Casm::Operation(Operation {
+        instructions.push(Asm::Operation(Operation {
             kind: OperationKind::BitwiseAnd(BitwiseAnd {
                 left: left_type.try_into()?,
                 right: right_type.try_into()?,
@@ -782,21 +450,27 @@ impl GenerateCode for super::BitwiseAnd {
 }
 
 impl GenerateCode for super::BitwiseXOR {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let Some(right_type) = self.right.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-        instructions.push(Casm::Operation(Operation {
+        instructions.push(Asm::Operation(Operation {
             kind: OperationKind::BitwiseXOR(BitwiseXOR {
                 left: left_type.try_into()?,
                 right: right_type.try_into()?,
@@ -808,21 +482,27 @@ impl GenerateCode for super::BitwiseXOR {
 }
 
 impl GenerateCode for super::BitwiseOR {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let Some(right_type) = self.right.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-        instructions.push(Casm::Operation(Operation {
+        instructions.push(Asm::Operation(Operation {
             kind: OperationKind::BitwiseOR(BitwiseOR {
                 left: left_type.try_into()?,
                 right: right_type.try_into()?,
@@ -834,31 +514,28 @@ impl GenerateCode for super::BitwiseOR {
 }
 
 impl GenerateCode for super::Cast {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Some(right_type) = self
-            .right
-            .type_of(&crate::arw_read!(
-                scope,
-                CodeGenerationError::ConcurrencyError
-            )?)
-            .ok()
-        else {
+        let Some(right_type) = self.right.type_of(&scope_manager, scope_id).ok() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let _ = self.left.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
         let op_left_type: Result<OpPrimitive, CodeGenerationError> = left_type.try_into();
         let op_right_type: Result<OpPrimitive, CodeGenerationError> = right_type.try_into();
 
         if op_left_type.is_ok() && op_right_type.is_ok() {
-            instructions.push(Casm::Operation(Operation {
+            instructions.push(Asm::Operation(Operation {
                 kind: OperationKind::Cast(Cast {
                     from: op_left_type.unwrap(),
                     to: op_right_type.unwrap(),
@@ -872,11 +549,13 @@ impl GenerateCode for super::Cast {
 }
 
 impl GenerateCode for super::Comparaison {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             super::Comparaison::Less {
                 left,
@@ -889,10 +568,10 @@ impl GenerateCode for super::Comparaison {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Less(Less {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -912,10 +591,10 @@ impl GenerateCode for super::Comparaison {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::LessEqual(LessEqual {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -935,10 +614,10 @@ impl GenerateCode for super::Comparaison {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Greater(Greater {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -958,10 +637,10 @@ impl GenerateCode for super::Comparaison {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::GreaterEqual(GreaterEqual {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -975,11 +654,13 @@ impl GenerateCode for super::Comparaison {
 }
 
 impl GenerateCode for super::Equation {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             super::Equation::Equal {
                 left,
@@ -992,10 +673,10 @@ impl GenerateCode for super::Equation {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::Equal(Equal {
                         left: left_type.size_of(),
                         right: right_type.size_of(),
@@ -1015,10 +696,10 @@ impl GenerateCode for super::Equation {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::Operation(Operation {
+                instructions.push(Asm::Operation(Operation {
                     kind: OperationKind::NotEqual(NotEqual {
                         left: left_type.size_of(),
                         right: right_type.size_of(),
@@ -1032,15 +713,21 @@ impl GenerateCode for super::Equation {
 }
 
 impl GenerateCode for super::LogicalAnd {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        let _ = self
+            .left
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-        instructions.push(Casm::Operation(Operation {
+        instructions.push(Asm::Operation(Operation {
             kind: OperationKind::LogicalAnd(LogicalAnd()),
             // result: OpPrimitive::Number(NumberType::U64),
         }));
@@ -1049,15 +736,21 @@ impl GenerateCode for super::LogicalAnd {
 }
 
 impl GenerateCode for super::LogicalOr {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
+        let _ = self
+            .left
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-        instructions.push(Casm::Operation(Operation {
+        instructions.push(Asm::Operation(Operation {
             kind: OperationKind::LogicalOr(LogicalOr()),
             // result: OpPrimitive::Number(NumberType::U64),
         }));
@@ -1068,760 +761,716 @@ impl GenerateCode for super::LogicalOr {
 #[cfg(test)]
 mod tests {
 
-    use crate::{
-        ast::{
-            expressions::{
-                data::{Number, Primitive, StrSlice},
-                Expression,
-            },
-            statements::Statement,
-            TryParse,
-        },
-        clear_stack, compile_statement, eval_and_compare, eval_and_compare_bool,
-        semantic::{
-            scope::{
-                scope::Scope,
-                static_types::{PrimitiveType, StrSliceType},
-            },
-            Resolve,
-        },
-        v_num,
-        vm::vm::{DeserializeFrom, Runtime},
-    };
-
-    use super::*;
+    use crate::{test_extract_variable, test_statements};
 
     #[test]
-    fn valid_operation_u128() {
-        eval_and_compare!(r##"400u128 + 20u128"##, v_num!(U128, 420), U128);
-        eval_and_compare!(
-            r##"400u128 - 20u128"##,
-            Primitive::Number(Number::U128(400 - 20)),
-            U128
-        );
-        eval_and_compare!(
-            r##"400u128 * 20u128"##,
-            Primitive::Number(Number::U128(400 * 20)),
-            U128
-        );
-        eval_and_compare!(
-            r##"400u128 / 20u128"##,
-            Primitive::Number(Number::U128(400 / 20)),
-            U128
-        );
-        eval_and_compare!(
-            r##"400u128 % 20u128"##,
-            Primitive::Number(Number::U128(400 % 20)),
-            U128
-        );
-        eval_and_compare!(
-            r##"400u128 << 20u128"##,
-            Primitive::Number(Number::U128(400u128 << 20u128)),
-            U128
-        );
-        eval_and_compare!(
-            r##"400u128 >> 20u128"##,
-            Primitive::Number(Number::U128(400u128 >> 20u128)),
-            U128
-        );
-        eval_and_compare!(
-            r##"428u128 & 428u128"##,
-            Primitive::Number(Number::U128(428u128 & 428u128)),
-            U128
-        );
-        eval_and_compare!(
-            r##"400u128 | 420u128"##,
-            Primitive::Number(Number::U128(400u128 | 420u128)),
-            U128
-        );
-        eval_and_compare!(
-            r##"400u128 ^ 420u128"##,
-            Primitive::Number(Number::U128(400u128 ^ 420u128)),
-            U128
-        );
-        eval_and_compare!(r##"400u128 as u64"##, v_num!(U64, 400), U64);
+    fn valid_addition() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
-        eval_and_compare_bool!(r##"20u128 > 2u128"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u128 > 20u128"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u128 >= 2u128"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u128 >= 20u128"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"2u128 <= 20u128"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u128 <= 2u128"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u128 > 2u128"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u128 > 20u128"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u128 == 20u128"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u128 == 2u128"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u128 != 2u128"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u128 != 20u128"##, Primitive::Bool(false));
-    }
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1 + 3);
+            let res = test_extract_variable::<u64>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2 + 3);
+            let res = test_extract_variable::<u32>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3 + 3);
+            let res = test_extract_variable::<u16>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4 + 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5 + 3);
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6 + 3);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7 + 3);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8 + 3);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9 + 3);
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 + 3);
+            true
+        }
 
-    #[test]
-    fn valid_cast() {
-        eval_and_compare!(r##"126u8 as u16"##, v_num!(U16, 126), U16);
-        eval_and_compare!(r##"126u8 as u32"##, v_num!(U32, 126), U32);
-        eval_and_compare!(r##"126u8 as u64"##, v_num!(U64, 126), U64);
-        eval_and_compare!(r##"126u8 as u128"##, v_num!(U128, 126), U128);
-        eval_and_compare!(r##"126u16 as u16"##, v_num!(U16, 126), U16);
-        eval_and_compare!(r##"126u16 as u32"##, v_num!(U32, 126), U32);
-        eval_and_compare!(r##"126u16 as u64"##, v_num!(U64, 126), U64);
-        eval_and_compare!(r##"126u16 as u128"##, v_num!(U128, 126), U128);
-        eval_and_compare!(r##"126u32 as u16"##, v_num!(U16, 126), U16);
-        eval_and_compare!(r##"126u32 as u32"##, v_num!(U32, 126), U32);
-        eval_and_compare!(r##"126u32 as u64"##, v_num!(U64, 126), U64);
-        eval_and_compare!(r##"126u32 as u128"##, v_num!(U128, 126), U128);
-        eval_and_compare!(r##"126u64 as u16"##, v_num!(U16, 126), U16);
-        eval_and_compare!(r##"126u64 as u32"##, v_num!(U32, 126), U32);
-        eval_and_compare!(r##"126u64 as u64"##, v_num!(U64, 126), U64);
-        eval_and_compare!(r##"126u64 as u128"##, v_num!(U128, 126), U128);
-        eval_and_compare!(r##"126u128 as u16"##, v_num!(U16, 126), U16);
-        eval_and_compare!(r##"126u128 as u32"##, v_num!(U32, 126), U32);
-        eval_and_compare!(r##"126u128 as u64"##, v_num!(U64, 126), U64);
-        eval_and_compare!(r##"126u128 as u128"##, v_num!(U128, 126), U128);
-    }
-
-    #[test]
-    fn valid_operation_u64() {
-        eval_and_compare!(r##"400 + 20"##, v_num!(U64, 420), U64);
-        eval_and_compare!(
-            r##"400 - 20"##,
-            Primitive::Number(Number::U64(400 - 20)),
-            U64
-        );
-        eval_and_compare!(
-            r##"400 * 20"##,
-            Primitive::Number(Number::U64(400 * 20)),
-            U64
-        );
-        eval_and_compare!(
-            r##"400 / 20"##,
-            Primitive::Number(Number::U64(400 / 20)),
-            U64
-        );
-        eval_and_compare!(
-            r##"400 % 20"##,
-            Primitive::Number(Number::U64(400 % 20)),
-            U64
-        );
-        eval_and_compare!(
-            r##"400u64 << 20u64"##,
-            Primitive::Number(Number::U64(400u64 << 20u64)),
-            U64
-        );
-        eval_and_compare!(
-            r##"400u64 >> 20u64"##,
-            Primitive::Number(Number::U64(400u64 >> 20u64)),
-            U64
-        );
-        eval_and_compare!(
-            r##"428u64 & 428u64"##,
-            Primitive::Number(Number::U64(428u64 & 428u64)),
-            U64
-        );
-        eval_and_compare!(
-            r##"400u64 | 420u64"##,
-            Primitive::Number(Number::U64(400u64 | 420u64)),
-            U64
-        );
-        eval_and_compare!(
-            r##"400u64 ^ 420u64"##,
-            Primitive::Number(Number::U64(400u64 ^ 420u64)),
-            U64
-        );
-        eval_and_compare_bool!(r##"20u64 > 2u64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u64 > 20u64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u64 >= 2u64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u64 >= 20u64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"2u64 <= 20u64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u64 <= 2u64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u64 > 2u64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u64 > 20u64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u64 == 20u64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u64 == 2u64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u64 != 2u64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u64 != 20u64"##, Primitive::Bool(false));
-    }
-
-    #[test]
-    fn valid_operation_u32() {
-        eval_and_compare!(r##"400u32 + 20u32"##, v_num!(U32, 420), U32);
-        eval_and_compare!(
-            r##"400u32 - 20u32"##,
-            Primitive::Number(Number::U32(400 - 20)),
-            U32
-        );
-        eval_and_compare!(
-            r##"400u32 * 20u32"##,
-            Primitive::Number(Number::U32(400 * 20)),
-            U32
-        );
-        eval_and_compare!(
-            r##"400u32 / 20u32"##,
-            Primitive::Number(Number::U32(400 / 20)),
-            U32
-        );
-        eval_and_compare!(
-            r##"400u32 % 20u32"##,
-            Primitive::Number(Number::U32(400 % 20)),
-            U32
-        );
-        eval_and_compare!(
-            r##"400u32 << 20u32"##,
-            Primitive::Number(Number::U32(400u32 << 20u32)),
-            U32
-        );
-        eval_and_compare!(
-            r##"400u32 >> 20u32"##,
-            Primitive::Number(Number::U32(400u32 >> 20u32)),
-            U32
-        );
-        eval_and_compare!(
-            r##"428u32 & 428u32"##,
-            Primitive::Number(Number::U32(428u32 & 428u32)),
-            U32
-        );
-        eval_and_compare!(
-            r##"400u32 | 420u32"##,
-            Primitive::Number(Number::U32(400u32 | 420u32)),
-            U32
-        );
-        eval_and_compare!(
-            r##"400u32 ^ 420u32"##,
-            Primitive::Number(Number::U32(400u32 ^ 420u32)),
-            U32
-        );
-        eval_and_compare_bool!(r##"20u32 > 2u32"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u32 > 20u32"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u32 >= 2u32"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u32 >= 20u32"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"2u32 <= 20u32"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u32 <= 2u32"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u32 > 2u32"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u32 > 20u32"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u32 == 20u32"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u32 == 2u32"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u32 != 2u32"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u32 != 20u32"##, Primitive::Bool(false));
-    }
-    #[test]
-    fn valid_operation_u16() {
-        eval_and_compare!(r##"400u16 + 20u16"##, v_num!(U16, 420), U16);
-        eval_and_compare!(
-            r##"400u16 - 20u16"##,
-            Primitive::Number(Number::U16(400 - 20)),
-            U16
-        );
-        eval_and_compare!(
-            r##"400u16 * 20u16"##,
-            Primitive::Number(Number::U16(400 * 20)),
-            U16
-        );
-        eval_and_compare!(
-            r##"400u16 / 20u16"##,
-            Primitive::Number(Number::U16(400 / 20)),
-            U16
-        );
-        eval_and_compare!(
-            r##"400u16 % 20u16"##,
-            Primitive::Number(Number::U16(400 % 20)),
-            U16
-        );
-        eval_and_compare!(
-            r##"400u16 << 2u16"##,
-            Primitive::Number(Number::U16(400u16 << 2u16)),
-            U16
-        );
-        eval_and_compare!(
-            r##"400u16 >> 2u16"##,
-            Primitive::Number(Number::U16(400u16 >> 2u16)),
-            U16
-        );
-        eval_and_compare!(
-            r##"428u16 & 428u16"##,
-            Primitive::Number(Number::U16(428u16 & 428u16)),
-            U16
-        );
-        eval_and_compare!(
-            r##"400u16 | 420u16"##,
-            Primitive::Number(Number::U16(400u16 | 420u16)),
-            U16
-        );
-        eval_and_compare!(
-            r##"400u16 ^ 420u16"##,
-            Primitive::Number(Number::U16(400u16 ^ 420u16)),
-            U16
-        );
-        eval_and_compare_bool!(r##"20u16 > 2u16"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u16 > 20u16"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u16 >= 2u16"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u16 >= 20u16"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"2u16 <= 20u16"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u16 <= 2u16"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u16 > 2u16"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u16 > 20u16"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u16 == 20u16"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u16 == 2u16"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u16 != 2u16"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u16 != 20u16"##, Primitive::Bool(false));
-    }
-    #[test]
-    fn valid_operation_u8() {
-        eval_and_compare!(r##"100u8 + 20u8"##, v_num!(U8, 120), U8);
-        eval_and_compare!(r##"50u8 - 2u8"##, Primitive::Number(Number::U8(50 - 2)), U8);
-        eval_and_compare!(r##"50u8 * 2u8"##, Primitive::Number(Number::U8(50 * 2)), U8);
-        eval_and_compare!(r##"50u8 / 2u8"##, Primitive::Number(Number::U8(50 / 2)), U8);
-        eval_and_compare!(r##"50u8 % 2u8"##, Primitive::Number(Number::U8(50 % 2)), U8);
-        eval_and_compare!(
-            r##"40u8 << 2u8"##,
-            Primitive::Number(Number::U8(40u8 << 2u8)),
-            U8
-        );
-        eval_and_compare!(
-            r##"40u8 >> 2u8"##,
-            Primitive::Number(Number::U8(40u8 >> 2u8)),
-            U8
-        );
-        eval_and_compare!(
-            r##"48u8 & 48u8"##,
-            Primitive::Number(Number::U8(48u8 & 48u8)),
-            U8
-        );
-        eval_and_compare!(
-            r##"40u8 | 42u8"##,
-            Primitive::Number(Number::U8(40u8 | 42u8)),
-            U8
-        );
-        eval_and_compare!(
-            r##"40u8 ^ 42u8"##,
-            Primitive::Number(Number::U8(40u8 ^ 42u8)),
-            U8
-        );
-        eval_and_compare_bool!(r##"20u8 > 2u8"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u8 > 20u8"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u8 >= 2u8"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u8 >= 20u8"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"2u8 <= 20u8"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u8 <= 2u8"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u8 > 2u8"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2u8 > 20u8"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u8 == 20u8"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u8 == 2u8"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20u8 != 2u8"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20u8 != 20u8"##, Primitive::Bool(false));
-    }
-
-    #[test]
-    fn valid_operation_i128() {
-        eval_and_compare!(r##"400i128 + 20i128"##, v_num!(I128, 420), I128);
-        eval_and_compare!(
-            r##"400i128 - 800i128"##,
-            Primitive::Number(Number::I128(400 - 800)),
-            I128
-        );
-        eval_and_compare!(
-            r##"400i128 * 5i128"##,
-            Primitive::Number(Number::I128(400 * 5)),
-            I128
-        );
-        eval_and_compare!(
-            r##"400i128 / 2i128"##,
-            Primitive::Number(Number::I128(400 / 2)),
-            I128
-        );
-        eval_and_compare!(
-            r##"400i128 % 2i128"##,
-            Primitive::Number(Number::I128(400 % 2)),
-            I128
-        );
-        eval_and_compare!(r##"-20i128"##, Primitive::Number(Number::I128(-20)), I128);
-        eval_and_compare!(
-            r##"400i128 << 20i128"##,
-            Primitive::Number(Number::I128(400i128 << 20i128)),
-            I128
-        );
-        eval_and_compare!(
-            r##"400i128 >> 20i128"##,
-            Primitive::Number(Number::I128(400i128 >> 20i128)),
-            I128
-        );
-        eval_and_compare!(
-            r##"428i128 & 428i128"##,
-            Primitive::Number(Number::I128(428i128 & 428i128)),
-            I128
-        );
-        eval_and_compare!(
-            r##"400i128 | 420i128"##,
-            Primitive::Number(Number::I128(400i128 | 420i128)),
-            I128
-        );
-        eval_and_compare!(
-            r##"400i128 ^ 420i128"##,
-            Primitive::Number(Number::I128(400i128 ^ 420i128)),
-            I128
-        );
-        eval_and_compare_bool!(r##"20i128 > 2i128"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i128 > 20i128"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i128 >= 2i128"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i128 >= 20i128"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"2i128 <= 20i128"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i128 <= 2i128"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i128 > 2i128"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i128 > 20i128"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i128 == 20i128"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i128 == 2i128"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i128 != 2i128"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i128 != 20i128"##, Primitive::Bool(false));
-    }
-
-    #[test]
-    fn valid_operation_i64() {
-        eval_and_compare!(r##"400i64 + 20i64"##, v_num!(I64, 420), I64);
-        eval_and_compare!(
-            r##"400i64 - 800i64"##,
-            Primitive::Number(Number::I64(400 - 800)),
-            I64
-        );
-        eval_and_compare!(
-            r##"400i64 * 5i64"##,
-            Primitive::Number(Number::I64(400 * 5)),
-            I64
-        );
-        eval_and_compare!(
-            r##"400i64 / 2i64"##,
-            Primitive::Number(Number::I64(400 / 2)),
-            I64
-        );
-        eval_and_compare!(
-            r##"400i64 % 2i64"##,
-            Primitive::Number(Number::I64(400 % 2)),
-            I64
-        );
-        eval_and_compare!(r##"-20i64"##, Primitive::Number(Number::I64(-20)), I64);
-        eval_and_compare!(r##"-20"##, Primitive::Number(Number::I64(-20)), I64);
-        eval_and_compare!(
-            r##"400i64 << 20i64"##,
-            Primitive::Number(Number::I64(400i64 << 20i64)),
-            I64
-        );
-        eval_and_compare!(
-            r##"400i64 >> 20i64"##,
-            Primitive::Number(Number::I64(400i64 >> 20i64)),
-            I64
-        );
-        eval_and_compare!(
-            r##"428i64 & 428i64"##,
-            Primitive::Number(Number::I64(428i64 & 428i64)),
-            I64
-        );
-        eval_and_compare!(
-            r##"400i64 | 420i64"##,
-            Primitive::Number(Number::I64(400i64 | 420i64)),
-            I64
-        );
-        eval_and_compare!(
-            r##"400i64 ^ 420i64"##,
-            Primitive::Number(Number::I64(400i64 ^ 420i64)),
-            I64
-        );
-        eval_and_compare_bool!(r##"20i64 > 2i64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i64 > 20i64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i64 >= 2i64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i64 >= 20i64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"2i64 <= 20i64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i64 <= 2i64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i64 > 2i64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i64 > 20i64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i64 == 20i64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i64 == 2i64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i64 != 2i64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i64 != 20i64"##, Primitive::Bool(false));
-    }
-    #[test]
-    fn valid_operation_i32() {
-        eval_and_compare!(r##"400i32 + 20i32"##, v_num!(I32, 420), I32);
-        eval_and_compare!(
-            r##"400i32 - 800i32"##,
-            Primitive::Number(Number::I32(400 - 800)),
-            I32
-        );
-        eval_and_compare!(
-            r##"400i32 * 5i32"##,
-            Primitive::Number(Number::I32(400 * 5)),
-            I32
-        );
-        eval_and_compare!(
-            r##"400i32 / 2i32"##,
-            Primitive::Number(Number::I32(400 / 2)),
-            I32
-        );
-        eval_and_compare!(
-            r##"400i32 % 2i32"##,
-            Primitive::Number(Number::I32(400 % 2)),
-            I32
-        );
-        eval_and_compare!(r##"-20i32"##, Primitive::Number(Number::I32(-20)), I32);
-        eval_and_compare!(
-            r##"400i32 << 20i32"##,
-            Primitive::Number(Number::I32(400i32 << 20i32)),
-            I32
-        );
-        eval_and_compare!(
-            r##"400i32 >> 20i32"##,
-            Primitive::Number(Number::I32(400i32 >> 20i32)),
-            I32
-        );
-        eval_and_compare!(
-            r##"428i32 & 428i32"##,
-            Primitive::Number(Number::I32(428i32 & 428i32)),
-            I32
-        );
-        eval_and_compare!(
-            r##"400i32 | 420i32"##,
-            Primitive::Number(Number::I32(400i32 | 420i32)),
-            I32
-        );
-        eval_and_compare!(
-            r##"400i32 ^ 420i32"##,
-            Primitive::Number(Number::I32(400i32 ^ 420i32)),
-            I32
-        );
-        eval_and_compare_bool!(r##"20i32 > 2i32"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i32 > 20i32"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i32 >= 2i32"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i32 >= 20i32"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"2i32 <= 20i32"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i32 <= 2i32"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i32 > 2i32"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i32 > 20i32"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i32 == 20i32"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i32 == 2i32"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i32 != 2i32"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i32 != 20i32"##, Primitive::Bool(false));
-    }
-    #[test]
-    fn valid_operation_i16() {
-        eval_and_compare!(r##"400i16 + 20i16"##, v_num!(I16, 420), I16);
-        eval_and_compare!(
-            r##"400i16 - 800i16"##,
-            Primitive::Number(Number::I16(400 - 800)),
-            I16
-        );
-        eval_and_compare!(
-            r##"400i16 * 5i16"##,
-            Primitive::Number(Number::I16(400 * 5)),
-            I16
-        );
-        eval_and_compare!(
-            r##"400i16 / 2i16"##,
-            Primitive::Number(Number::I16(400 / 2)),
-            I16
-        );
-        eval_and_compare!(
-            r##"400i16 % 2i16"##,
-            Primitive::Number(Number::I16(400 % 2)),
-            I16
-        );
-        eval_and_compare!(r##"-20i16"##, Primitive::Number(Number::I16(-20)), I16);
-        eval_and_compare!(
-            r##"400i16 << 2i16"##,
-            Primitive::Number(Number::I16(400i16 << 2i16)),
-            I16
-        );
-        eval_and_compare!(
-            r##"400i16 >> 2i16"##,
-            Primitive::Number(Number::I16(400i16 >> 2i16)),
-            I16
-        );
-        eval_and_compare!(
-            r##"428i16 & 428i16"##,
-            Primitive::Number(Number::I16(428i16 & 428i16)),
-            I16
-        );
-        eval_and_compare!(
-            r##"400i16 | 420i16"##,
-            Primitive::Number(Number::I16(400i16 | 420i16)),
-            I16
-        );
-        eval_and_compare!(
-            r##"400i16 ^ 420i16"##,
-            Primitive::Number(Number::I16(400i16 ^ 420i16)),
-            I16
-        );
-        eval_and_compare_bool!(r##"20i16 > 2i16"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i16 > 20i16"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i16 >= 2i16"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i16 >= 20i16"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"2i16 <= 20i16"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i16 <= 2i16"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i16 > 2i16"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i16 > 20i16"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i16 == 20i16"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i16 == 2i16"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i16 != 2i16"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i16 != 20i16"##, Primitive::Bool(false));
-    }
-    #[test]
-    fn valid_operation_i8() {
-        eval_and_compare!(r##"100i8 + 20i8"##, v_num!(I8, 120), I8);
-        eval_and_compare!(
-            r##"20i8 - 10i8"##,
-            Primitive::Number(Number::I8(20 - 10)),
-            I8
-        );
-        eval_and_compare!(r##"20i8 * 5i8"##, Primitive::Number(Number::I8(20 * 5)), I8);
-        eval_and_compare!(r##"20i8 / 2i8"##, Primitive::Number(Number::I8(20 / 2)), I8);
-        eval_and_compare!(r##"20i8 % 2i8"##, Primitive::Number(Number::I8(20 % 2)), I8);
-        eval_and_compare!(r##"-20i8"##, Primitive::Number(Number::I8(-20)), I8);
-        eval_and_compare!(
-            r##"40i8 << 2i8"##,
-            Primitive::Number(Number::I8(40i8 << 2i8)),
-            I8
-        );
-        eval_and_compare!(
-            r##"40i8 >> 2i8"##,
-            Primitive::Number(Number::I8(40i8 >> 2i8)),
-            I8
-        );
-        eval_and_compare!(
-            r##"48i8 & 48i8"##,
-            Primitive::Number(Number::I8(48i8 & 48i8)),
-            I8
-        );
-        eval_and_compare!(
-            r##"40i8 | 42i8"##,
-            Primitive::Number(Number::I8(40i8 | 42i8)),
-            I8
-        );
-        eval_and_compare!(
-            r##"40i8 ^ 42i8"##,
-            Primitive::Number(Number::I8(40i8 ^ 42i8)),
-            I8
-        );
-        eval_and_compare_bool!(r##"20i8 > 2i8"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i8 > 20i8"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i8 >= 2i8"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i8 >= 20i8"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"2i8 <= 20i8"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i8 <= 2i8"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i8 > 2i8"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2i8 > 20i8"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i8 == 20i8"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i8 == 2i8"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20i8 != 2i8"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20i8 != 20i8"##, Primitive::Bool(false));
-    }
-    #[test]
-    fn valid_operation_f64() {
-        eval_and_compare!(
-            r##"10.5 + 20.2"##,
-            Primitive::Number(Number::F64(10.5 + 20.2)),
-            F64
-        );
-        eval_and_compare!(
-            r##"10.5 - 20.2"##,
-            Primitive::Number(Number::F64(10.5 - 20.2)),
-            F64
-        );
-        eval_and_compare!(
-            r##"10.5 * 20.2"##,
-            Primitive::Number(Number::F64(10.5 * 20.2)),
-            F64
-        );
-        eval_and_compare!(
-            r##"10.5 / 20.2"##,
-            Primitive::Number(Number::F64(10.5 / 20.2)),
-            F64
-        );
-        eval_and_compare!(r##"-20.0"##, Primitive::Number(Number::F64(-20.0)), F64);
-        eval_and_compare_bool!(r##"20f64 > 2f64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2f64 > 20f64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20f64 >= 2f64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2f64 >= 20f64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"2f64 <= 20f64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20f64 <= 2f64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20f64 > 2f64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"2f64 > 20f64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20f64 == 20f64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20f64 == 2f64"##, Primitive::Bool(false));
-        eval_and_compare_bool!(r##"20f64 != 2f64"##, Primitive::Bool(true));
-        eval_and_compare_bool!(r##"20f64 != 20f64"##, Primitive::Bool(false));
-    }
-    #[test]
-    fn valid_addition_string() {
-        let mut expr = Expression::parse(
+        test_statements(
             r##"
-           "Hello " + "World"
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = expr
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None)
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        expr.gencode(&scope, &mut instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        // Execute the instructions.
-
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-
-        let result: StrSlice = <StrSliceType as DeserializeFrom>::deserialize_from(
-            &StrSliceType {
-                size: "Hello ".chars().count() * 4 + "world".chars().count() * 4,
-            },
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-
-        assert_eq!(result.value, "Hello World")
+        
+        let var_u128 = 1u128 + 3u128;
+        let var_u64 = 2 + 3u64;
+        let var_u32 = 3 + 3u32;
+        let var_u16 = 4u16 + 3u16;
+        let var_u8 = 5u8 + 3;
+        let var_i128 = 6i128 + 3;
+        let var_i64 = 7 + 3;
+        let var_i32 = 8i32 + 3i32;
+        let var_i16 : i16 = 9 + 3;
+        let var_i8 : i8 = 10i8 + 3;
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
     }
 
     #[test]
-    fn valid_addition_string_with_padding() {
-        let mut statement = Statement::parse(
+    fn valid_substraction() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 - 3);
+            let res = test_extract_variable::<u64>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 20 - 3);
+            let res = test_extract_variable::<u32>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3 - 3);
+            let res = test_extract_variable::<u16>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4 - 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5 - 3);
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6 - 3);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7 - 3);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8 - 3);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9 - 3);
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 - 3);
+            true
+        }
+
+        test_statements(
             r##"
-            let res = {
-                let hello : str<10> = "Hello ";
-                hello[8] = 'b';
-                hello[7] = 'a';
-                let world : str<10> = "World";
-                return hello + world;
-            };
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-        let data = compile_statement!(statement);
+        
+        let var_u128 = 10u128 - 3u128;
+        let var_u64 = 20 - 3u64;
+        let var_u32 = 3 - 3u32;
+        let var_u16 = 4u16 - 3u16;
+        let var_u8 = 5u8 - 3;
+        let var_i128 = 6i128 - 3;
+        let var_i64 = 7 - 3;
+        let var_i32 = 8i32 - 3i32;
+        let var_i16 : i16 = 9 - 3;
+        let var_i8 : i8 = 10i8 - 3;
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 
-        let result: StrSlice = <StrSliceType as DeserializeFrom>::deserialize_from(
-            &StrSliceType {
-                size: "Hello ".chars().count() * 4 + "world".chars().count() * 4,
-            },
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+    #[test]
+    fn valid_multiplaction() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
 
-        assert_eq!(result.value, "Hello \0ab\0World\0\0\0\0\0")
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1 * 3);
+            let res = test_extract_variable::<u64>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2 * 3);
+            let res = test_extract_variable::<u32>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3 * 3);
+            let res = test_extract_variable::<u16>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4 * 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5 * 3);
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6 * 3);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7 * 3);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8 * 3);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9 * 3);
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 * 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_u128 = 1u128 * 3u128;
+        let var_u64 = 2 * 3u64;
+        let var_u32 = 3 * 3u32;
+        let var_u16 = 4u16 * 3u16;
+        let var_u8 = 5u8 * 3;
+        let var_i128 = 6i128 * 3;
+        let var_i64 = 7 * 3;
+        let var_i32 = 8i32 * 3i32;
+        let var_i16 : i16 = 9 * 3;
+        let var_i8 : i8 = 10i8 * 3;
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_division() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 / 3);
+            let res = test_extract_variable::<u64>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 20 / 3);
+            let res = test_extract_variable::<u32>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3 / 3);
+            let res = test_extract_variable::<u16>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4 / 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5 / 3);
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6 / 3);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7 / 3);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8 / 3);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9 / 3);
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 / 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_u128 = 10u128 / 3u128;
+        let var_u64 = 20 / 3u64;
+        let var_u32 = 3 / 3u32;
+        let var_u16 = 4u16 / 3u16;
+        let var_u8 = 5u8 / 3;
+        let var_i128 = 6i128 / 3;
+        let var_i64 = 7 / 3;
+        let var_i32 = 8i32 / 3i32;
+        let var_i16 : i16 = 9 / 3;
+        let var_i8 : i8 = 10i8 / 3;
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_shift() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1 >> 3);
+            let res = test_extract_variable::<u64>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2 << 3);
+            let res = test_extract_variable::<u32>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3 >> 3);
+            let res = test_extract_variable::<u16>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4 << 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5 >> 3);
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6 << 3);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7 >> 3);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8 << 3);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9 >> 3);
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 << 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_u128 = 1u128 >> 3u128;
+        let var_u64 = 2 << 3u64;
+        let var_u32 = 3 >> 3u32;
+        let var_u16 = 4u16 << 3u16;
+        let var_u8 = 5u8 >> 3;
+        let var_i128 = 6i128 << 3;
+        let var_i64 = 7 >> 3;
+        let var_i32 = 8i32 << 3i32;
+        let var_i16 : i16 = 9 >> 3;
+        let var_i8 : i8 = 10i8 << 3;
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_band_bor_bxor() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1 & 3);
+            let res = test_extract_variable::<u64>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2 | 3);
+            let res = test_extract_variable::<u32>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3 ^ 3);
+            let res = test_extract_variable::<u16>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4 | 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5 & 3);
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6 ^ 3);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7 & 3);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8 | 3);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9 ^ 3);
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 | 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_u128 = 1u128 & 3u128;
+        let var_u64 = 2 | 3u64;
+        let var_u32 = 3 ^ 3u32;
+        let var_u16 = 4u16 | 3u16;
+        let var_u8 = 5u8 & 3;
+        let var_i128 = 6i128 ^ 3;
+        let var_i64 = 7 & 3;
+        let var_i32 = 8i32 | 3i32;
+        let var_i16 : i16 = 9 ^ 3;
+        let var_i8 : i8 = 10i8 | 3;
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_cmp() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u8>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 1 == 3);
+            let res = test_extract_variable::<u8>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 2 != 3);
+            let res = test_extract_variable::<u8>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 3 > 3);
+            let res = test_extract_variable::<u8>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 4 >= 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 5 < 3);
+            let res = test_extract_variable::<u8>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 6 <= 3);
+            let res = test_extract_variable::<u8>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 7 == 3);
+            let res = test_extract_variable::<u8>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 8 != 3);
+            let res = test_extract_variable::<u8>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 9 < 3);
+            let res = test_extract_variable::<u8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 10 > 3);
+
+            let res = test_extract_variable::<u8>("var_and1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, true && false);
+            let res = test_extract_variable::<u8>("var_and2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, true && true);
+            let res = test_extract_variable::<u8>("var_and3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, false && false);
+            let res = test_extract_variable::<u8>("var_and4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, false && true);
+
+            let res = test_extract_variable::<u8>("var_or1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, true || false);
+            let res = test_extract_variable::<u8>("var_or2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, true || true);
+            let res = test_extract_variable::<u8>("var_or3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, false || false);
+            let res = test_extract_variable::<u8>("var_or4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, false || true);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_u128 = 1u128 == 3u128;
+        let var_u64 = 2 != 3u64;
+        let var_u32 = 3 > 3u32;
+        let var_u16 = 4u16 >= 3u16;
+        let var_u8 = 5u8 < 3;
+        let var_i128 = 6i128 <= 3;
+        let var_i64 = 7 == 3;
+        let var_i32 = 8i32 != 3i32;
+        let var_i16 = 9 < 3;
+        let var_i8 = 10i8 > 3;
+        let var_and1 = true and false;
+        let var_and2 = true and true;
+        let var_and3 = false and false;
+        let var_and4 = false and true;
+        let var_or1 = true or false;
+        let var_or2 = true or true;
+        let var_or3 = false or false;
+        let var_or4 = false or true;
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_neg() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, -5);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, -5);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1 + -5);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1 + (-5));
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, -5 + 1);
+
+            let res = test_extract_variable::<u8>("var_neg1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, !true);
+            let res = test_extract_variable::<u8>("var_neg2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, !false);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_i128 = -5i128;
+        let var_i64 = -5i64;
+        let var_i32 = 1i32 + -5 as i32;
+        let var_i16 = 1 + (-5i16);
+        let var_i8 = -5 + 1i8;
+
+        let var_neg1 = ! true;
+        let var_neg2 = !false;
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_tuple_access() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<i64>("y", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<i64>("z", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        let t = (1,2,3);
+        let x = t.0;
+        let y = t.1;
+        let z = t.2;
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_field_access() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<i64>("y", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<i64>("z", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        struct Point {
+            x :i64,
+            y :i64,
+            z :i64,
+        }
+
+        let t = Point{x:1,y:2,z:3};
+        let x = t.x;
+        let y = t.y;
+        let z = t.z;
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_slice_access() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<i64>("y", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<i64>("z", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let t = [1,2,3];
+        let x = t[0];
+        let y = t[1];
+        let z = t[2];
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_vec_access() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<i64>("y", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<i64>("z", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let t = vec[1,2,3];
+        let x = t[0];
+        let y = t[1];
+        let z = t[2];
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_complex_access() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<i64>("y", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<i64>("z", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        struct Point {
+            x :i64,
+            y :i64,
+            z :i64,
+        }
+
+        struct Test {
+            tuple : ([4]i64,i64,Point)
+        }
+
+        let t = Test{
+            tuple : ([1,2,3,4],2,Point{x:1,y:2,z:3})
+        };
+
+        let x = t.tuple.0[0];
+        let y = t.tuple.1;
+        let z = t.tuple.2.z;
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
     }
 }
