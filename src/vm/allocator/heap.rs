@@ -1,22 +1,14 @@
-use std::{
-    fmt::Debug,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
-};
+use std::fmt::Debug;
 
 use num_traits::ToBytes;
 
 use thiserror::Error;
 
-use super::{align, stack::STACK_SIZE};
+use super::{align, MemoryAddress};
 
 pub const ALIGNMENT: usize = 8;
 pub const HEAP_SIZE: usize = 2048;
 pub const HEAP_ADDRESS_SIZE: usize = 8;
-
-type Pointer = usize;
 
 #[derive(Debug, Clone, Error)]
 pub enum HeapError {
@@ -37,8 +29,8 @@ pub enum HeapError {
 #[derive(Clone)]
 pub struct Heap {
     heap: [u8; HEAP_SIZE],
-    first_freed_block_offset: Arc<AtomicUsize>,
-    allocated_size: Arc<AtomicUsize>,
+    first_freed_block_offset: usize,
+    allocated_size: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -177,7 +169,7 @@ impl Block {
     }
 
     fn data_size(&self) -> usize {
-        self.header.size as usize - 16
+        self.header.size as usize - (Heap::HEADER_SIZE * 2)
     }
 
     fn cut_to_allocate(self, data_slice: usize) -> Result<(Self, Option<Self>), HeapError> {
@@ -272,10 +264,11 @@ impl Block {
             return Err(HeapError::InvalidPointer);
         }
         let block_pointer = end - block_footer.size as usize;
-        Block::read(buffer, block_pointer)
+        Block::read(buffer, block_pointer + Heap::HEADER_SIZE)
     }
 
-    fn read(buffer: &[u8], offset: Pointer) -> Result<Self, HeapError> {
+    fn read(buffer: &[u8], offset: usize) -> Result<Self, HeapError> {
+        let offset = offset - Heap::HEADER_SIZE;
         if offset as u64 & 1u64 != 0 {
             return Err(HeapError::InvalidPointer);
         }
@@ -311,6 +304,7 @@ impl Block {
             return Err(HeapError::InvalidPointer);
         };
         let block_footer = BlockHeader::read(block_end);
+
         if block_header != block_footer {
             return Err(HeapError::InvalidPointer);
         }
@@ -333,11 +327,13 @@ impl Debug for Heap {
 }
 
 impl Heap {
+    pub const HEADER_SIZE: usize = 8;
+
     fn iter_blocks(&self) -> Result<Vec<Block>, HeapError> {
         let mut res = Vec::default();
         let mut offset = 0;
         while offset < HEAP_SIZE {
-            let block = Block::read(&self.heap, offset)?;
+            let block = Block::read(&self.heap, offset + Heap::HEADER_SIZE)?;
             offset = block.skip();
             res.push(block);
         }
@@ -366,7 +362,7 @@ impl Heap {
     }
 
     pub fn allocated_size(&self) -> usize {
-        self.allocated_size.as_ref().load(Ordering::Acquire)
+        self.allocated_size
     }
 
     fn best_fit(&self, aligned_size: usize) -> Result<Option<Block>, HeapError> {
@@ -374,12 +370,9 @@ impl Heap {
         let mut min_fitting_size = HEAP_SIZE as u64 + 1;
         // Iterating over free block;
 
-        let mut offset: usize = self
-            .first_freed_block_offset
-            .as_ref()
-            .load(Ordering::Acquire);
+        let mut offset: usize = self.first_freed_block_offset;
         while offset < HEAP_SIZE {
-            let block = Block::read(&self.heap, offset)?;
+            let block = Block::read(&self.heap, offset + Heap::HEADER_SIZE)?;
             if block.header.allocated {
                 offset = block.skip();
                 continue;
@@ -410,7 +403,7 @@ impl Heap {
         Ok(())
     }
 
-    pub fn alloc(&mut self, size: usize) -> Result<Pointer, HeapError> {
+    pub fn alloc(&mut self, size: usize) -> Result<MemoryAddress, HeapError> {
         let aligned_size = BlockData::fit(align(size));
         let Some(block) = self.best_fit(aligned_size)? else {
             return Err(HeapError::AllocationError);
@@ -426,19 +419,19 @@ impl Heap {
 
                 // update previous free block to account the change of next free block
                 if let Some(previous_free_block) = previous_free_block {
-                    let previous_free_block = Block::read(&self.heap, previous_free_block)?;
+                    let previous_free_block =
+                        Block::read(&self.heap, previous_free_block + Heap::HEADER_SIZE)?;
                     if !previous_free_block.header.allocated {
                         self.heap[previous_free_block.range_next().unwrap()]
                             .copy_from_slice(&remaining_block.pointer.to_be_bytes());
                     }
                 } else {
-                    self.first_freed_block_offset
-                        .as_ref()
-                        .store(remaining_block.pointer as usize, Ordering::Release);
+                    self.first_freed_block_offset = remaining_block.pointer as usize;
                 }
                 // update next free block to account the change of previous free block
                 if let Some(next_free_block) = next_free_block {
-                    let next_free_block = Block::read(&self.heap, next_free_block)?;
+                    let next_free_block =
+                        Block::read(&self.heap, next_free_block + Heap::HEADER_SIZE)?;
                     if !next_free_block.header.allocated {
                         self.heap[next_free_block.range_previous().unwrap()]
                             .copy_from_slice(&remaining_block.pointer.to_be_bytes());
@@ -448,10 +441,12 @@ impl Heap {
             None => {
                 // update previous free block to account the change of next free block
                 if let Some(previous_free_block) = previous_free_block {
-                    let previous_free_block = Block::read(&self.heap, previous_free_block)?;
+                    let previous_free_block =
+                        Block::read(&self.heap, previous_free_block + Heap::HEADER_SIZE)?;
 
                     if let Some(next_free_block) = next_free_block {
-                        let next_free_block = Block::read(&self.heap, next_free_block)?;
+                        let next_free_block =
+                            Block::read(&self.heap, next_free_block + Heap::HEADER_SIZE)?;
                         if !next_free_block.header.allocated
                             && !previous_free_block.header.allocated
                         {
@@ -461,17 +456,18 @@ impl Heap {
                     }
                 } else {
                     if let Some(next_free_block) = next_free_block {
-                        let next_free_block = Block::read(&self.heap, next_free_block)?;
-                        self.first_freed_block_offset
-                            .as_ref()
-                            .store(next_free_block.pointer, Ordering::Release);
+                        let next_free_block =
+                            Block::read(&self.heap, next_free_block + Heap::HEADER_SIZE)?;
+                        self.first_freed_block_offset = next_free_block.pointer;
                     }
                 }
                 // update next free block to account the change of previous free block
                 if let Some(next_free_block) = next_free_block {
-                    let next_free_block = Block::read(&self.heap, next_free_block)?;
+                    let next_free_block =
+                        Block::read(&self.heap, next_free_block + Heap::HEADER_SIZE)?;
                     if let Some(previous_free_block) = previous_free_block {
-                        let previous_free_block = Block::read(&self.heap, previous_free_block)?;
+                        let previous_free_block =
+                            Block::read(&self.heap, previous_free_block + Heap::HEADER_SIZE)?;
                         if !next_free_block.header.allocated
                             && !previous_free_block.header.allocated
                         {
@@ -483,35 +479,37 @@ impl Heap {
             }
         }
 
-        let address = block.pointer + STACK_SIZE;
-        self.allocated_size
-            .as_ref()
-            .fetch_add(aligned_size, Ordering::AcqRel);
-        Ok(address)
+        let address = block.pointer + Heap::HEADER_SIZE;
+        self.allocated_size += aligned_size;
+        Ok(MemoryAddress::Heap { offset: address })
     }
 
-    pub fn realloc(&mut self, address: Pointer, size: usize) -> Result<Pointer, HeapError> {
-        if address < STACK_SIZE {
-            return Err(HeapError::ReadError);
-        }
-        let address = address - STACK_SIZE;
-        let block = Block::read(&self.heap, address)?;
-        let prev_size = block.data_size();
-        let data = self.read(address + STACK_SIZE + 8, prev_size)?;
+    pub fn realloc(
+        &mut self,
+        address: MemoryAddress,
+        size: usize,
+    ) -> Result<MemoryAddress, HeapError> {
+        let MemoryAddress::Heap { offset } = address else {
+            return Err(HeapError::InvalidPointer);
+        };
 
-        let _ = self.free(address + STACK_SIZE)?;
+        let block = Block::read(&self.heap, offset)?;
+        let prev_size = block.data_size();
+        let data = self.read(address, prev_size)?;
+
+        let _ = self.free(address)?;
 
         let new_address = self.alloc(size)?;
-        let _ = self.write(new_address + 8, &data)?;
+
+        let _ = self.write(address, &data)?;
 
         Ok(new_address)
     }
 
-    pub fn free(&mut self, address: Pointer) -> Result<(), HeapError> {
-        if address < STACK_SIZE {
-            return Err(HeapError::ReadError);
-        }
-        let address = address - STACK_SIZE;
+    pub fn free(&mut self, address: MemoryAddress) -> Result<(), HeapError> {
+        let MemoryAddress::Heap { offset: address } = address else {
+            return Err(HeapError::InvalidPointer);
+        };
 
         let block = Block::read(&self.heap, address)?;
         if !block.header.allocated {
@@ -519,24 +517,19 @@ impl Heap {
         }
 
         let freed_size = block.data_size();
-
         let block = {
-            let borrowed_first_freed_block_offset = self
-                .first_freed_block_offset
-                .as_ref()
-                .load(Ordering::Acquire);
             let left_block = match block.peak_left() {
                 Some(range) => Block::from_footer(&self.heap, range).ok(),
                 None => None,
             };
 
-            let right_block = Block::read(&self.heap, block.skip()).ok();
+            let right_block = Block::read(&self.heap, block.skip() + Heap::HEADER_SIZE).ok();
 
             let coalesced_left_block = match left_block {
                 Some(left_block) => {
                     if left_block.header.allocated {
                         // search for a previous free block to store in the current block
-                        let mut offset = borrowed_first_freed_block_offset;
+                        let mut offset = self.first_freed_block_offset;
                         if offset > left_block.pointer {
                             // no free block before the current block therefore set the current block previous pointer to invalid pointer
                             Block {
@@ -556,9 +549,11 @@ impl Heap {
                             }
                         } else {
                             // Update the current block previous with the found free block pointer
-                            let mut searched_block = Block::read(&self.heap, offset)?;
+                            let mut searched_block =
+                                Block::read(&self.heap, offset + Heap::HEADER_SIZE)?;
                             while offset < left_block.pointer {
-                                searched_block = Block::read(&self.heap, offset)?;
+                                searched_block =
+                                    Block::read(&self.heap, offset + Heap::HEADER_SIZE)?;
                                 if searched_block.header.allocated {
                                     offset = block.skip();
                                 } else {
@@ -628,10 +623,13 @@ impl Heap {
                         if coalesced_left_block.next_free().is_some() {
                             coalesced_left_block
                         } else {
-                            let mut offset = borrowed_first_freed_block_offset;
+                            let mut offset = self.first_freed_block_offset;
                             if offset < coalesced_left_block.pointer {
                                 while offset < HEAP_SIZE {
-                                    let searched_block = Block::read(&self.heap.as_ref(), offset)?;
+                                    let searched_block = Block::read(
+                                        &self.heap.as_ref(),
+                                        offset + Heap::HEADER_SIZE,
+                                    )?;
                                     if searched_block.header.allocated {
                                         offset = block.skip();
                                     } else {
@@ -642,7 +640,7 @@ impl Heap {
                                     }
                                 }
                             }
-                            let next_pointer = Block::read(&self.heap, offset)
+                            let next_pointer = Block::read(&self.heap, offset + Heap::HEADER_SIZE)
                                 .ok()
                                 .map(|next_block| next_block.pointer);
                             // update coalesced_left_block next free pointer with searched_block pointer
@@ -681,37 +679,24 @@ impl Heap {
 
             // update previous free block to account the change of next free block
             if let Some(previous_free_block) = previous_free_block {
-                let previous_free_block = Block::read(&self.heap, previous_free_block)?;
+                let previous_free_block =
+                    Block::read(&self.heap, previous_free_block + Heap::HEADER_SIZE)?;
 
                 if !previous_free_block.header.allocated {
                     self.heap[previous_free_block.range_next().unwrap()]
                         .copy_from_slice(&block.pointer.to_be_bytes());
-                    if previous_free_block.pointer
-                        < self
-                            .first_freed_block_offset
-                            .as_ref()
-                            .load(Ordering::Acquire)
-                    {
-                        self.first_freed_block_offset
-                            .as_ref()
-                            .store(block.pointer, Ordering::Release);
+                    if previous_free_block.pointer < self.first_freed_block_offset {
+                        self.first_freed_block_offset = block.pointer;
                     }
                 }
             } else {
-                if block.pointer
-                    < self
-                        .first_freed_block_offset
-                        .as_ref()
-                        .load(Ordering::Acquire)
-                {
-                    self.first_freed_block_offset
-                        .as_ref()
-                        .store(block.pointer, Ordering::Release);
+                if block.pointer < self.first_freed_block_offset {
+                    self.first_freed_block_offset = block.pointer;
                 }
             }
             // update next free block to account the change of previous free block
             if let Some(next_free_block) = next_free_block {
-                let next_free_block = Block::read(&self.heap, next_free_block)?;
+                let next_free_block = Block::read(&self.heap, next_free_block + Heap::HEADER_SIZE)?;
                 if !next_free_block.header.allocated {
                     self.heap[next_free_block.range_previous().unwrap()]
                         .copy_from_slice(&block.pointer.to_be_bytes());
@@ -719,214 +704,42 @@ impl Heap {
             }
         }
 
-        self.allocated_size
-            .as_ref()
-            .fetch_sub(freed_size, Ordering::AcqRel);
-
+        self.allocated_size -= freed_size;
         Ok(())
     }
 
-    pub fn read(
-        &self,
-        address: Pointer,
-        /*offset: usize,*/ size: usize,
-    ) -> Result<Vec<u8>, HeapError> {
-        if address < STACK_SIZE {
-            return Err(HeapError::ReadError);
-        }
-        let address = address - STACK_SIZE;
-        // let block = {
-        //     let binding = self.heap.borrow();
-        //     let borrowed = binding.as_ref();
-        //     Block::read(borrowed, address)?
-        // };
-        // if !block.header.allocated {
-        //     return Err(HeapError::InvalidPointer);
-        // }
-        // if block.data_size() < size + offset {
-        //     return Err(HeapError::InvalidPointer);
-        // }
+    pub fn read_slice(&self, address: MemoryAddress, size: usize) -> Result<&[u8], HeapError> {
+        let MemoryAddress::Heap { offset: address } = address else {
+            return Err(HeapError::InvalidPointer);
+        };
+
         if address + size >= HEAP_SIZE {
             return Err(HeapError::ReadError);
         }
-        let res = {
-            // let data_range = block.range_data();
-            // match data_range {
-            //     Some(data_range) => {
-            //         let (start, end) = (data_range.start, data_range.end);
-            //         if end < start + offset {
-            //             None
-            //         } else {
-            //             let mut output = Vec::with_capacity(end - (start + offset));
-            //             output.extend_from_slice(&borrowed[start + offset..start + offset + size]);
-            //             Some(output)
-            //         }
-            //     }
-            //     None => None,
-            // }
+        Ok(&self.heap[address..address + size])
+    }
 
-            let mut output = Vec::with_capacity(size);
-            output.extend_from_slice(&self.heap[address..address + size]);
-            output
+    pub fn read(&self, address: MemoryAddress, size: usize) -> Result<Vec<u8>, HeapError> {
+        let MemoryAddress::Heap { offset: address } = address else {
+            return Err(HeapError::InvalidPointer);
         };
-        // let Some(res) = res else {
-        //     return Err(HeapError::InvalidPointer);
-        // };
-        Ok(res)
+
+        if address + size >= HEAP_SIZE {
+            return Err(HeapError::ReadError);
+        }
+
+        let mut output = Vec::with_capacity(size);
+        output.extend_from_slice(&self.heap[address..address + size]);
+        Ok(output)
     }
 
-    pub fn read_utf8(
-        &self,
-        address: Pointer,
-        idx: usize,
-        len: usize,
-    ) -> Result<([u8; 4], usize), HeapError> {
-        if address < STACK_SIZE {
-            return Err(HeapError::ReadError);
-        }
-        let address = address - STACK_SIZE;
-
-        if address >= HEAP_SIZE {
-            return Err(HeapError::ReadError);
-        }
-        let mut offset = 0;
-        let mut current_idx = 0;
-        let mut byte = self.heap[address + offset];
-
-        while current_idx < idx {
-            byte = self.heap[address + offset];
-            if offset >= len {
-                return Err(HeapError::ReadError);
-            }
-            match byte {
-                // 7-bit ASCII character (U+0000 to U+007F)
-                0x00..=0x7F => {
-                    offset += 1;
-                    current_idx += 1;
-                }
-                // Two-byte character (U+0080 to U+07FF)
-                0xC0..=0xDF => {
-                    if (address + offset) + 1 >= HEAP_SIZE {
-                        return Err(HeapError::ReadError);
-                    }
-                    let in_byte = self.heap[(address + offset) + 1];
-                    if (in_byte & 0xC0) != 0x80 {
-                        return Err(HeapError::ReadError);
-                    }
-                    offset += 2;
-                    current_idx += 1;
-                }
-                // Three-byte character (U+0800 to U+FFFF)
-                0xE0..=0xEF => {
-                    for i in 1..3 {
-                        if (address + offset) + i >= HEAP_SIZE {
-                            return Err(HeapError::ReadError);
-                        }
-                        let in_byte = self.heap[(address + offset) + i];
-                        if (in_byte & 0xC0) != 0x80 {
-                            return Err(HeapError::ReadError);
-                        }
-                    }
-                    offset += 3;
-                    current_idx += 1;
-                }
-                // Four-byte character (U+10000 to U+10FFFF)
-                0xF0..=0xF7 => {
-                    for i in 1..4 {
-                        if (address + offset) + i >= HEAP_SIZE {
-                            return Err(HeapError::ReadError);
-                        }
-                        let in_byte = self.heap[(address + offset) + i];
-                        if (in_byte & 0xC0) != 0x80 {
-                            return Err(HeapError::ReadError);
-                        }
-                    }
-                    offset += 4;
-                    current_idx += 1;
-                }
-                _ => {
-                    return Err(HeapError::ReadError);
-                }
-            }
-        }
-
-        if current_idx != idx {
-            return Err(HeapError::ReadError);
-        }
-
-        byte = self.heap[address + offset];
-        let mut bytes = [byte, 0u8, 0u8, 0u8];
-        let mut size = 1;
-        match byte {
-            // 7-bit ASCII character (U+0000 to U+007F)
-            0x00..=0x7F => {}
-            // Two-byte character (U+0080 to U+07FF)
-            0xC0..=0xDF => {
-                if (address + offset) + 1 >= HEAP_SIZE {
-                    return Err(HeapError::ReadError);
-                }
-                let in_byte = self.heap[(address + offset) + 1];
-                if (in_byte & 0xC0) != 0x80 {
-                    return Err(HeapError::ReadError);
-                }
-                bytes[1] = in_byte;
-                size = 2;
-            }
-            // Three-byte character (U+0800 to U+FFFF)
-            0xE0..=0xEF => {
-                for i in 1..3 {
-                    if (address + offset) + i >= HEAP_SIZE {
-                        return Err(HeapError::ReadError);
-                    }
-                    let in_byte = self.heap[(address + offset) + i];
-                    if (in_byte & 0xC0) != 0x80 {
-                        return Err(HeapError::ReadError);
-                    }
-                    bytes[i] = in_byte;
-                }
-                size = 3;
-            }
-            // Four-byte character (U+10000 to U+10FFFF)
-            0xF0..=0xF7 => {
-                for i in 1..4 {
-                    if (address + offset) + i >= HEAP_SIZE {
-                        return Err(HeapError::ReadError);
-                    }
-                    let in_byte = self.heap[(address + offset) + i];
-                    if (in_byte & 0xC0) != 0x80 {
-                        return Err(HeapError::ReadError);
-                    }
-                    bytes[i] = in_byte;
-                }
-                size = 4;
-            }
-            _ => {
-                return Err(HeapError::ReadError);
-            }
-        }
-
-        Ok((bytes, offset))
-    }
-
-    pub fn write(&mut self, address: Pointer, data: &[u8]) -> Result<(), HeapError> {
-        if address < STACK_SIZE {
-            return Err(HeapError::WriteError);
-        }
-        let address = address - STACK_SIZE;
+    pub fn write(&mut self, address: MemoryAddress, data: &[u8]) -> Result<(), HeapError> {
+        let MemoryAddress::Heap { offset: address } = address else {
+            return Err(HeapError::InvalidPointer);
+        };
         if address + data.len() > HEAP_SIZE {
             return Err(HeapError::WriteError);
         }
-        // let block = {
-        //     let binding = self.heap.borrow();
-        //     let borrowed = binding.as_ref();
-        //     Block::read(borrowed, address)?
-        // };
-        // if !block.header.allocated {
-        //     return Err(HeapError::InvalidPointer);
-        // }
-        // if block.data_size() < data.len() + offset {
-        //     return Err(HeapError::InvalidPointer);
-        // }
 
         self.heap[address..address + data.len()].copy_from_slice(data);
 
@@ -944,13 +757,18 @@ mod tests {
         let mut heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0 + STACK_SIZE);
+        assert_eq!(
+            address,
+            MemoryAddress::Heap {
+                offset: Heap::HEADER_SIZE
+            }
+        );
 
         let address = heap
             .alloc(64)
             .expect("The allocation should have succeeded");
 
-        assert_eq!(address, 32 + STACK_SIZE);
+        assert_eq!(address, MemoryAddress::Heap { offset: 32 + 8 });
     }
 
     #[test]
@@ -967,13 +785,18 @@ mod tests {
             }
         }
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0 + STACK_SIZE);
+        assert_eq!(
+            address,
+            MemoryAddress::Heap {
+                offset: Heap::HEADER_SIZE
+            }
+        );
     }
 
     #[test]
     fn valid_coalescing_left() {
         let mut heap = Heap::new();
-        let mut pointers = [0; 6];
+        let mut pointers = [MemoryAddress::Heap { offset: 0 }; 6];
         for i in 0..6 {
             let address = heap.alloc(8).expect("The allocation should have succeeded");
             pointers[i] = address;
@@ -985,13 +808,13 @@ mod tests {
         let address = heap
             .alloc(32)
             .expect("The allocation should have succeeded");
-        assert_eq!(address, 64 + STACK_SIZE);
+        assert_eq!(address, pointers[2]);
     }
 
     #[test]
     fn valid_coalescing_right() {
         let mut heap = Heap::new();
-        let mut pointers = [0; 6];
+        let mut pointers = [MemoryAddress::Heap { offset: 0 }; 6];
         for i in 0..6 {
             let address = heap.alloc(8).expect("The allocation should have succeeded");
             pointers[i] = address;
@@ -1004,13 +827,13 @@ mod tests {
         let address = heap
             .alloc(32)
             .expect("The allocation should have succeeded");
-        assert_eq!(address, 64 + STACK_SIZE);
+        assert_eq!(address, pointers[2]);
     }
 
     #[test]
     fn valid_coalescing_complex() {
         let mut heap = Heap::new();
-        let mut pointers = [0; 10];
+        let mut pointers = [MemoryAddress::Heap { offset: 0 }; 10];
         for i in 0..10 {
             let address = heap.alloc(8).expect("The allocation should have succeeded");
             pointers[i] = address;
@@ -1021,13 +844,13 @@ mod tests {
         let address = heap
             .alloc(200)
             .expect("The allocation should have succeeded");
-        assert_eq!(address, 160 + STACK_SIZE);
+        assert_eq!(address, pointers[5]);
     }
 
     #[test]
     fn robustness_coalescing_complex() {
         let mut heap = Heap::new();
-        let mut pointers = [0; HEAP_SIZE / 32];
+        let mut pointers = [MemoryAddress::Heap { offset: 0 }; HEAP_SIZE / 32];
         for i in 0..HEAP_SIZE / 32 {
             let address = heap.alloc(8).expect("The allocation should have succeeded");
             pointers[i] = address;
@@ -1049,11 +872,21 @@ mod tests {
         let mut heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0 + STACK_SIZE);
+        assert_eq!(
+            address,
+            MemoryAddress::Heap {
+                offset: Heap::HEADER_SIZE
+            }
+        );
 
         heap.free(address).expect("The free should have succeeded");
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0 + STACK_SIZE);
+        assert_eq!(
+            address,
+            MemoryAddress::Heap {
+                offset: Heap::HEADER_SIZE
+            }
+        );
     }
 
     #[test]
@@ -1069,7 +902,12 @@ mod tests {
         let address = heap
             .alloc(200)
             .expect("The allocation should have succeeded");
-        assert_eq!(address, 0 + STACK_SIZE);
+        assert_eq!(
+            address,
+            MemoryAddress::Heap {
+                offset: Heap::HEADER_SIZE
+            }
+        );
 
         let address = heap.alloc(HEAP_SIZE - 200);
         assert!(address.is_err());
@@ -1080,7 +918,12 @@ mod tests {
         let mut heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0 + STACK_SIZE);
+        assert_eq!(
+            address,
+            MemoryAddress::Heap {
+                offset: Heap::HEADER_SIZE,
+            }
+        );
 
         heap.free(address).expect("The free should have succeeded");
         let res = heap.free(address);
@@ -1092,7 +935,12 @@ mod tests {
         let mut heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0 + STACK_SIZE);
+        assert_eq!(
+            address,
+            MemoryAddress::Heap {
+                offset: Heap::HEADER_SIZE
+            }
+        );
         let res = heap.read(address, 6).expect("Read should have succeeded");
         assert_eq!(res.len(), 6)
     }
@@ -1118,7 +966,12 @@ mod tests {
         let mut heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0 + STACK_SIZE);
+        assert_eq!(
+            address,
+            MemoryAddress::Heap {
+                offset: Heap::HEADER_SIZE
+            }
+        );
         let data = vec![1u8; 6];
 
         heap.write(address, &data)

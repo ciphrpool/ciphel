@@ -1,10 +1,10 @@
-use std::sync::{Arc, RwLock};
-
 use crate::{
     ast::{
-        self,
-        expressions::{Atomic, Expression},
-        statements::{declaration::TypedVar, return_stat::Return, Statement},
+        expressions::{Atomic, CompletePath, Expression},
+        statements::{
+            block::{ClosureBlock, LambdaBlock},
+            declaration::TypedVar,
+        },
         types::NumberType,
         utils::{
             error::squash,
@@ -13,27 +13,27 @@ use crate::{
             numbers::{parse_float, parse_number},
             strings::{
                 parse_id,
-                string_parser::{parse_char, parse_string},
+                string_parser::{parse_char, parse_fstring, parse_string},
                 wst, wst_closed,
             },
         },
         TryParse,
     },
-    semantic::{scope::ClosureState, Metadata},
-    vm::{allocator::align, platform},
+    semantic::Metadata,
+    vm::{allocator::align, core},
 };
 use nom::{
     branch::alt,
     combinator::{cut, map, opt, value},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair},
-    Parser,
 };
-use nom_supreme::{final_parser::ExtractContext, ParserExt};
+use nom_supreme::ParserExt;
 
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, MultiData, Number, Primitive,
-    PtrAccess, Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
+    Address, Call, CallArgs, Closure, ClosureParam, Data, Enum, Format, FormatItem, Lambda,
+    LeftCall, Map, MultiData, Number, Primitive, Printf, PtrAccess, Slice, StrSlice, Struct, Tuple,
+    Union, VarCall, Variable, Vector,
 };
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
@@ -44,11 +44,15 @@ impl TryParse for Data {
                 map(Slice::parse, |value| Data::Slice(value)),
                 map(Vector::parse, |value| Data::Vec(value)),
                 map(Closure::parse, |value| Data::Closure(value)),
+                map(Lambda::parse, |value| Data::Lambda(value)),
                 map(Tuple::parse, |value| Data::Tuple(value)),
                 map(Address::parse, |value| Data::Address(value)),
                 map(PtrAccess::parse, |value| Data::PtrAccess(value)),
                 value(Data::Unit, wst_closed(lexem::UNIT)),
                 map(Map::parse, |value| Data::Map(value)),
+                map(Printf::parse, |value| Data::Printf(value)),
+                map(Format::parse, |value| Data::Format(value)),
+                map(Call::parse, |value| Data::Call(value)),
                 map(Struct::parse, |value| Data::Struct(value)),
                 map(Union::parse, |value| Data::Union(value)),
                 map(Enum::parse, |value| Data::Enum(value)),
@@ -67,13 +71,13 @@ impl TryParse for Variable {
      * Variable := ID
      */
     fn parse(input: Span) -> PResult<Self> {
-        let (remainder, id) = parse_id(input)?;
+        let (remainder, name) = parse_id(input)?;
         Ok((
             remainder,
             Variable {
-                id,
-                from_field: false,
+                name,
                 metadata: Metadata::default(),
+                state: None,
             },
         ))
     }
@@ -148,6 +152,8 @@ impl TryParse for Slice {
             ),
             |value| Slice {
                 value,
+                size: 0,
+                address: None,
                 metadata: Metadata::default(),
             },
         )(input)
@@ -164,7 +170,7 @@ impl TryParse for StrSlice {
     fn parse(input: Span) -> PResult<Self> {
         map(parse_string, |value| StrSlice {
             value,
-            padding: 0,
+            address: None,
             metadata: Metadata::default(),
         })(input)
     }
@@ -181,7 +187,7 @@ impl TryParse for Vector {
     fn parse(input: Span) -> PResult<Self> {
         map(
             preceded(
-                wst(platform::utils::lexem::VEC),
+                wst(core::lexem::VEC),
                 delimited(
                     wst(lexem::SQ_BRA_O),
                     cut(MultiData::parse).context("Invalid vector"),
@@ -232,46 +238,46 @@ impl TryParse for Closure {
         map(
             pair(
                 pair(
-                    opt(wst_closed(lexem::MOVE)),
+                    wst_closed(lexem::MOVE),
                     delimited(
                         wst(lexem::PAR_O),
                         separated_list0(wst(lexem::COMA), ClosureParam::parse),
                         wst(lexem::PAR_C),
                     ),
                 ),
-                preceded(wst(lexem::ARROW), cut(ExprScope::parse)).context("Invalid closure"),
+                preceded(wst(lexem::ARROW), cut(ClosureBlock::parse)).context("Invalid closure"),
             ),
-            |((state, params), scope)| Closure {
+            |((_, params), block)| Closure {
                 params,
-                scope,
-                closed: state.is_some(),
+                block,
+                repr_data: None,
+                name: None,
+                id: None,
                 metadata: Metadata::default(),
             },
         )(input)
     }
 }
 
-impl TryParse for ExprScope {
+impl TryParse for Lambda {
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(ast::statements::block::Block::parse, |value| {
-                ExprScope::Scope(value)
-            }),
-            map(Expression::parse, |value| {
-                ExprScope::Expr(ast::statements::block::Block {
-                    metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(Return::Expr {
-                        expr: Box::new(value),
-                        metadata: Metadata::default(),
-                    })],
-                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                    is_loop: Default::default(),
-
-                    caller: Default::default(),
-                    inner_scope: None,
-                })
-            }),
-        ))(input)
+        map(
+            pair(
+                delimited(
+                    wst(lexem::PAR_O),
+                    separated_list0(wst(lexem::COMA), ClosureParam::parse),
+                    wst(lexem::PAR_C),
+                ),
+                cut(preceded(wst(lexem::ARROW), cut(LambdaBlock::parse))).context("Invalid lambda"),
+            ),
+            |(params, block)| Lambda {
+                params,
+                block,
+                name: None,
+                id: None,
+                metadata: Metadata::default(),
+            },
+        )(input)
     }
 }
 
@@ -344,7 +350,7 @@ impl TryParse for Struct {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                parse_id,
+                CompletePath::parse,
                 delimited(
                     wst(lexem::BRA_O),
                     separated_list0(
@@ -354,8 +360,9 @@ impl TryParse for Struct {
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 ),
             ),
-            |(id, value)| Struct {
-                id,
+            |(CompletePath { path, name }, value)| Struct {
+                path,
+                id: name,
                 fields: value,
                 metadata: Metadata::default(),
             },
@@ -375,7 +382,7 @@ impl TryParse for Union {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                separated_pair(parse_id, wst(lexem::SEP), parse_id),
+                CompletePath::parse_segment,
                 delimited(
                     wst(lexem::BRA_O),
                     cut(separated_list0(
@@ -385,11 +392,28 @@ impl TryParse for Union {
                     cut(preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C))),
                 ),
             ),
-            |((typename, name), value)| Union {
-                variant: name,
-                typename,
-                fields: value,
-                metadata: Metadata::default(),
+            |(CompletePath { mut path, name }, value)| {
+                let typename = match &mut path {
+                    crate::ast::expressions::Path::Segment(vec) => match vec.pop() {
+                        Some(typename) => {
+                            if vec.len() == 0 {
+                                path = crate::ast::expressions::Path::Empty;
+                                typename
+                            } else {
+                                typename
+                            }
+                        }
+                        None => "".to_string(), // unreachable
+                    },
+                    crate::ast::expressions::Path::Empty => "".to_string(), // unreachable
+                };
+                Union {
+                    path,
+                    variant: name,
+                    typename,
+                    fields: value,
+                    metadata: Metadata::default(),
+                }
             },
         )(input)
     }
@@ -404,11 +428,31 @@ impl TryParse for Enum {
      */
     fn parse(input: Span) -> PResult<Self> {
         map(
-            separated_pair(parse_id, wst(lexem::SEP), parse_id),
-            |(typename, value)| Enum {
-                typename,
-                value,
-                metadata: Metadata::default(),
+            CompletePath::parse_segment,
+            |CompletePath {
+                 mut path,
+                 name: value,
+             }| {
+                let typename = match &mut path {
+                    crate::ast::expressions::Path::Segment(vec) => match vec.pop() {
+                        Some(typename) => {
+                            if vec.len() == 0 {
+                                path = crate::ast::expressions::Path::Empty;
+                                typename
+                            } else {
+                                typename
+                            }
+                        }
+                        None => "".to_string(), // unreachable
+                    },
+                    crate::ast::expressions::Path::Empty => "".to_string(), // unreachable
+                };
+                Enum {
+                    path,
+                    typename,
+                    value,
+                    metadata: Metadata::default(),
+                }
             },
         )(input)
     }
@@ -427,7 +471,7 @@ impl TryParse for Map {
     fn parse(input: Span) -> PResult<Self> {
         map(
             preceded(
-                wst(platform::utils::lexem::MAP),
+                wst(core::lexem::MAP),
                 delimited(
                     wst(lexem::BRA_O),
                     cut(separated_list1(
@@ -445,17 +489,139 @@ impl TryParse for Map {
     }
 }
 
+impl TryParse for CallArgs {
+    /*
+     * @desc Parse variable
+     *
+     * @grammar
+     * CallArgs := (( Expression, )*)
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            delimited(
+                wst(lexem::PAR_O),
+                separated_list0(wst(lexem::COMA), Expression::parse),
+                wst(lexem::PAR_C),
+            ),
+            |args| CallArgs { args, size: None },
+        )(input)
+    }
+}
+
+impl TryParse for Call {
+    /*
+     * @desc Parse variable
+     *
+     * @grammar
+     * Call := CompletePath (CallArgs)
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            pair(CompletePath::parse, CallArgs::parse),
+            |(path, args)| Call {
+                path: LeftCall::VarCall(VarCall {
+                    path,
+                    id: None,
+                    is_closure: false,
+                }),
+                args,
+                metadata: Metadata::default(),
+            },
+        )(input)
+    }
+}
+
+impl TryParse for Printf {
+    /*
+     * @desc Parse variable
+     *
+     * @grammar
+     * Printf := CompletePath (CallArgs)
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            pair(
+                preceded(
+                    opt(pair(wst_closed(core::lexem::CORE), wst(lexem::SEP))),
+                    preceded(
+                        opt(pair(wst_closed(core::lexem::IO), wst(lexem::SEP))),
+                        wst_closed(core::lexem::PRINTF),
+                    ),
+                ),
+                delimited(
+                    wst(lexem::PAR_O),
+                    parse_fstring::<Expression>,
+                    wst(lexem::PAR_C),
+                ),
+            ),
+            |(_, args)| Printf {
+                args: args
+                    .into_iter()
+                    .map(|item| match item {
+                        crate::ast::utils::strings::string_parser::FItem::Str(string) => {
+                            FormatItem::Str(string)
+                        }
+                        crate::ast::utils::strings::string_parser::FItem::Expr(expr) => {
+                            FormatItem::Expr(expr)
+                        }
+                    })
+                    .collect(),
+                metadata: Metadata::default(),
+            },
+        )(input)
+    }
+}
+
+impl TryParse for Format {
+    /*
+     * @desc Parse variable
+     *
+     * @grammar
+     * Format := CompletePath (CallArgs)
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            pair(
+                preceded(
+                    opt(pair(wst_closed(core::lexem::CORE), wst(lexem::SEP))),
+                    preceded(
+                        opt(pair(wst_closed(core::lexem::IO), wst(lexem::SEP))),
+                        wst_closed(core::lexem::FORMAT),
+                    ),
+                ),
+                delimited(
+                    wst(lexem::PAR_O),
+                    parse_fstring::<Expression>,
+                    wst(lexem::PAR_C),
+                ),
+            ),
+            |(_, args)| Format {
+                args: args
+                    .into_iter()
+                    .map(|item| match item {
+                        crate::ast::utils::strings::string_parser::FItem::Str(string) => {
+                            FormatItem::Str(string)
+                        }
+                        crate::ast::utils::strings::string_parser::FItem::Expr(expr) => {
+                            FormatItem::Expr(expr)
+                        }
+                    })
+                    .collect(),
+                metadata: Metadata::default(),
+            },
+        )(input)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, RwLock};
 
     use crate::{
         ast::expressions::{
             data::Number,
-            operation::{FieldAccess, FnCall, ListAccess, TupleAccess},
-            Atomic,
+            operation::{FieldAccess, ListAccess},
+            Atomic, Path,
         },
-        semantic::scope::ClosureState,
         v_num,
     };
 
@@ -517,6 +683,8 @@ mod tests {
                         Number::Unresolved(6).into()
                     ))))
                 ],
+                size: 0,
+                address: None,
                 metadata: Metadata::default(),
             },
             value
@@ -531,8 +699,8 @@ mod tests {
         assert_eq!(
             StrSlice {
                 value: "Hello World".to_string(),
+                address: None,
                 metadata: Metadata::default(),
-                padding: 0,
             },
             value
         );
@@ -565,119 +733,6 @@ mod tests {
     }
 
     #[test]
-    fn valid_closure() {
-        let res = Closure::parse("(x,y) -> x".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-
-        assert_eq!(
-            Closure {
-                params: vec![
-                    ClosureParam::Minimal("x".to_string().into()),
-                    ClosureParam::Minimal("y".to_string().into())
-                ],
-                closed: false,
-                scope: ExprScope::Expr(ast::statements::block::Block {
-                    metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable {
-                                id: "x".to_string().into(),
-                                from_field: false,
-                                metadata: Metadata::default()
-                            }
-                        )))),
-                        metadata: Metadata::default()
-                    })],
-                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                    is_loop: Default::default(),
-
-                    caller: Default::default(),
-                    inner_scope: None
-                }),
-                metadata: Metadata::default()
-            },
-            value
-        )
-    }
-
-    #[test]
-    fn valid_closure_closed() {
-        let res = Closure::parse("move (x,y) -> x".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-
-        assert_eq!(
-            Closure {
-                params: vec![
-                    ClosureParam::Minimal("x".to_string().into()),
-                    ClosureParam::Minimal("y".to_string().into())
-                ],
-                closed: true,
-                scope: ExprScope::Expr(ast::statements::block::Block {
-                    metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable {
-                                id: "x".to_string().into(),
-                                from_field: false,
-                                metadata: Metadata::default()
-                            }
-                        )))),
-                        metadata: Metadata::default()
-                    })],
-                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                    is_loop: Default::default(),
-
-                    caller: Default::default(),
-                    inner_scope: None
-                }),
-                metadata: Metadata::default()
-            },
-            value
-        )
-    }
-    #[test]
-    fn valid_closure_typed_args() {
-        let res = Closure::parse("(x:u64) -> x".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-
-        assert_eq!(
-            Closure {
-                params: vec![ClosureParam::Full(TypedVar {
-                    id: "x".to_string().into(),
-                    signature: ast::types::Type::Primitive(ast::types::PrimitiveType::Number(
-                        NumberType::U64
-                    )),
-                    rec: false,
-                }),],
-                closed: false,
-
-                scope: ExprScope::Expr(ast::statements::block::Block {
-                    metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable {
-                                id: "x".to_string().into(),
-                                from_field: false,
-                                metadata: Metadata::default()
-                            }
-                        )))),
-                        metadata: Metadata::default()
-                    })],
-                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                    is_loop: Default::default(),
-
-                    caller: Default::default(),
-                    inner_scope: None
-                }),
-                metadata: Metadata::default()
-            },
-            value
-        )
-    }
-    #[test]
     fn valid_tuple() {
         let res = Tuple::parse("(2,'a')".into());
         assert!(res.is_ok(), "{:?}", res);
@@ -704,9 +759,9 @@ mod tests {
         assert_eq!(
             Address {
                 value: Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
-                    from_field: false,
-                    metadata: Metadata::default()
+                    name: "x".to_string().into(),
+                    metadata: Metadata::default(),
+                    state: None,
                 }))
                 .into(),
                 metadata: Metadata::default()
@@ -723,9 +778,9 @@ mod tests {
         assert_eq!(
             PtrAccess {
                 value: Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
-                    from_field: false,
-                    metadata: Metadata::default()
+                    name: "x".to_string().into(),
+                    metadata: Metadata::default(),
+                    state: None,
                 }))
                 .into(),
                 metadata: Metadata::default()
@@ -745,7 +800,7 @@ mod tests {
                     (
                         Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
                             value: "x".to_string().into(),
-                            padding: 0,
+                            address: None,
                             metadata: Metadata::default(),
                         }))),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
@@ -755,7 +810,7 @@ mod tests {
                     (
                         Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
                             value: "y".to_string().into(),
-                            padding: 0,
+                            address: None,
                             metadata: Metadata::default(),
                         }))),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
@@ -776,6 +831,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Struct {
+                path: Path::default(),
                 id: "Point".to_string().into(),
                 fields: vec![
                     (
@@ -804,6 +860,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Union {
+                path: Path::default(),
                 typename: "Geo".to_string().into(),
                 variant: "Point".to_string().into(),
                 fields: vec![
@@ -833,6 +890,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Enum {
+                path: Path::default(),
                 typename: "Geo".to_string().into(),
                 value: "Point".to_string().into(),
                 metadata: Metadata::default()
@@ -848,9 +906,9 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                id: "x".to_string().into(),
+                name: "x".to_string().into(),
                 metadata: Metadata::default(),
-                from_field: false.into()
+                state: None,
             }))),
             value
         );
@@ -861,9 +919,9 @@ mod tests {
         assert_eq!(
             Expression::ListAccess(ListAccess {
                 var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
+                    name: "x".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false.into()
+                    state: None,
                 })))),
                 index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
                     Unresolved, 3
@@ -879,14 +937,14 @@ mod tests {
         assert_eq!(
             Expression::FieldAccess(FieldAccess {
                 var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
+                    name: "x".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false.into()
+                    state: None,
                 })))),
                 field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "y".to_string().into(),
+                    name: "y".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false.into()
+                    state: None,
                 })))),
                 metadata: Metadata::default()
             }),
@@ -898,20 +956,20 @@ mod tests {
         assert_eq!(
             Expression::FieldAccess(FieldAccess {
                 var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
+                    name: "x".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false.into()
+                    state: None,
                 })))),
                 field: Box::new(Expression::FieldAccess(FieldAccess {
                     var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "y".to_string().into(),
+                        name: "y".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: false.into()
+                        state: None,
                     })))),
                     field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "z".to_string().into(),
+                        name: "z".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: false.into()
+                        state: None,
                     })))),
                     metadata: Metadata::default()
                 })),
@@ -925,15 +983,15 @@ mod tests {
         assert_eq!(
             Expression::FieldAccess(FieldAccess {
                 var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
+                    name: "x".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false.into()
+                    state: None,
                 })))),
                 field: Box::new(Expression::ListAccess(ListAccess {
                     var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "y".to_string().into(),
+                        name: "y".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: false.into()
+                        state: None,
                     })))),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
                         Unresolved, 3
@@ -951,9 +1009,9 @@ mod tests {
             Expression::FieldAccess(FieldAccess {
                 var: Box::new(Expression::ListAccess(ListAccess {
                     var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".to_string().into(),
+                        name: "x".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: false.into()
+                        state: None,
                     })))),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
                         Unresolved, 3
@@ -961,36 +1019,10 @@ mod tests {
                     metadata: Metadata::default()
                 })),
                 field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "y".to_string().into(),
+                    name: "y".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false.into()
+                    state: None,
                 })))),
-                metadata: Metadata::default()
-            }),
-            value
-        );
-
-        let res = Expression::parse("f(10).1".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Expression::TupleAccess(TupleAccess {
-                var: Expression::FnCall(FnCall {
-                    lib: None,
-                    fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "f".to_string().into(),
-                        metadata: Metadata::default(),
-                        from_field: false,
-                    })))),
-                    params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Number::Unresolved(10).into())
-                    )))],
-                    metadata: Metadata::default(),
-                    platform: Default::default(),
-                    is_dynamic_fn: None,
-                })
-                .into(),
-                index: 1,
                 metadata: Metadata::default()
             }),
             value

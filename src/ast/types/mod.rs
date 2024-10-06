@@ -1,4 +1,4 @@
-use super::utils::strings::ID;
+use super::{expressions::Path, utils::strings::ID};
 
 pub mod types_parse;
 pub mod types_resolve;
@@ -12,10 +12,11 @@ pub enum Type {
     Slice(SliceType),
     String(StringType),
     StrSlice(StrSliceType),
-    Range(RangeType),
-    UserType(ID),
+    UserType { path: Path, name: String },
     Vec(VecType),
+    Function(FunctionType),
     Closure(ClosureType),
+    Lambda(LambdaType),
     Tuple(TupleType),
     Unit,
     Any,
@@ -52,9 +53,7 @@ pub struct SliceType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct StrSliceType {
-    pub size: usize,
-}
+pub struct StrSliceType {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StringType();
@@ -63,12 +62,23 @@ pub struct StringType();
 pub struct VecType(pub SubType);
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct FunctionType {
+    pub params: Types,
+    pub ret: SubType,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ClosureType {
     pub params: Types,
-    pub scope_params_size: usize,
     pub ret: SubType,
-    pub closed: bool,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LambdaType {
+    pub params: Types,
+    pub ret: SubType,
+}
+
 pub type Types = Vec<Type>;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -76,12 +86,6 @@ pub struct TupleType(pub Types);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AddrType(pub SubType);
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RangeType {
-    pub num: NumberType,
-    pub inclusive: bool,
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapType {

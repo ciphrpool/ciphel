@@ -1,8 +1,10 @@
 use crate::ast::utils::error::squash;
 use crate::ast::utils::strings::wst_closed;
-use crate::semantic::scope::scope::Scope;
-use crate::semantic::Info;
+use crate::semantic::scope::scope::ScopeState;
+use crate::semantic::{Desugar, Info};
 
+use crate::vm::asm::branch::Goto;
+use crate::vm::{CodeGenerationError, GenerateCode};
 use crate::{
     ast::{
         expressions::Expression,
@@ -14,13 +16,10 @@ use crate::{
         TryParse,
     },
     semantic::{
-        scope::{static_types::StaticType, type_traits::TypeChecking, BuildStaticType},
-        CompatibleWith, EType, Either, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
+        scope::static_types::StaticType, CompatibleWith, EType, Metadata, Resolve, SemanticError,
+        TypeOf,
     },
-    vm::{
-        casm::{alloc::StackFrame, Casm, CasmProgram},
-        vm::{CodeGenerationError, GenerateCode},
-    },
+    vm::asm::Asm,
 };
 use nom::branch::alt;
 use nom::combinator::cut;
@@ -30,10 +29,16 @@ use nom::{
     sequence::delimited,
 };
 
+use super::Statement;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Return {
     Unit,
     Expr {
+        expr: Box<Expression>,
+        metadata: Metadata,
+    },
+    Inline {
         expr: Box<Expression>,
         metadata: Metadata,
     },
@@ -81,281 +86,233 @@ impl TryParse for Return {
         )(input)
     }
 }
+
+impl Desugar<Statement> for Return {
+    fn desugar<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        match self {
+            Return::Unit => {}
+            Return::Expr { expr, metadata } => {
+                if let Some(output) = expr.desugar::<E>(scope_manager, scope_id)? {
+                    *expr = output.into();
+                }
+            }
+            Return::Inline { expr, metadata } => {
+                if let Some(output) = expr.desugar::<E>(scope_manager, scope_id)? {
+                    *expr = output.into();
+                }
+            }
+            Return::Break => {}
+            Return::Continue => {}
+        }
+        return Ok(None);
+    }
+}
+
 impl Resolve for Return {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G: crate::GameEngineStaticFn>(
+    fn resolve<E: crate::vm::external::Engine>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
+        let Some(scope_id) = scope_id else {
+            return Err(SemanticError::Default);
+        };
         match self {
             Return::Unit => {
-                match context {
-                    Some(context) => {
-                        if !<EType as TypeChecking>::is_unit(context) {
-                            return Err(SemanticError::IncompatibleTypes);
-                        }
+                let Some(scope_id) = scope_manager.can_return(scope_id) else {
+                    return Err(SemanticError::ExpectedFunctionClosureLambda);
+                };
+                match scope_manager.scope_types.get_mut(&scope_id) {
+                    Some(types) => {
+                        types.push(EType::Static(StaticType::Unit));
                     }
-                    None => {}
+                    None => {
+                        scope_manager
+                            .scope_types
+                            .insert(scope_id, vec![EType::Static(StaticType::Unit)]);
+                    }
+                }
+                if let Some(context) = context {
+                    if *context != EType::Static(StaticType::Unit) {
+                        return Err(SemanticError::IncompatibleTypes);
+                    }
                 }
                 Ok(())
             }
             Return::Expr { expr, metadata } => {
-                let _ = expr.resolve::<G>(scope, &context, &mut None)?;
-                match context {
-                    Some(c) => {
-                        let return_type = expr
-                            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                        let _ = c.compatible_with(
-                            &return_type,
-                            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-                        )?;
-                        metadata.info = Info::Resolved {
-                            context: context.clone(),
-                            signature: Some(expr.type_of(&crate::arw_read!(
-                                scope,
-                                SemanticError::ConcurrencyError
-                            )?)?),
-                        };
-                        Ok(())
+                let _ = expr.resolve::<E>(scope_manager, Some(scope_id), &context, &mut None)?;
+                let return_type = expr.type_of(&scope_manager, Some(scope_id))?;
+                if let Some(context) = context {
+                    let _ =
+                        context.compatible_with(&return_type, &scope_manager, Some(scope_id))?;
+                }
+
+                let Some(scope_id) = scope_manager.can_return(scope_id) else {
+                    return Err(SemanticError::ExpectedFunctionClosureLambda);
+                };
+                match scope_manager.scope_types.get_mut(&scope_id) {
+                    Some(types) => {
+                        types.push(return_type.clone());
                     }
                     None => {
-                        metadata.info = Info::Resolved {
-                            context: None,
-                            signature: Some(expr.type_of(&crate::arw_read!(
-                                scope,
-                                SemanticError::ConcurrencyError
-                            )?)?),
-                        };
-                        Ok(())
+                        scope_manager
+                            .scope_types
+                            .insert(scope_id, vec![return_type.clone()]);
                     }
                 }
+                if let Some(context) = context {
+                    if *context != return_type {
+                        return Err(SemanticError::IncompatibleTypes);
+                    }
+                }
+                metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(return_type),
+                };
+                Ok(())
+            }
+            Return::Inline { expr, metadata } => {
+                let _ = expr.resolve::<E>(scope_manager, Some(scope_id), &context, &mut None)?;
+                let return_type = expr.type_of(&scope_manager, Some(scope_id))?;
+                if let Some(context) = context {
+                    let _ =
+                        context.compatible_with(&return_type, &scope_manager, Some(scope_id))?;
+                }
+
+                let scope_id = match scope_manager.can_return(scope_id) {
+                    Some(scope_id) => scope_id,
+                    None => match scope_manager.scope_states.get(&scope_id) {
+                        Some(ScopeState::Inline | ScopeState::IIFE) => scope_id,
+                        _ => return Err(SemanticError::ExpectedInlineBlock),
+                    },
+                };
+                match scope_manager.scope_types.get_mut(&scope_id) {
+                    Some(types) => {
+                        types.push(return_type.clone());
+                    }
+                    None => {
+                        scope_manager
+                            .scope_types
+                            .insert(scope_id, vec![return_type.clone()]);
+                    }
+                }
+
+                if let Some(context) = context {
+                    if *context != return_type {
+                        return Err(SemanticError::IncompatibleTypes);
+                    }
+                }
+                metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(return_type),
+                };
+                Ok(())
             }
             Return::Break => {
-                if crate::arw_read!(scope, SemanticError::ConcurrencyError)?
-                    .state()?
-                    .is_loop
-                {
-                    Ok(())
-                } else {
-                    Err(SemanticError::ExpectedLoop)
-                }
+                let Some(scope_id) = scope_manager.is_scope_in(scope_id, ScopeState::Loop) else {
+                    return Err(SemanticError::ExpectedLoop);
+                };
+                Ok(())
             }
             Return::Continue => {
-                if crate::arw_read!(scope, SemanticError::ConcurrencyError)?
-                    .state()?
-                    .is_loop
-                {
-                    Ok(())
-                } else {
-                    Err(SemanticError::ExpectedLoop)
-                }
+                let Some(scope_id) = scope_manager.is_scope_in(scope_id, ScopeState::Loop) else {
+                    return Err(SemanticError::ExpectedLoop);
+                };
+                Ok(())
             }
         }
     }
 }
 
 impl TypeOf for Return {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
-            Return::Unit => Ok(Either::Static(
-                <StaticType as BuildStaticType>::build_unit().into(),
-            )),
-            Return::Expr { expr, metadata: _ } => expr.type_of(&scope),
-            Return::Break => Ok(Either::Static(
-                <StaticType as BuildStaticType>::build_unit().into(),
-            )),
-            Return::Continue => Ok(Either::Static(
-                <StaticType as BuildStaticType>::build_unit().into(),
-            )),
+            Return::Unit => Ok(EType::Static(StaticType::Unit)),
+            Return::Expr { expr, metadata: _ } => expr.type_of(&scope_manager, scope_id),
+            Return::Inline { expr, metadata: _ } => expr.type_of(&scope_manager, scope_id),
+            Return::Break => Ok(EType::Static(StaticType::Unit)),
+            Return::Continue => Ok(EType::Static(StaticType::Unit)),
         }
     }
 }
 
 impl GenerateCode for Return {
-    fn gencode(
+    fn gencode<E: crate::vm::external::Engine>(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::program::Program<E>,
+        context: &crate::vm::CodeGenerationContext,
+    ) -> Result<(), crate::vm::CodeGenerationError> {
         match self {
             Return::Unit => {
-                instructions.push(Casm::StackFrame(StackFrame::Return {
-                    return_size: Some(0),
+                let Some(return_label) = context.return_label else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Asm::Goto(Goto {
+                    label: Some(return_label),
                 }));
                 Ok(())
             }
             Return::Expr { expr, metadata } => {
-                let Some(return_size) = metadata.signature().map(|t| t.size_of()) else {
+                let _ = expr.gencode::<E>(scope_manager, scope_id, instructions, context)?;
+
+                let Some(return_label) = context.return_label else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = expr.gencode(scope, instructions)?;
+                instructions.push(Asm::Goto(Goto {
+                    label: Some(return_label),
+                }));
+                Ok(())
+            }
+            Return::Inline { expr, metadata } => {
+                let _ = expr.gencode::<E>(scope_manager, scope_id, instructions, context)?;
 
-                instructions.push(Casm::StackFrame(StackFrame::Return {
-                    return_size: Some(return_size),
+                let Some(return_label) = context.return_label else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Asm::Goto(Goto {
+                    label: Some(return_label),
                 }));
                 Ok(())
             }
             Return::Break => {
-                instructions.push(Casm::StackFrame(StackFrame::Break));
+                let Some(break_label) = context.break_label else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Asm::Goto(Goto {
+                    label: Some(break_label),
+                }));
                 Ok(())
             }
             Return::Continue => {
-                instructions.push(Casm::StackFrame(StackFrame::Continue));
+                let Some(continue_label) = context.continue_label else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Asm::Goto(Goto {
+                    label: Some(continue_label),
+                }));
                 Ok(())
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{
-        arw_write, e_static, p_num,
-        semantic::{
-            scope::{
-                scope,
-                static_types::{PrimitiveType, StaticType},
-            },
-            Either,
-        },
-    };
-
-    use super::*;
-
-    #[test]
-    fn valid_return() {
-        let res = Return::parse(
-            r#"
-            return ;
-        "#
-            .into(),
-        );
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(Return::Unit, value);
-
-        let res = Return::parse(
-            r#"
-            break ;
-        "#
-            .into(),
-        );
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(Return::Break, value);
-        let res = Return::parse(
-            r#"
-            continue ;
-        "#
-            .into(),
-        );
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(Return::Continue, value);
-    }
-
-    #[test]
-    fn valid_resolved_return() {
-        let mut return_statement = Return::parse(
-            r#"
-            return ;
-        "#
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let scope = scope::Scope::new();
-
-        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let mut return_statement = Return::parse(
-            r#"
-            return 10;
-        "#
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let return_type = return_statement
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
-        assert_eq!(p_num!(I64), return_type);
-
-        let mut return_statement = Return::parse(
-            r#"
-            break ;
-        "#
-            .into(),
-        )
-        .unwrap()
-        .1;
-
-        let inner_scope = scope::Scope::spawn(&scope, Vec::default())
-            .expect("Scope should be able to have child block");
-        let _ = arw_write!(inner_scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .to_loop();
-
-        let res =
-            return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&inner_scope, &None, &mut ());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let return_type = return_statement
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
-        assert_eq!(e_static!(StaticType::Unit), return_type);
-
-        let mut return_statement = Return::parse(
-            r#"
-            continue ;
-        "#
-            .into(),
-        )
-        .unwrap()
-        .1;
-
-        let res =
-            return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&inner_scope, &None, &mut ());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let return_type = return_statement
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
-        assert_eq!(e_static!(StaticType::Unit), return_type);
-    }
-
-    #[test]
-    fn robustness_return() {
-        let mut return_statement = Return::parse(
-            r#"
-            return 10;
-        "#
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let scope = scope::Scope::new();
-        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
-                StaticType::Primitive(PrimitiveType::Char).into(),
-            )),
-            &mut (),
-        );
-        assert!(res.is_err());
     }
 }

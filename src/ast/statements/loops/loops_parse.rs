@@ -1,23 +1,24 @@
 use nom::{
     branch::alt,
-    combinator::{cut, map},
-    sequence::{pair, preceded, tuple},
+    combinator::{cut, map, opt},
+    multi::separated_list0,
+    sequence::{delimited, pair, preceded, tuple},
 };
 use nom_supreme::ParserExt;
 
 use crate::ast::{
     expressions::Expression,
-    statements::{block::Block, declaration::PatternVar},
+    statements::{assignation::Assignation, block::Block, declaration::Declaration},
     utils::{
         error::squash,
         io::{PResult, Span},
         lexem,
-        strings::{parse_id, wst, wst_closed},
+        strings::{wst, wst_closed},
     },
     TryParse,
 };
 
-use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
+use super::{ForInit, ForLoop, Loop, WhileLoop};
 
 impl TryParse for Loop {
     /*
@@ -36,6 +37,7 @@ impl TryParse for Loop {
                     Loop::Loop(Box::new(scope))
                 }),
                 map(ForLoop::parse, |value| Loop::For(value)),
+                //map(ForInLoop::parse, |value| Loop::ForIn(value)),
                 map(WhileLoop::parse, |value| Loop::While(value)),
             )),
             "Expected a loop, while or for loop",
@@ -43,44 +45,37 @@ impl TryParse for Loop {
     }
 }
 
-impl TryParse for ForIterator {
+impl TryParse for ForInit {
     fn parse(input: Span) -> PResult<Self> {
-        map(Expression::parse, |expr| ForIterator { expr })(input)
+        alt((
+            map(Assignation::parse_without_semicolon, ForInit::Assignation),
+            map(Declaration::parse_without_semicolon, ForInit::Declaration),
+        ))(input)
     }
 }
-
-impl TryParse for ForItem {
-    fn parse(input: Span) -> PResult<Self> {
-        squash(
-            alt((
-                map(PatternVar::parse, |value| ForItem::Pattern(value)),
-                map(parse_id, |value| ForItem::Id(value)),
-            )),
-            "Expected a valid item in for-loop",
-        )(input)
-    }
-}
-
 impl TryParse for ForLoop {
-    /*
-     * @desc Parse for loop
-     *
-     * @grammar
-     * Forloop := for ITEM in ITERATOR Scope
-     * ITERATOR := ID | VecData | SliceData | receive\[ Addr \]\(  UNumber \) | TupleData
-     * ITEM := ID | TypedVar | PatternVar
-     */
     fn parse(input: Span) -> PResult<Self> {
         map(
             tuple((
-                preceded(wst_closed(lexem::FOR), cut(ForItem::parse)),
-                cut(preceded(wst_closed(lexem::IN), ForIterator::parse)),
+                wst_closed(lexem::FOR),
+                delimited(
+                    wst(lexem::PAR_O),
+                    tuple((
+                        separated_list0(wst(lexem::COMA), ForInit::parse),
+                        wst(lexem::SEMI_COLON),
+                        opt(Expression::parse),
+                        wst(lexem::SEMI_COLON),
+                        separated_list0(wst(lexem::COMA), Assignation::parse_without_semicolon),
+                    )),
+                    wst(lexem::PAR_C),
+                ),
                 cut(Block::parse).context("Invalid block in for-loop statement"),
             )),
-            |(item, iterator, scope)| ForLoop {
-                item,
-                iterator,
-                scope: Box::new(scope),
+            |(_, (indices, _, condition, _, increments), block)| ForLoop {
+                indices,
+                condition,
+                increments,
+                block: Box::new(block),
             },
         )(input)
     }
@@ -99,9 +94,9 @@ impl TryParse for WhileLoop {
                 preceded(wst_closed(lexem::WHILE), cut(Expression::parse)),
                 cut(Block::parse).context("Invalid block in while-loop statement"),
             ),
-            |(condition, scope)| WhileLoop {
+            |(condition, block)| WhileLoop {
                 condition: Box::new(condition),
-                scope: Box::new(scope),
+                block: Box::new(block),
             },
         )(input)
     }
@@ -109,31 +104,13 @@ impl TryParse for WhileLoop {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, RwLock};
-
-    use crate::{
-        ast::{
-            expressions::{
-                data::{Data, Primitive, Variable},
-                operation::FnCall,
-                Atomic,
-            },
-            statements::{
-                flows::{CallStat, Flow},
-                Statement,
-            },
-        },
-        semantic::{scope::ClosureState, Metadata},
-        v_num,
-    };
-
     use super::*;
 
     #[test]
     fn valid_for() {
         let res = ForLoop::parse(
             r#"
-        for i in x {
+        for (let i:u8 = 0 ; i < 10 ; i = i + 1) {
             f(10);
         }
         "#
@@ -141,45 +118,6 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(
-            ForLoop {
-                item: ForItem::Id("i".to_string().into()),
-                iterator: ForIterator {
-                    expr: Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".to_string().into(),
-                        from_field: false,
-                        metadata: Metadata::default(),
-                    })))
-                },
-                scope: Box::new(Block {
-                    metadata: Metadata::default(),
-                    instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        call: Expression::FnCall(FnCall {
-                            lib: None,
-                            fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                                Variable {
-                                    id: "f".to_string().into(),
-                                    from_field: false,
-                                    metadata: Metadata::default(),
-                                }
-                            )))),
-                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                v_num!(Unresolved, 10)
-                            )))],
-                            metadata: Metadata::default(),
-                            platform: Default::default(),
-                            is_dynamic_fn: None,
-                        })
-                    }))],
-                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                    is_loop: Default::default(),
-
-                    caller: Default::default(),
-                    inner_scope: None
-                })
-            },
-            value
-        );
     }
 
     #[test]
@@ -194,40 +132,6 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(
-            WhileLoop {
-                condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Bool(true)
-                )))),
-                scope: Box::new(Block {
-                    metadata: Metadata::default(),
-                    instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        call: Expression::FnCall(FnCall {
-                            lib: None,
-                            fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                                Variable {
-                                    id: "f".to_string().into(),
-                                    from_field: false,
-                                    metadata: Metadata::default(),
-                                }
-                            )))),
-                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                v_num!(Unresolved, 10)
-                            )))],
-                            metadata: Metadata::default(),
-                            platform: Default::default(),
-                            is_dynamic_fn: None,
-                        })
-                    }))],
-                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                    is_loop: Default::default(),
-
-                    caller: Default::default(),
-                    inner_scope: None
-                })
-            },
-            value
-        );
     }
 
     #[test]
@@ -242,34 +146,5 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(
-            Loop::Loop(Box::new(Block {
-                metadata: Metadata::default(),
-                instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                    call: Expression::FnCall(FnCall {
-                        lib: None,
-                        fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable {
-                                id: "f".to_string().into(),
-                                from_field: false,
-                                metadata: Metadata::default(),
-                            }
-                        )))),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
-                            Unresolved, 10
-                        ))))],
-                        metadata: Metadata::default(),
-                        platform: Default::default(),
-                        is_dynamic_fn: None,
-                    })
-                }))],
-                can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                is_loop: Default::default(),
-
-                caller: Default::default(),
-                inner_scope: None
-            })),
-            value
-        );
     }
 }

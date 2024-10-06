@@ -1,41 +1,46 @@
 use crate::semantic::{EType, Resolve, SemanticError, TypeOf};
 
-use super::{ForIterator, ForLoop, Loop, WhileLoop};
-use crate::semantic::scope::scope::Scope;
+use super::{ForLoop, Loop, WhileLoop};
 
 impl TypeOf for Loop {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
-            Loop::For(value) => value.type_of(&scope),
-            Loop::While(value) => value.type_of(&scope),
-            Loop::Loop(value) => value.type_of(&scope),
+            Loop::For(value) => value.type_of(&scope_manager, scope_id),
+            Loop::While(value) => value.type_of(&scope_manager, scope_id),
+            Loop::Loop(value) => value.type_of(&scope_manager, scope_id),
         }
     }
 }
-impl TypeOf for ForIterator {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        self.expr.type_of(scope)
-    }
-}
+
 impl TypeOf for ForLoop {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
-        self.scope.type_of(&scope)
+        self.block.type_of(&scope_manager, scope_id)
     }
 }
+
 impl TypeOf for WhileLoop {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
-        self.scope.type_of(&scope)
+        self.block.type_of(&scope_manager, scope_id)
     }
 }

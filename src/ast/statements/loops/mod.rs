@@ -1,6 +1,6 @@
-use crate::ast::{expressions::Expression, utils::strings::ID};
+use crate::ast::expressions::Expression;
 
-use super::{block::Block, declaration::PatternVar};
+use super::block::Block;
 
 pub mod loops_gencode;
 pub mod loops_parse;
@@ -15,25 +15,25 @@ pub enum Loop {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum ForInit {
+    Assignation(super::assignation::Assignation),
+    Declaration(super::declaration::Declaration),
+}
+
+pub type ForInits = Vec<ForInit>;
+pub type ForCondition = Option<Expression>;
+pub type ForIncrements = Vec<super::assignation::Assignation>;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ForLoop {
-    item: ForItem,
-    iterator: ForIterator,
-    scope: Box<Block>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ForItem {
-    Id(ID),
-    Pattern(PatternVar),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ForIterator {
-    pub expr: Expression,
+    indices: ForInits,
+    condition: ForCondition,
+    increments: ForIncrements,
+    block: Box<Block>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WhileLoop {
     condition: Box<Expression>,
-    scope: Box<Block>,
+    block: Box<Block>,
 }

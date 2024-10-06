@@ -132,7 +132,7 @@ Ciphel supports three types of loops:
 
 A casm (abbreviated as "sp") represents the minimal executable step of an instruction, with each casm having an associated weight that determines its execution cost. This weight is crucial in calculating the energy required for a player to perform an instruction.
 
-#### Casm Calculation Rules
+#### Asm Calculation Rules
 
 The calculation of casm weights follows specific rules for expressions and statements:
 
@@ -145,7 +145,7 @@ The calculation of casm weights follows specific rules for expressions and state
 5. **Binary Operation**: Sum of the casm weights of the two expressions.
 6. **Parentheses**: No additional casm weight for the inner expression.
 7. **If Expression**: Sum of the casm weight of the condition and the maximum of the casm weights of the main and else expressions.
-8. **Match Expression**: Casm weight of the given expression plus the maximum casm weight of the pattern expressions.
+8. **Match Expression**: Asm weight of the given expression plus the maximum casm weight of the pattern expressions.
 9. **Try Expression**: double the casm weight of the main expression plus the casm weight of the main and else expressions.
 10. **Function Call**: 10% of the casm weight of the function plus the sum of the casm weights of the arguments.
     Platform api function call result in 10sp
@@ -154,12 +154,12 @@ The calculation of casm weights follows specific rules for expressions and state
 
 1. **Declaration**: 2sp for pattern matching, 1sp otherwise, plus the casm weight of the value.
 2. **Assignment**: 1sp for simple access, 2sp for accessing fields inside a struct or dereferencing an address.
-3. **Loop**: Casm weight of the iterator or condition plus the casm weight of the scope every times the loop iterates, DYNAMIC sp.
+3. **Loop**: Asm weight of the iterator or condition plus the casm weight of the scope every times the loop iterates, DYNAMIC sp.
 4. **Function Definition**: 1sp per parameter if the parameter lives on the stack or is an address, plus the casm weight of the scope.
-5. **Event Definition**: Casm weight of the condition plus casm weight of the scope.
+5. **Event Definition**: Asm weight of the condition plus casm weight of the scope.
    The casm weight of the condition depends on the observable involved in the trigger function, the more an observable is broad an the more the casm weight will be high, exemple the casm weight of the observable a command has been performed is higher than the command X has been performed
 6. **If Statement**: Sum of the casm weight of the condition and the maximum of the casm weights of the main and else scopes.
-7. **Match Statement**: Casm weight of the given expression and the maximum casm weight of the pattern scopes.
+7. **Match Statement**: Asm weight of the given expression and the maximum casm weight of the pattern scopes.
 8. **Try Statement**: double the casm weight of the main scope plus the casm weights of the main and else scopes.
 9. **Function Call**: 10% of the casm weight of the function plus the sum of the casm weights of the arguments.
 10. **Scope**: Sum of the casm weights of the internal instructions.

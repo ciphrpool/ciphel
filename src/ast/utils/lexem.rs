@@ -1,3 +1,4 @@
+pub const MODULE: &str = "module";
 pub const ENUM: &str = "enum";
 pub const STRUCT: &str = "struct";
 pub const UNION: &str = "union";
@@ -19,7 +20,7 @@ pub const BREAK: &str = "break";
 pub const CONTINUE: &str = "continue";
 pub const MOVE: &str = "move";
 pub const REC: &str = "rec";
-pub const DYN: &str = "dyn";
+pub const CLOSED: &str = "closed";
 
 // TYPE
 pub const U8: &str = "u8";
@@ -41,12 +42,9 @@ pub const BOOL: &str = "bool";
 pub const UNIT: &str = "unit";
 pub const ANY: &str = "Any";
 pub const UUNIT: &str = "Unit";
-pub const ERR: &str = "error";
+pub const ERR: &str = "Error";
 pub const UVEC: &str = "Vec";
 pub const UMAP: &str = "Map";
-pub const RANGE_I: &str = "RangeI";
-pub const RANGE_E: &str = "RangeE";
-pub const GENERATOR: &str = "Gen";
 pub const FN: &str = "fn";
 
 // PONCTUATION

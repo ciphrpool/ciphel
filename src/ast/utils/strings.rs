@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use nom::{
     branch::alt,
     character::complete::{alpha1, alphanumeric1, anychar},
@@ -90,7 +88,7 @@ pub mod eater {
     }
 }
 
-pub type ID = Arc<String>;
+pub type ID = String;
 
 /*
  * @desc Parse Identifier
@@ -113,8 +111,8 @@ pub fn parse_id(input: Span) -> PResult<ID> {
                 lexem::AS => true,
                 lexem::ELSE => true,
                 lexem::TRY => true,
-                // platform::utils::lexem::ERROR => true,
-                // platform::utils::lexem::OK => true,
+                // Core::utils::lexem::ERROR => true,
+                // Core::utils::lexem::OK => true,
                 lexem::IF => true,
                 lexem::THEN => true,
                 lexem::MATCH => true,
@@ -128,7 +126,7 @@ pub fn parse_id(input: Span) -> PResult<ID> {
                 lexem::CONTINUE => true,
                 lexem::MOVE => true,
                 lexem::REC => true,
-                lexem::DYN => true,
+                lexem::CLOSED => true,
                 lexem::U8 => true,
                 lexem::U16 => true,
                 lexem::U32 => true,
@@ -150,9 +148,6 @@ pub fn parse_id(input: Span) -> PResult<ID> {
                 lexem::UUNIT => true,
                 lexem::UVEC => true,
                 lexem::UMAP => true,
-                lexem::RANGE_I => true,
-                lexem::RANGE_E => true,
-                lexem::GENERATOR => true,
                 lexem::FN => true,
                 lexem::TRUE => true,
                 lexem::FALSE => true,
@@ -164,7 +159,7 @@ pub fn parse_id(input: Span) -> PResult<ID> {
                     nom::error::ErrorKind::AlphaNumeric,
                 )))
             } else {
-                Ok(Arc::new(id))
+                Ok(id)
             }
         },
     ))

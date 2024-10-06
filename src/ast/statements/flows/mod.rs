@@ -1,6 +1,10 @@
-use crate::ast::expressions::{flows::Pattern, Expression};
+use crate::ast::expressions::{
+    data::{Call, Printf},
+    flows::Cases,
+    Expression,
+};
 
-use super::block::Block;
+use super::block::{Block, ExprBlock};
 
 pub mod flows_gencode;
 pub mod flows_parse;
@@ -12,6 +16,7 @@ pub enum Flow {
     If(IfStat),
     Match(MatchStat),
     Try(TryStat),
+    Printf(Printf),
     Call(CallStat),
 }
 
@@ -26,14 +31,8 @@ pub struct IfStat {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchStat {
     expr: Box<Expression>,
-    patterns: Vec<PatternStat>,
+    cases: Cases<Block, ExprBlock>,
     else_branch: Option<Box<Block>>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct PatternStat {
-    patterns: Vec<Pattern>,
-    scope: Box<Block>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,5 +43,5 @@ pub struct TryStat {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallStat {
-    pub call: Expression,
+    pub call: Call,
 }
