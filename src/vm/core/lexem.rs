@@ -37,7 +37,7 @@ pub const FREE_MAP: &str = "free_map";
 pub const STRING: &str = "string";
 pub const APPEND: &str = "append";
 pub const CHARAT: &str = "char_at";
-pub const TO_CONST_STR: &str = "to_const_str";
+pub const TO_CONST_STR: &str = "to_str";
 pub const CLEAR_STRING: &str = "clear_string";
 
 // FORMAT

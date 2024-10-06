@@ -270,6 +270,8 @@ impl<E: crate::vm::external::Engine> Executable<E> for StringAsm {
                     len += string.len();
                     cap = (len + string.len()) * 2;
                     address = heap.realloc(address, size)?;
+                } else {
+                    len += string.len();
                 }
 
                 /* Write capacity */
