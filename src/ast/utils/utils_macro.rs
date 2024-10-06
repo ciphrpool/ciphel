@@ -35,10 +35,10 @@ macro_rules! v_num {
 #[macro_export]
 macro_rules! err_tuple {
     ($value:expr) => {
-        e_static!(crate::semantic::scope::static_types::StaticType::Tuple(
+        crate::e_static!(crate::semantic::scope::static_types::StaticType::Tuple(
             crate::semantic::scope::static_types::TupleType(vec![
                 $value,
-                e_static!(StaticType::Error)
+                crate::e_static!(StaticType::Error)
             ])
         ))
     };

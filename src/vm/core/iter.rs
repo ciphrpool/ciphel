@@ -21,7 +21,7 @@ use crate::{
     },
 };
 
-use super::PathFinder;
+use super::{vector::VEC_HEADER, PathFinder};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IterFn {
@@ -268,7 +268,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for IterAsm {
 
                 let len = items_ptr.len() as u64;
                 let cap = align(len as usize) as u64;
-                let alloc_size = cap * (len * 16) + 16;
+                let alloc_size = cap * (len * 16) + (VEC_HEADER as u64);
 
                 let items_data: Vec<u8> = items_ptr
                     .into_iter()
@@ -284,10 +284,10 @@ impl<E: crate::vm::external::Engine> Executable<E> for IterAsm {
 
                 let address = heap.alloc(alloc_size as usize)?;
 
-                /* Write len */
-                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address.add(8), &cap_bytes)?;
+                let _ = heap.write(address, &cap_bytes)?;
+                /* Write len */
+                let _ = heap.write(address.add(8), &len_bytes)?;
                 /* Write data */
                 let _ = heap.write(address.add(16), &items_data)?;
 
@@ -306,7 +306,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for IterAsm {
 
                 let len = values_ptr.len() as u64;
                 let cap = align(len as usize) as u64;
-                let alloc_size = cap * (len * 16) + 16;
+                let alloc_size = cap * (len * 16) + (VEC_HEADER as u64);
 
                 let values_data: Vec<u8> = values_ptr
                     .into_iter()
@@ -321,10 +321,10 @@ impl<E: crate::vm::external::Engine> Executable<E> for IterAsm {
 
                 let address = heap.alloc(alloc_size as usize)?;
 
-                /* Write len */
-                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address.add(8), &cap_bytes)?;
+                let _ = heap.write(address, &cap_bytes)?;
+                /* Write len */
+                let _ = heap.write(address.add(8), &len_bytes)?;
                 /* Write data */
                 let _ = heap.write(address.add(16), &values_data)?;
 
@@ -342,7 +342,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for IterAsm {
 
                 let len = keys_ptr.len() as u64;
                 let cap = align(len as usize) as u64;
-                let alloc_size = cap * (len * 16) + 16;
+                let alloc_size = cap * (len * 16) + (VEC_HEADER as u64);
 
                 let keys_data: Vec<u8> = keys_ptr
                     .into_iter()
@@ -357,10 +357,10 @@ impl<E: crate::vm::external::Engine> Executable<E> for IterAsm {
 
                 let address = heap.alloc(alloc_size as usize)?;
 
-                /* Write len */
-                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address.add(8), &cap_bytes)?;
+                let _ = heap.write(address, &cap_bytes)?;
+                /* Write len */
+                let _ = heap.write(address.add(8), &len_bytes)?;
                 /* Write data */
                 let _ = heap.write(address.add(16), &keys_data)?;
 

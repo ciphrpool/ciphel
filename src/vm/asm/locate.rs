@@ -102,6 +102,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for LocateOffset {
         context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
     ) -> Result<(), RuntimeError> {
         let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+
         let new_address = address.add(self.offset);
         let new_address: u64 = new_address.into(stack);
 

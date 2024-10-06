@@ -28,9 +28,10 @@ pub const CLEAR_VEC: &str = "clear_vec";
 // MAP
 pub const MAP: &str = "map";
 pub const INSERT: &str = "insert";
-pub const DELKEY: &str = "del_key";
+pub const DELKEY: &str = "delete_key";
 pub const GET: &str = "get";
 pub const CLEAR_MAP: &str = "clear_map";
+pub const FREE_MAP: &str = "free_map";
 
 // STRING
 pub const STRING: &str = "string";

@@ -129,7 +129,7 @@ impl ResolveCore for VectorFn {
                 }
                 let (first_part, second_part) = parameters.split_at_mut(1);
                 let vector = &mut first_part[0];
-                let item = &mut second_part[1];
+                let item = &mut second_part[0];
                 let vector_type = vec_param::<E>(vector, scope_manager, scope_id)?;
 
                 let _ = item.resolve::<E>(
@@ -163,7 +163,7 @@ impl ResolveCore for VectorFn {
                 }
                 let (first_part, second_part) = parameters.split_at_mut(1);
                 let vector = &mut first_part[0];
-                let index = &mut second_part[1];
+                let index = &mut second_part[0];
                 let vector_type = vec_param::<E>(vector, scope_manager, scope_id)?;
 
                 let _ = index.resolve::<E>(
@@ -186,7 +186,7 @@ impl ResolveCore for VectorFn {
                 }
                 let (first_part, second_part) = parameters.split_at_mut(1);
                 let vector = &mut first_part[0];
-                let array = &mut second_part[1];
+                let array = &mut second_part[0];
                 let vector_type = vec_param::<E>(vector, scope_manager, scope_id)?;
 
                 let _ = array.resolve::<E>(
@@ -330,7 +330,9 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
         match *self {
             VectorAsm::Vec { item_size } => {
                 let len = OpPrimitive::pop_num::<u64>(stack)? as usize;
+
                 let cap = len * 2;
+
                 let address = heap.alloc(align(cap * item_size) + VEC_HEADER)?;
 
                 /* Write capacity */

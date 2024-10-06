@@ -104,7 +104,7 @@ impl ResolveCore for StringFn {
                 }
                 let (first_part, second_part) = parameters.split_at_mut(1);
                 let string = &mut first_part[0];
-                let const_str = &mut second_part[1];
+                let const_str = &mut second_part[0];
                 let _ = string_param::<E>(string, scope_manager, scope_id)?;
 
                 let _ = const_str.resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
@@ -122,7 +122,7 @@ impl ResolveCore for StringFn {
                 }
                 let (first_part, second_part) = parameters.split_at_mut(1);
                 let string = &mut first_part[0];
-                let index = &mut second_part[1];
+                let index = &mut second_part[0];
                 *for_string = string_or_slice_param::<E>(string, scope_manager, scope_id)?;
 
                 let _ = index.resolve::<E>(
@@ -238,7 +238,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for StringAsm {
                 let string = OpPrimitive::get_string_from(slice, stack, heap)?;
                 let len = string.len();
                 let cap = len * 2;
-                let address = heap.alloc(cap)?;
+                let address = heap.alloc(cap + STRING_HEADER)?;
 
                 /* Write capacity */
                 let _ = heap.write(address, &(cap as u64).to_le_bytes())?;

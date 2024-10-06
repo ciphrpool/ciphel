@@ -1390,6 +1390,12 @@ impl Desugar<Atomic> for Call {
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
+        for arg in self.args.args.iter_mut() {
+            if let Some(output) = arg.desugar::<E>(scope_manager, scope_id)? {
+                *arg = output;
+            }
+        }
+
         let path = match &self.path {
             crate::ast::expressions::data::LeftCall::VarCall(VarCall { path, .. }) => path,
             crate::ast::expressions::data::LeftCall::ExternCall(ExternCall { path }) => path,

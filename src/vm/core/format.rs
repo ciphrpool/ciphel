@@ -17,6 +17,7 @@ use crate::{
     semantic::{Resolve, SemanticError},
 };
 
+use super::string::STRING_HEADER;
 use super::PathFinder;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1038,7 +1039,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for FormatAsm {
 
                 let len = data.len();
                 let cap = len * 2;
-                let address = heap.alloc(cap)?;
+                let address = heap.alloc(cap + STRING_HEADER)?;
 
                 /* Write capacity */
                 let _ = heap.write(address, &(cap as u64).to_le_bytes())?;

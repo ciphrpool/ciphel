@@ -1,7 +1,8 @@
 use crate::{
     ast::expressions::Expression,
+    err_tuple,
     semantic::{
-        scope::static_types::{MapType, StaticType, VecType},
+        scope::static_types::{MapType, StaticType, VecType, POINTER_SIZE},
         CompatibleWith, EType, Resolve, ResolveCore, SemanticError, SizeOf, TypeOf,
     },
     vm::{
@@ -21,6 +22,7 @@ use crate::{
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
+    ops::ControlFlow,
 };
 
 use super::{string::STRING_HEADER, vector::VEC_HEADER, PathFinder};
@@ -76,6 +78,11 @@ pub enum MapFn {
         item_size: usize,
         ref_access: DerefHashing,
     },
+    MapFree {
+        key_size: usize,
+        item_size: usize,
+        ref_access: DerefHashing,
+    },
 }
 
 impl PathFinder for MapFn {
@@ -105,7 +112,12 @@ impl PathFinder for MapFn {
                     key_size: 0,
                     ref_access: DerefHashing::Default,
                 }),
-                lexem::CLEAR_MAP => Some(MapFn::DelKey {
+                lexem::CLEAR_MAP => Some(MapFn::Clear {
+                    item_size: 0,
+                    key_size: 0,
+                    ref_access: DerefHashing::Default,
+                }),
+                lexem::FREE_MAP => Some(MapFn::MapFree {
                     item_size: 0,
                     key_size: 0,
                     ref_access: DerefHashing::Default,
@@ -155,7 +167,7 @@ impl ResolveCore for MapFn {
                         "of this map allocation"
                     )));
                 };
-                if parameters.len() == 0 || parameters.len() > 2 {
+                if parameters.len() > 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
@@ -171,7 +183,7 @@ impl ResolveCore for MapFn {
                     };
                 }
 
-                *with_capacity = parameters.len() == 2;
+                *with_capacity = parameters.len() == 1;
                 *key_size = keys_type.size_of();
                 *item_size = values_type.size_of();
 
@@ -190,7 +202,7 @@ impl ResolveCore for MapFn {
 
                 let (first_part, second_part) = second_part.split_at_mut(1);
                 let key = &mut first_part[0];
-                let item = &mut second_part[1];
+                let item = &mut second_part[0];
 
                 let map_type = map_param::<E>(map, scope_manager, scope_id)?;
 
@@ -210,12 +222,12 @@ impl ResolveCore for MapFn {
                 let _ = key.resolve::<E>(
                     scope_manager,
                     scope_id,
-                    &Some(map_type.values_type.as_ref().clone()),
+                    &Some(map_type.keys_type.as_ref().clone()),
                     &mut None,
                 )?;
                 let key_type = key.type_of(scope_manager, scope_id)?;
                 let _ = key_type.compatible_with(
-                    map_type.values_type.as_ref(),
+                    map_type.keys_type.as_ref(),
                     scope_manager,
                     scope_id,
                 )?;
@@ -250,19 +262,19 @@ impl ResolveCore for MapFn {
                 }
                 let (first_part, second_part) = parameters.split_at_mut(1);
                 let map = &mut first_part[0];
-                let key = &mut second_part[1];
+                let key = &mut second_part[0];
 
                 let map_type = map_param::<E>(map, scope_manager, scope_id)?;
 
                 let _ = key.resolve::<E>(
                     scope_manager,
                     scope_id,
-                    &Some(map_type.values_type.as_ref().clone()),
+                    &Some(map_type.keys_type.as_ref().clone()),
                     &mut None,
                 )?;
                 let key_type = key.type_of(scope_manager, scope_id)?;
                 let _ = key_type.compatible_with(
-                    map_type.values_type.as_ref(),
+                    map_type.keys_type.as_ref(),
                     scope_manager,
                     scope_id,
                 )?;
@@ -272,7 +284,7 @@ impl ResolveCore for MapFn {
 
                 // should deref the key
                 *ref_access = (&key_type).into();
-                Ok(map_type.values_type.as_ref().clone())
+                Ok(err_tuple!(map_type.values_type.as_ref().clone()))
             }
             MapFn::Clear {
                 key_size,
@@ -285,7 +297,27 @@ impl ResolveCore for MapFn {
                 let map = &mut parameters[0];
                 let map_type = map_param::<E>(map, scope_manager, scope_id)?;
 
-                Ok(EType::Static(StaticType::Map(map_type)))
+                *item_size = map_type.values_type.size_of();
+                *key_size = map_type.keys_type.size_of();
+                *ref_access = map_type.keys_type.as_ref().into();
+                Ok(EType::Static(StaticType::Error))
+            }
+            MapFn::MapFree {
+                key_size,
+                item_size,
+                ref_access,
+            } => {
+                if parameters.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let map = &mut parameters[0];
+                let map_type = map_param::<E>(map, scope_manager, scope_id)?;
+
+                *item_size = map_type.values_type.size_of();
+                *key_size = map_type.keys_type.size_of();
+                *ref_access = map_type.keys_type.as_ref().into();
+
+                Ok(EType::Static(StaticType::Error))
             }
         }
     }
@@ -320,6 +352,10 @@ pub enum MapAsm {
         item_size: usize,
         key_size: usize,
     },
+    MapFree {
+        item_size: usize,
+        key_size: usize,
+    },
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for MapAsm {
@@ -331,6 +367,7 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for MapAsm {
             MapAsm::DelKey { .. } => stdio.push_asm_lib(engine, "del_key"),
             MapAsm::Get { .. } => stdio.push_asm_lib(engine, "get"),
             MapAsm::Clear { .. } => stdio.push_asm_lib(engine, "clear_map"),
+            MapAsm::MapFree { .. } => stdio.push_asm_lib(engine, "free_map"),
         }
     }
 }
@@ -344,6 +381,10 @@ impl crate::vm::AsmWeight for MapAsm {
             MapAsm::DelKey { .. } => crate::vm::Weight::HIGH,
             MapAsm::Get { .. } => crate::vm::Weight::MEDIUM,
             MapAsm::Clear { .. } => crate::vm::Weight::MEDIUM,
+            MapAsm::MapFree {
+                item_size,
+                key_size,
+            } => crate::vm::Weight::MEDIUM,
         }
     }
 }
@@ -413,6 +454,16 @@ impl GenerateCode for MapFn {
                 ref_access,
             } => {
                 instructions.push(Asm::Core(CoreAsm::Map(MapAsm::Clear {
+                    item_size,
+                    key_size,
+                })));
+            }
+            MapFn::MapFree {
+                key_size,
+                item_size,
+                ref_access,
+            } => {
+                instructions.push(Asm::Core(CoreAsm::Map(MapAsm::MapFree {
                     item_size,
                     key_size,
                 })));
@@ -500,8 +551,8 @@ impl BucketLayout {
                         let len =
                             OpPrimitive::get_num_from::<u64>(key_address.add(8), stack, heap)?;
 
-                        let items_bytes = heap
-                            .read_slice(key_address.add(STRING_HEADER), len as usize * item_size)?;
+                        let items_bytes =
+                            heap.read_slice(key_address.add(VEC_HEADER), len as usize * item_size)?;
 
                         if items_bytes == key {
                             indexes = Some(AssignResult {
@@ -525,7 +576,7 @@ impl BucketLayout {
                             OpPrimitive::get_num_from::<u64>(key_address.add(8), stack, heap)?;
 
                         let items_bytes =
-                            heap.read_slice(key_address.add(VEC_HEADER), len as usize)?;
+                            heap.read_slice(key_address.add(STRING_HEADER), len as usize)?;
 
                         if items_bytes == key {
                             indexes = Some(AssignResult {
@@ -547,7 +598,19 @@ impl BucketLayout {
 
                         let len = OpPrimitive::get_num_from::<u64>(key_address, stack, heap)?;
 
-                        let items_bytes = heap.read_slice(key_address.add(8), len as usize)?;
+                        let items_bytes =
+                            match key_address {
+                                MemoryAddress::Heap { offset } => {
+                                    heap.read_slice(key_address.add(POINTER_SIZE), len as usize)?
+                                }
+                                MemoryAddress::Stack { offset } => {
+                                    stack.read(key_address.add(POINTER_SIZE), len as usize)?
+                                }
+                                MemoryAddress::Frame { offset } => stack
+                                    .read_in_frame(key_address.add(POINTER_SIZE), len as usize)?,
+                                MemoryAddress::Global { offset } => stack
+                                    .read_global(key_address.add(POINTER_SIZE), len as usize)?,
+                            };
 
                         if items_bytes == key {
                             indexes = Some(AssignResult {
@@ -622,11 +685,11 @@ impl BucketLayout {
                         let len =
                             OpPrimitive::get_num_from::<u64>(key_address.add(8), stack, heap)?;
 
-                        let items_bytes = heap
-                            .read_slice(key_address.add(STRING_HEADER), len as usize * item_size)?;
+                        let items_bytes =
+                            heap.read_slice(key_address.add(VEC_HEADER), len as usize * item_size)?;
 
                         if items_bytes == key {
-                            return Ok(Some(self.ptr_keys.add(idx * self.value_size)));
+                            return Ok(Some(self.ptr_values.add(idx * self.value_size)));
                         }
                     }
                     DerefHashing::String => {
@@ -642,10 +705,10 @@ impl BucketLayout {
                             OpPrimitive::get_num_from::<u64>(key_address.add(8), stack, heap)?;
 
                         let items_bytes =
-                            heap.read_slice(key_address.add(VEC_HEADER), len as usize)?;
+                            heap.read_slice(key_address.add(STRING_HEADER), len as usize)?;
 
                         if items_bytes == key {
-                            return Ok(Some(self.ptr_keys.add(idx * self.value_size)));
+                            return Ok(Some(self.ptr_values.add(idx * self.value_size)));
                         }
                     }
                     DerefHashing::StrSlice => {
@@ -659,10 +722,22 @@ impl BucketLayout {
 
                         let len = OpPrimitive::get_num_from::<u64>(key_address, stack, heap)?;
 
-                        let items_bytes = heap.read_slice(key_address.add(8), len as usize)?;
+                        let items_bytes =
+                            match key_address {
+                                MemoryAddress::Heap { offset } => {
+                                    heap.read_slice(key_address.add(POINTER_SIZE), len as usize)?
+                                }
+                                MemoryAddress::Stack { offset } => {
+                                    stack.read(key_address.add(POINTER_SIZE), len as usize)?
+                                }
+                                MemoryAddress::Frame { offset } => stack
+                                    .read_in_frame(key_address.add(POINTER_SIZE), len as usize)?,
+                                MemoryAddress::Global { offset } => stack
+                                    .read_global(key_address.add(POINTER_SIZE), len as usize)?,
+                            };
 
                         if items_bytes == key {
-                            return Ok(Some(self.ptr_keys.add(idx * self.value_size)));
+                            return Ok(Some(self.ptr_values.add(idx * self.value_size)));
                         }
                     }
                     DerefHashing::Default => {
@@ -670,7 +745,7 @@ impl BucketLayout {
                             heap.read_slice(self.ptr_keys.add(idx * self.key_size), self.key_size)?;
 
                         if found_key == key {
-                            return Ok(Some(self.ptr_keys.add(idx * self.value_size)));
+                            return Ok(Some(self.ptr_values.add(idx * self.value_size)));
                         }
                     }
                 }
@@ -709,8 +784,8 @@ impl BucketLayout {
                         let len =
                             OpPrimitive::get_num_from::<u64>(key_address.add(8), stack, heap)?;
 
-                        let items_bytes = heap
-                            .read_slice(key_address.add(STRING_HEADER), len as usize * item_size)?;
+                        let items_bytes =
+                            heap.read_slice(key_address.add(VEC_HEADER), len as usize * item_size)?;
 
                         if items_bytes == key {
                             found_idx = Some(idx);
@@ -729,7 +804,7 @@ impl BucketLayout {
                             OpPrimitive::get_num_from::<u64>(key_address.add(8), stack, heap)?;
 
                         let items_bytes =
-                            heap.read_slice(key_address.add(VEC_HEADER), len as usize)?;
+                            heap.read_slice(key_address.add(STRING_HEADER), len as usize)?;
 
                         if items_bytes == key {
                             found_idx = Some(idx);
@@ -746,7 +821,19 @@ impl BucketLayout {
 
                         let len = OpPrimitive::get_num_from::<u64>(key_address, stack, heap)?;
 
-                        let items_bytes = heap.read_slice(key_address.add(8), len as usize)?;
+                        let items_bytes =
+                            match key_address {
+                                MemoryAddress::Heap { offset } => {
+                                    heap.read_slice(key_address.add(POINTER_SIZE), len as usize)?
+                                }
+                                MemoryAddress::Stack { offset } => {
+                                    stack.read(key_address.add(POINTER_SIZE), len as usize)?
+                                }
+                                MemoryAddress::Frame { offset } => stack
+                                    .read_in_frame(key_address.add(POINTER_SIZE), len as usize)?,
+                                MemoryAddress::Global { offset } => stack
+                                    .read_global(key_address.add(POINTER_SIZE), len as usize)?,
+                            };
 
                         if items_bytes == key {
                             found_idx = Some(idx);
@@ -799,12 +886,11 @@ impl BucketLayout {
 }
 
 impl MapLayout {
-    fn len_offset() -> usize {
-        8
-    }
-
     fn log_cap_offset() -> usize {
         0
+    }
+    fn len_offset() -> usize {
+        8
     }
 
     fn hash_seed_offset() -> usize {
@@ -867,7 +953,7 @@ impl MapLayout {
 
     fn update_log_cap(&self, new_log_cap: u8, heap: &mut Heap) -> Result<(), RuntimeError> {
         let _ = heap.write(
-            self.ptr_map_layout.add(MapLayout::ptr_buckets_offset()),
+            self.ptr_map_layout.add(MapLayout::log_cap_offset()),
             &[new_log_cap],
         )?;
         Ok(())
@@ -887,7 +973,12 @@ impl MapLayout {
         Ok(())
     }
 
-    pub fn resize(&self, stack: &Stack, heap: &mut Heap) -> Result<(), RuntimeError> {
+    pub fn resize(
+        &self,
+        ref_access: DerefHashing,
+        stack: &Stack,
+        heap: &mut Heap,
+    ) -> Result<(), RuntimeError> {
         let mut new_log_cap = self.log_cap + 1;
 
         let previous_ptr_bucket = self.ptr_buckets;
@@ -895,6 +986,7 @@ impl MapLayout {
         let bytes_buckets = heap.read(self.ptr_buckets, (1 << self.log_cap) * self.bucket_size)?;
         let mut resizing_is_over = false;
         let mut new_bytes_buckets = Vec::new();
+
         'again: while !resizing_is_over {
             let alloc_size = (1 << new_log_cap) * self.bucket_size;
             if alloc_size > HEAP_SIZE {
@@ -920,8 +1012,65 @@ impl MapLayout {
                         continue;
                     }
                     // Compute hash
-                    let hash = hash_of(key, self.hash_seed);
+                    let hash = match ref_access {
+                        DerefHashing::Vec(item_size) => {
+                            let key_address: MemoryAddress = u64::from_le_bytes(
+                                *TryInto::<&[u8; 8]>::try_into(key)
+                                    .map_err(|_| RuntimeError::Deserialization)?,
+                            )
+                            .try_into()?;
+
+                            let len =
+                                OpPrimitive::get_num_from::<u64>(key_address.add(8), stack, heap)?;
+
+                            let items_bytes = heap.read_slice(
+                                key_address.add(VEC_HEADER),
+                                len as usize * item_size,
+                            )?;
+                            hash_of(items_bytes, self.hash_seed)
+                        }
+                        DerefHashing::String => {
+                            let key_address: MemoryAddress = u64::from_le_bytes(
+                                *TryInto::<&[u8; 8]>::try_into(key)
+                                    .map_err(|_| RuntimeError::Deserialization)?,
+                            )
+                            .try_into()?;
+
+                            let len =
+                                OpPrimitive::get_num_from::<u64>(key_address.add(8), stack, heap)?;
+
+                            let bytes =
+                                heap.read_slice(key_address.add(VEC_HEADER), len as usize)?;
+                            hash_of(bytes, self.hash_seed)
+                        }
+                        DerefHashing::StrSlice => {
+                            let key_address: MemoryAddress = u64::from_le_bytes(
+                                *TryInto::<&[u8; 8]>::try_into(key)
+                                    .map_err(|_| RuntimeError::Deserialization)?,
+                            )
+                            .try_into()?;
+
+                            let len = OpPrimitive::get_num_from::<u64>(key_address, stack, heap)?;
+
+                            let bytes = match key_address {
+                                MemoryAddress::Heap { offset } => {
+                                    heap.read_slice(key_address.add(POINTER_SIZE), len as usize)?
+                                }
+                                MemoryAddress::Stack { offset } => {
+                                    stack.read(key_address.add(POINTER_SIZE), len as usize)?
+                                }
+                                MemoryAddress::Frame { offset } => stack
+                                    .read_in_frame(key_address.add(POINTER_SIZE), len as usize)?,
+                                MemoryAddress::Global { offset } => stack
+                                    .read_global(key_address.add(POINTER_SIZE), len as usize)?,
+                            };
+                            hash_of(bytes, self.hash_seed)
+                        }
+                        DerefHashing::Default => hash_of(key, self.hash_seed),
+                    };
+
                     let new_bucket_idx = bucket_idx(hash, new_log_cap) as usize;
+
                     // index of key_top_hash in new bucket
                     let ptr_new_bucket = new_bucket_idx * self.bucket_size;
                     let mut idx_in_new_bucket = None;
@@ -986,10 +1135,16 @@ impl MapLayout {
     }
 
     pub fn clear_buckets(&self, heap: &mut Heap) -> Result<(), RuntimeError> {
+        dbg!(self.bucket_size);
         let _ = heap.write(
             self.ptr_buckets,
             &vec![0; (1 << self.log_cap) * self.bucket_size],
         )?;
+        Ok(())
+    }
+
+    pub fn free_buckets(&self, heap: &mut Heap) -> Result<(), RuntimeError> {
+        let _ = heap.free(self.ptr_buckets)?;
         Ok(())
     }
 
@@ -1194,7 +1349,20 @@ fn retrieve_key(
 
             let len = OpPrimitive::get_num_from::<u64>(address, stack, heap)?;
 
-            let items_bytes = heap.read(address.add(8), len as usize)?;
+            let items_bytes = match address {
+                MemoryAddress::Heap { offset } => {
+                    heap.read(address.add(POINTER_SIZE), len as usize)?
+                }
+                MemoryAddress::Stack { offset } => stack
+                    .read(address.add(POINTER_SIZE), len as usize)?
+                    .to_vec(),
+                MemoryAddress::Frame { offset } => stack
+                    .read_in_frame(address.add(POINTER_SIZE), len as usize)?
+                    .to_vec(),
+                MemoryAddress::Global { offset } => stack
+                    .read_global(address.add(POINTER_SIZE), len as usize)?
+                    .to_vec(),
+            };
             Ok((Some(address), items_bytes))
         }
     }
@@ -1228,10 +1396,10 @@ impl<E: crate::vm::external::Engine> Executable<E> for MapAsm {
                 item_size,
                 key_size,
             } => {
-                let mut log_cap: u8 = 0;
                 let cap = OpPrimitive::pop_num::<u64>(stack)?;
 
                 // to reduce cap size and therefore number of created bucket -> the map will try to fill up buckets in priority rather than reallocating
+                let log_cap: u8;
                 if cap <= MAP_BUCKET_SIZE as u64 {
                     log_cap = 0;
                 } else {
@@ -1255,14 +1423,16 @@ impl<E: crate::vm::external::Engine> Executable<E> for MapAsm {
                 let (key_address, key_data) = retrieve_key(key_size, ref_access, stack, heap)?;
 
                 let map_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let mut is_new_value = false;
+                let mut map_len: u64 = 0;
 
-                let mut insertion_successful = false;
-
-                while !insertion_successful {
+                loop {
                     let map_layout = map_layout(map_address, key_size, item_size, heap)?;
+                    map_len = map_layout.len;
 
                     let hash = hash_of(&key_data, map_layout.hash_seed);
                     let top_hash = top_hash(hash);
+
                     let bucket_idx = bucket_idx(hash, map_layout.log_cap) as u64;
 
                     // get address of the bucket
@@ -1274,53 +1444,65 @@ impl<E: crate::vm::external::Engine> Executable<E> for MapAsm {
 
                     let opt_ptr_key_value =
                         bucket_layout.assign(top_hash, &key_data, ref_access, stack, heap)?;
-                    match opt_ptr_key_value {
+
+                    let flow = match opt_ptr_key_value {
                         Some(AssignResult {
                             tophash_address,
                             key_address: assigned_key_address,
                             item_address,
-                            is_new_value,
+                            is_new_value: _is_new_value,
                         }) => {
+                            is_new_value = _is_new_value;
                             // trigger resizing if overload
-                            if is_new_value {
-                                if over_load_factor(map_layout.len + 1, map_layout.log_cap) {
-                                    let _ = map_layout.resize(stack, heap)?;
-                                    // resizing invalidates everything so perform the whole operation again
-                                    continue;
-                                }
-                            }
-                            // insert in found place
-                            let _ = heap.write(tophash_address, &vec![top_hash])?;
-                            match key_address {
-                                Some(key_address) => {
-                                    let key_address: u64 = key_address.into(stack);
+                            if is_new_value
+                                && over_load_factor(map_layout.len + 1, map_layout.log_cap)
+                            {
+                                // resizing invalidates everything so perform the whole operation again
+                                let _ = map_layout.resize(ref_access, stack, heap)?;
+                                ControlFlow::Continue(())
+                            } else {
+                                // insert in found place
+                                let _ = heap.write(tophash_address, &vec![top_hash])?;
+                                match key_address {
+                                    Some(key_address) => {
+                                        let key_address: u64 = key_address.into(stack);
 
-                                    let _ = heap
-                                        .write(assigned_key_address, &key_address.to_le_bytes())?;
+                                        let _ = heap.write(
+                                            assigned_key_address,
+                                            &key_address.to_le_bytes(),
+                                        )?;
+                                    }
+                                    None => {
+                                        let _ = heap.write(assigned_key_address, &key_data)?;
+                                    }
                                 }
-                                None => {
-                                    let _ = heap.write(assigned_key_address, &key_data)?;
-                                }
+                                let _ = heap.write(item_address, &item_data)?;
+                                ControlFlow::Break(())
                             }
-                            let _ = heap.write(item_address, &item_data)?;
-                            if is_new_value {
-                                // update len
-                                let _ = heap.write(
-                                    map_address.add(8),
-                                    &(map_layout.len + 1).to_le_bytes().to_vec(),
-                                )?;
-                            }
-                            insertion_successful = true;
                         }
                         None => {
                             // resize and retry
-                            let _ = map_layout.resize(&stack, heap)?;
+                            let _ = map_layout.resize(ref_access, &stack, heap)?;
+                            ControlFlow::Continue(())
                         }
-                    }
+                    };
 
-                    let map_address: u64 = map_address.into(stack);
-                    let _ = stack.push_with(&map_address.to_le_bytes())?;
+                    match flow {
+                        ControlFlow::Continue(()) => continue,
+                        ControlFlow::Break(_) => break,
+                    }
                 }
+
+                if is_new_value {
+                    // update len
+                    let _ = heap.write(
+                        map_address.add(MapLayout::len_offset()),
+                        &(map_len + 1).to_le_bytes().to_vec(),
+                    )?;
+                }
+
+                let map_address: u64 = map_address.into(stack);
+                let _ = stack.push_with(&map_address.to_le_bytes())?;
             }
             MapAsm::DelKey {
                 item_size,
@@ -1402,13 +1584,339 @@ impl<E: crate::vm::external::Engine> Executable<E> for MapAsm {
                 key_size,
             } => {
                 let map_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+
                 let map_layout = map_layout(map_address, key_size, item_size, heap)?;
-                let _ = map_layout.clear_buckets(heap)?;
+                let res = map_layout.clear_buckets(heap);
                 // update len
                 let _ = heap.write(map_address.add(8), &(0u64).to_le_bytes().to_vec())?;
+
+                if res.is_ok() {
+                    stack.push_with(&OK_SLICE)?;
+                } else {
+                    stack.push_with(&ERROR_SLICE)?;
+                }
+            }
+            MapAsm::MapFree {
+                item_size,
+                key_size,
+            } => {
+                let map_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let map_layout = map_layout(map_address, key_size, item_size, heap)?;
+                let res = map_layout.free_buckets(heap);
+
+                if heap.free(map_address).is_ok() && res.is_ok() {
+                    stack.push_with(&OK_SLICE)?;
+                } else {
+                    stack.push_with(&ERROR_SLICE)?;
+                }
             }
         }
         scheduler.next();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{test_extract_variable, test_extract_variable_with, test_statements};
+
+    use super::*;
+
+    #[test]
+    fn valid_get_insert_upsert() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u64>("value", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+            let res = test_extract_variable::<u64>("value2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 69);
+            true
+        }
+
+        test_statements(
+            r##"
+        let hmap : Map[u64]u64 = map();
+        hmap = insert(hmap,101,5);
+        hmap = insert(hmap,102,6);
+        hmap = insert(hmap,103,7);
+        hmap = insert(hmap,104,8);
+        hmap = insert(hmap,105,9);
+        hmap = insert(hmap,106,10);
+        hmap = insert(hmap,107,11);
+        hmap = insert(hmap,108,12);
+        hmap = insert(hmap,109,13);
+        hmap = insert(hmap,110,14);
+        let (value,err) = get(hmap,103);
+
+        hmap = insert(hmap,103,69);
+
+        let (value2,err) = get(hmap,103);
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_get_insert_upsert_str_slice() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u64>("value", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+            let res = test_extract_variable::<u64>("value2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 69);
+            true
+        }
+
+        test_statements(
+            r##"
+        let hmap : Map[str]u64 = map();
+        hmap = insert(hmap,"a",5);
+        hmap = insert(hmap,"bo",6);
+        hmap = insert(hmap,"c",7);
+        hmap = insert(hmap,"dn",8);
+        hmap = insert(hmap,"e",9);
+        hmap = insert(hmap,"fm",10);
+        hmap = insert(hmap,"g",11);
+        hmap = insert(hmap,"hl",12);
+        hmap = insert(hmap,"i",13);
+        hmap = insert(hmap,"jk",14);
+        let (value,err) = get(hmap,"c");
+
+        hmap = insert(hmap,"c",69);
+
+        let (value2,err) = get(hmap,"c");
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_get_insert_upsert_string() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u64>("value", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+            let res = test_extract_variable::<u64>("value2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 69);
+            true
+        }
+
+        test_statements(
+            r##"
+        let hmap : Map[String]u64 = map();
+        hmap = insert(hmap,string("a"),5);
+        hmap = insert(hmap,string("bo"),6);
+        hmap = insert(hmap,string("c"),7);
+        hmap = insert(hmap,string("dn"),8);
+        hmap = insert(hmap,string("e"),9);
+        hmap = insert(hmap,string("fm"),10);
+        hmap = insert(hmap,string("g"),11);
+        hmap = insert(hmap,string("hl"),12);
+        hmap = insert(hmap,string("i"),13);
+        hmap = insert(hmap,string("jk"),14);
+        let (value,err) = get(hmap,string("c"));
+
+        hmap = insert(hmap,string("c"),69);
+
+        let (value2,err) = get(hmap,string("c"));
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_delete() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u64>("value", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+            let res = test_extract_variable::<u64>("dvalue", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+            let res = test_extract_variable::<u8>("err", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            true
+        }
+
+        test_statements(
+            r##"
+        let hmap : Map[u64]u64 = map();
+        hmap = insert(hmap,101,5);
+        hmap = insert(hmap,102,6);
+        hmap = insert(hmap,103,7);
+
+        let (value,err) = get(hmap,103);
+
+        let (dvalue,err) = delete_key(hmap,103);
+
+        let (value2,err) = get(hmap,103);
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_init() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u64>("value", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+            let res = test_extract_variable::<u64>("value2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 69);
+            true
+        }
+
+        test_statements(
+            r##"
+        let hmap : Map[u64]u64 = map {
+            101 : 5,
+            102 : 6,
+            103 : 7,
+            104 : 8,
+            105 : 9,
+            106 : 10,
+            107 : 11,
+            108 : 12,
+            109 : 13,
+            110 : 14,
+        };
+        let (value,err) = get(hmap,103);
+
+        hmap = insert(hmap,103,69);
+
+        let (value2,err) = get(hmap,103);
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_init_str() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u64>("value", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+            let res = test_extract_variable::<u64>("value2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 69);
+            true
+        }
+
+        test_statements(
+            r##"
+        let hmap : Map[str]u64 = map {
+            "a" : 5,
+            "bo" : 6,
+            "c" : 7,
+            "dn" : 8,
+            "e" : 9,
+            "fm" : 10,
+            "g" : 11,
+            "hl" : 12,
+            "i" : 13,
+            "jk" : 14,
+        };
+        let (value,err) = get(hmap,"c");
+
+        hmap = insert(hmap,"c",69);
+
+        let (value2,err) = get(hmap,"c");
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_clear() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u64>("value", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+            let res = test_extract_variable::<u64>("value2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 0);
+
+            let res = test_extract_variable::<u8>("err", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            true
+        }
+
+        test_statements(
+            r##"
+        let hmap : Map[u64]u64 = map {
+            101 : 5,
+            102 : 6,
+            103 : 7,
+            104 : 8,
+            105 : 9,
+            106 : 10,
+            107 : 11,
+            108 : 12,
+            109 : 13,
+            110 : 14,
+        };
+        let (value,err) = get(hmap,103);
+
+        let err = clear_map(hmap);
+
+        let (value2,err) = get(hmap,103);
+        "##,
+            &mut engine,
+            assert_fn,
+        );
     }
 }

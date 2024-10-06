@@ -304,6 +304,7 @@ impl Block {
             return Err(HeapError::InvalidPointer);
         };
         let block_footer = BlockHeader::read(block_end);
+
         if block_header != block_footer {
             return Err(HeapError::InvalidPointer);
         }
@@ -516,7 +517,6 @@ impl Heap {
         }
 
         let freed_size = block.data_size();
-
         let block = {
             let left_block = match block.peak_left() {
                 Some(range) => Block::from_footer(&self.heap, range).ok(),
@@ -705,7 +705,6 @@ impl Heap {
         }
 
         self.allocated_size -= freed_size;
-
         Ok(())
     }
 
