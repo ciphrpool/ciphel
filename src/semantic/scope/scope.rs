@@ -607,13 +607,22 @@ impl ScopeManager {
 
     pub fn find_type_by_name(
         &self,
+        path: Option<&[String]>,
         name: &str,
         scope: Option<u128>,
     ) -> Result<Type, SemanticError> {
+        if let Some(path) = path {
+            return self
+                .modules
+                .iter()
+                .find_map(|module| module.find_type(path, name))
+                .ok_or(SemanticError::UnknownType(name.to_string()));
+        }
+
         match scope {
             Some(scope) => {
                 let Some(branch) = self.scope_branches.get(&scope) else {
-                    return Err(SemanticError::UnknownVar(name.to_string()));
+                    return Err(SemanticError::UnknownType(name.to_string()));
                 };
 
                 let Some(ctype) = self
@@ -642,7 +651,7 @@ impl ScopeManager {
                     .filter(|v| v.name == name && v.scope.is_none())
                     .next()
                 else {
-                    return Err(SemanticError::UnknownVar(name.to_string()));
+                    return Err(SemanticError::UnknownType(name.to_string()));
                 };
                 Ok(Type {
                     id: ctype.id,

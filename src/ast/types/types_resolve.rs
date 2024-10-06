@@ -23,8 +23,15 @@ impl Resolve for Type {
             Type::Primitive(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Type::Slice(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Type::StrSlice(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
-            Type::UserType(ref value) => {
-                let _ = scope_manager.find_type_by_name(value, scope_id)?;
+            Type::UserType { ref path, ref name } => {
+                let _ = scope_manager.find_type_by_name(
+                    match path {
+                        crate::ast::expressions::Path::Segment(vec) => Some(vec.as_slice()),
+                        crate::ast::expressions::Path::Empty => None,
+                    },
+                    name,
+                    scope_id,
+                )?;
                 Ok(())
             }
             Type::Vec(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),

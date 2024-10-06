@@ -276,7 +276,14 @@ impl TypeOf for Struct {
     where
         Self: Sized + Resolve,
     {
-        let user_type = scope_manager.find_type_by_name(&self.id, scope_id)?;
+        let user_type = scope_manager.find_type_by_name(
+            match &self.path {
+                crate::ast::expressions::Path::Segment(vec) => Some(vec.as_slice()),
+                crate::ast::expressions::Path::Empty => None,
+            },
+            &self.id,
+            scope_id,
+        )?;
         Ok(EType::User {
             id: user_type.id,
             size: user_type.def.size_of(),
@@ -292,7 +299,14 @@ impl TypeOf for Union {
     where
         Self: Sized + Resolve,
     {
-        let user_type = scope_manager.find_type_by_name(&self.typename, scope_id)?;
+        let user_type = scope_manager.find_type_by_name(
+            match &self.path {
+                crate::ast::expressions::Path::Segment(vec) => Some(vec.as_slice()),
+                crate::ast::expressions::Path::Empty => None,
+            },
+            &self.typename,
+            scope_id,
+        )?;
         Ok(EType::User {
             id: user_type.id,
             size: user_type.def.size_of(),
@@ -309,7 +323,14 @@ impl TypeOf for Enum {
     where
         Self: Sized + Resolve,
     {
-        let user_type = scope_manager.find_type_by_name(&self.typename, scope_id)?;
+        let user_type = scope_manager.find_type_by_name(
+            match &self.path {
+                crate::ast::expressions::Path::Segment(vec) => Some(vec.as_slice()),
+                crate::ast::expressions::Path::Empty => None,
+            },
+            &self.typename,
+            scope_id,
+        )?;
         Ok(EType::User {
             id: user_type.id,
             size: user_type.def.size_of(),

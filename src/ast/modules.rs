@@ -11,13 +11,16 @@ use crate::{
         lexem,
         strings::{parse_id, wst},
     },
-    semantic::{scope::scope::Variable, Desugar, Resolve},
+    semantic::{
+        scope::scope::{Type, Variable},
+        Desugar, EType, Resolve,
+    },
     vm::{external::ExternThreadIdentifier, GenerateCode},
     CompilationError,
 };
 
 use super::{
-    statements::definition::{FnDef, TypeDef},
+    statements::definition::{EnumDef, FnDef, StructDef, TypeDef, UnionDef},
     utils::{error::generate_error_report, io::Span},
     TryParse,
 };
@@ -46,6 +49,35 @@ impl Module {
                     id: id.clone(),
                     ctype: ctype.clone(),
                     scope: None,
+                });
+            }
+            None => return None,
+        }
+    }
+
+    pub fn find_type(&self, path: &[String], name: &str) -> Option<Type> {
+        if path.len() != 1 {
+            return None;
+        }
+        if path[0] != self.name {
+            return None;
+        }
+        match self.types.iter().find(|td| match *td {
+            TypeDef::Struct(StructDef { id, .. }) => id.as_str() == name,
+            TypeDef::Union(UnionDef { id, .. }) => id.as_str() == name,
+            TypeDef::Enum(EnumDef { id, .. }) => id.as_str() == name,
+        }) {
+            Some(td) => {
+                let Some((EType::User { id, size }, def)) = (match td {
+                    TypeDef::Struct(value) => &value.signature,
+                    TypeDef::Union(value) => &value.signature,
+                    TypeDef::Enum(value) => &value.signature,
+                }) else {
+                    return None;
+                };
+                return Some(Type {
+                    id: id.clone(),
+                    def: def.clone(),
                 });
             }
             None => return None,
@@ -163,9 +195,11 @@ pub fn parse_module<TID: ExternThreadIdentifier>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{test_extract_variable, Ciphel};
-
-    
+    use crate::{
+        test_extract_variable, test_extract_variable_with,
+        vm::asm::operation::{GetNumFrom, OpPrimitive},
+        Ciphel,
+    };
 
     #[test]
     fn valid_module() {
@@ -187,6 +221,11 @@ mod tests {
         
         module Test {
         
+            struct Point {
+                x : i64,
+                y : i64,
+            }
+
             fn test() -> i64 {
                 5
             }
@@ -207,7 +246,19 @@ mod tests {
         }
         let res2 = Test::test();
         let res3 = test();
+            
+        let point = Test::Point { x : 4 , y : 9 };
+        let point2 = Point { x : 7 , y : 2 };
 
+        struct Point {
+            x : i64,
+            y : i64,
+            z : i64,
+        }
+
+        let point3 = Point { x : 7 , y : 2 , z : 6};
+        
+        let point4 = Test::Point { x : 4 , y : 9 };
             "##,
                 0,
             )
@@ -236,5 +287,72 @@ mod tests {
         let res = test_extract_variable::<i64>("res3", scope_manager, stack, &ciphel.heap)
             .expect("Deserialization should have succeeded");
         assert_eq!(res, 6);
+
+        test_extract_variable_with(
+            "point",
+            |address, stack, heap| {
+                let x = OpPrimitive::get_num_from::<u64>(address, stack, heap)
+                    .expect("Deserialization should have succeeded");
+                let y = OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)
+                    .expect("Deserialization should have succeeded");
+
+                assert_eq!(x, 4);
+                assert_eq!(y, 9);
+            },
+            scope_manager,
+            stack,
+            &ciphel.heap,
+        );
+
+        test_extract_variable_with(
+            "point2",
+            |address, stack, heap| {
+                let x = OpPrimitive::get_num_from::<u64>(address, stack, heap)
+                    .expect("Deserialization should have succeeded");
+                let y = OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)
+                    .expect("Deserialization should have succeeded");
+
+                assert_eq!(x, 7);
+                assert_eq!(y, 2);
+            },
+            scope_manager,
+            stack,
+            &ciphel.heap,
+        );
+
+        test_extract_variable_with(
+            "point3",
+            |address, stack, heap| {
+                let x = OpPrimitive::get_num_from::<u64>(address, stack, heap)
+                    .expect("Deserialization should have succeeded");
+                let y = OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)
+                    .expect("Deserialization should have succeeded");
+                let z = OpPrimitive::get_num_from::<u64>(address.add(16), stack, heap)
+                    .expect("Deserialization should have succeeded");
+
+                assert_eq!(x, 7);
+                assert_eq!(y, 2);
+                assert_eq!(z, 6);
+            },
+            scope_manager,
+            stack,
+            &ciphel.heap,
+        );
+
+        test_extract_variable_with(
+            "point4",
+            |address, stack, heap| {
+                let x = OpPrimitive::get_num_from::<u64>(address, stack, heap)
+                    .expect("Deserialization should have succeeded");
+                let y = OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)
+                    .expect("Deserialization should have succeeded");
+
+                assert_eq!(x, 4);
+                assert_eq!(y, 9);
+            },
+            scope_manager,
+            stack,
+            &ciphel.heap,
+        );
     }
 }

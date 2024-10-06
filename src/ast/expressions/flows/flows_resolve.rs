@@ -178,7 +178,7 @@ impl Resolve for UnionPattern {
         Self: Sized,
     {
         let UserType::Union(union_type @ Union { .. }) = scope_manager
-            .find_type_by_name(&self.typename, scope_id)?
+            .find_type_by_name(None, &self.typename, scope_id)?
             .def
         else {
             return Err(SemanticError::IncompatibleTypes);
@@ -339,8 +339,9 @@ impl<
         let inner_scope = self.block.init_from_parent(scope_manager, scope_id)?;
 
         for (ref typename, ref name, value) in self.patterns.iter_mut() {
-            let UserType::Enum(Enum { id, values }) =
-                scope_manager.find_type_by_name(typename, scope_id)?.def
+            let UserType::Enum(Enum { id, values }) = scope_manager
+                .find_type_by_name(None, typename, scope_id)?
+                .def
             else {
                 return Err(SemanticError::IncompatibleTypes);
             };

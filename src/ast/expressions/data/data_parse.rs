@@ -350,7 +350,7 @@ impl TryParse for Struct {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                parse_id,
+                CompletePath::parse,
                 delimited(
                     wst(lexem::BRA_O),
                     separated_list0(
@@ -360,8 +360,9 @@ impl TryParse for Struct {
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 ),
             ),
-            |(id, value)| Struct {
-                id,
+            |(CompletePath { path, name }, value)| Struct {
+                path,
+                id: name,
                 fields: value,
                 metadata: Metadata::default(),
             },
@@ -381,7 +382,7 @@ impl TryParse for Union {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                separated_pair(parse_id, wst(lexem::SEP), parse_id),
+                CompletePath::parse_segment,
                 delimited(
                     wst(lexem::BRA_O),
                     cut(separated_list0(
@@ -391,11 +392,28 @@ impl TryParse for Union {
                     cut(preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C))),
                 ),
             ),
-            |((typename, name), value)| Union {
-                variant: name,
-                typename,
-                fields: value,
-                metadata: Metadata::default(),
+            |(CompletePath { mut path, name }, value)| {
+                let typename = match &mut path {
+                    crate::ast::expressions::Path::Segment(vec) => match vec.pop() {
+                        Some(typename) => {
+                            if vec.len() == 0 {
+                                path = crate::ast::expressions::Path::Empty;
+                                typename
+                            } else {
+                                typename
+                            }
+                        }
+                        None => "".to_string(), // unreachable
+                    },
+                    crate::ast::expressions::Path::Empty => "".to_string(), // unreachable
+                };
+                Union {
+                    path,
+                    variant: name,
+                    typename,
+                    fields: value,
+                    metadata: Metadata::default(),
+                }
             },
         )(input)
     }
@@ -410,11 +428,31 @@ impl TryParse for Enum {
      */
     fn parse(input: Span) -> PResult<Self> {
         map(
-            separated_pair(parse_id, wst(lexem::SEP), parse_id),
-            |(typename, value)| Enum {
-                typename,
-                value,
-                metadata: Metadata::default(),
+            CompletePath::parse_segment,
+            |CompletePath {
+                 mut path,
+                 name: value,
+             }| {
+                let typename = match &mut path {
+                    crate::ast::expressions::Path::Segment(vec) => match vec.pop() {
+                        Some(typename) => {
+                            if vec.len() == 0 {
+                                path = crate::ast::expressions::Path::Empty;
+                                typename
+                            } else {
+                                typename
+                            }
+                        }
+                        None => "".to_string(), // unreachable
+                    },
+                    crate::ast::expressions::Path::Empty => "".to_string(), // unreachable
+                };
+                Enum {
+                    path,
+                    typename,
+                    value,
+                    metadata: Metadata::default(),
+                }
             },
         )(input)
     }
@@ -582,7 +620,7 @@ mod tests {
         ast::expressions::{
             data::Number,
             operation::{FieldAccess, ListAccess},
-            Atomic,
+            Atomic, Path,
         },
         v_num,
     };
@@ -793,6 +831,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Struct {
+                path: Path::default(),
                 id: "Point".to_string().into(),
                 fields: vec![
                     (
@@ -821,6 +860,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Union {
+                path: Path::default(),
                 typename: "Geo".to_string().into(),
                 variant: "Point".to_string().into(),
                 fields: vec![
@@ -850,6 +890,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Enum {
+                path: Path::default(),
                 typename: "Geo".to_string().into(),
                 value: "Point".to_string().into(),
                 metadata: Metadata::default()

@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     combinator::map,
-    multi::many0,
+    multi::{many0, many1},
     sequence::{delimited, pair, terminated},
 };
 use operation::ExprCall;
@@ -67,16 +67,17 @@ pub enum Atomic {
     ExprFlow(flows::ExprFlow),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Path {
     Segment(Vec<String>),
+    #[default]
     Empty,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompletePath {
-    path: Path,
-    name: String,
+    pub path: Path,
+    pub name: String,
 }
 
 impl TryParse for Path {
@@ -91,11 +92,27 @@ impl TryParse for Path {
     }
 }
 
+impl Path {
+    fn parse_segment(input: Span) -> PResult<Self> {
+        map(many1(terminated(parse_id, wst(lexem::SEP))), |segments| {
+            Path::Segment(segments)
+        })(input)
+    }
+}
+
 impl TryParse for CompletePath {
     fn parse(input: Span) -> PResult<Self> {
         map(pair(Path::parse, parse_id), |(path, name)| CompletePath {
             name,
             path,
+        })(input)
+    }
+}
+
+impl CompletePath {
+    fn parse_segment(input: Span) -> PResult<Self> {
+        map(pair(Path::parse_segment, parse_id), |(path, name)| {
+            CompletePath { name, path }
         })(input)
     }
 }

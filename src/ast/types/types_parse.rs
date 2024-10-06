@@ -5,12 +5,15 @@ use nom::{
     sequence::{delimited, pair, preceded, tuple},
 };
 
-use crate::ast::utils::{
-    error::squash,
-    io::{PResult, Span},
-    lexem,
-    numbers::parse_number,
-    strings::{parse_id, wst, wst_closed},
+use crate::ast::{
+    expressions::CompletePath,
+    utils::{
+        error::squash,
+        io::{PResult, Span},
+        lexem,
+        numbers::parse_number,
+        strings::{parse_id, wst, wst_closed},
+    },
 };
 
 use crate::ast::TryParse;
@@ -44,7 +47,9 @@ impl TryParse for Type {
                 map(TupleType::parse, |value| Type::Tuple(value)),
                 map(AddrType::parse, |value| Type::Address(value)),
                 map(MapType::parse, |value| Type::Map(value)),
-                map(parse_id, |value| Type::UserType(value)),
+                map(CompletePath::parse, |CompletePath { path, name }| {
+                    Type::UserType { path, name }
+                }),
             )),
             "Expected a valid type",
         )(input)

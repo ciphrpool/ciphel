@@ -23,8 +23,16 @@ impl TypeOf for Type {
             Type::Primitive(value) => value.type_of(&scope_manager, scope_id),
             Type::Slice(value) => value.type_of(&scope_manager, scope_id),
             Type::StrSlice(value) => value.type_of(&scope_manager, scope_id),
-            Type::UserType(value) => {
-                let user_type = scope_manager.find_type_by_name(&value, scope_id)?;
+            Type::UserType { path, name } => {
+                let user_type = scope_manager.find_type_by_name(
+                    match path {
+                        crate::ast::expressions::Path::Segment(vec) => Some(vec.as_slice()),
+                        crate::ast::expressions::Path::Empty => None,
+                    },
+                    name,
+                    scope_id,
+                )?;
+
                 Ok(EType::User {
                     id: user_type.id,
                     size: user_type.def.size_of(),

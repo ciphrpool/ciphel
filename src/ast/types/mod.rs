@@ -1,4 +1,4 @@
-use super::utils::strings::ID;
+use super::{expressions::Path, utils::strings::ID};
 
 pub mod types_parse;
 pub mod types_resolve;
@@ -12,7 +12,7 @@ pub enum Type {
     Slice(SliceType),
     String(StringType),
     StrSlice(StrSliceType),
-    UserType(ID),
+    UserType { path: Path, name: String },
     Vec(VecType),
     Function(FunctionType),
     Closure(ClosureType),

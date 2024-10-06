@@ -15,7 +15,7 @@ use crate::{
     },
 };
 
-use super::{Atomic, CompletePath, Expression};
+use super::{Atomic, CompletePath, Expression, Path};
 
 pub mod data_gencode;
 pub mod data_parse;
@@ -157,6 +157,7 @@ pub struct PtrAccess {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct {
+    pub path: Path,
     pub id: ID,
     pub fields: Vec<(ID, Expression)>,
     pub metadata: Metadata,
@@ -164,6 +165,7 @@ pub struct Struct {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Union {
+    pub path: Path,
     pub typename: ID,
     pub variant: ID,
     pub fields: Vec<(ID, Expression)>,
@@ -172,6 +174,7 @@ pub struct Union {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Enum {
+    pub path: Path,
     pub typename: ID,
     pub value: ID,
     pub metadata: Metadata,
@@ -243,38 +246,17 @@ impl Data {
         match self {
             Data::Primitive(_) => None,
             Data::Slice(Slice { metadata, .. }) => Some(metadata),
-            Data::Vec(Vector {
-                value: _,
-                metadata,
-                length: _,
-                capacity: _,
-            }) => Some(metadata),
+            Data::Vec(Vector { metadata, .. }) => Some(metadata),
             Data::Closure(Closure { metadata, .. }) => Some(metadata),
             Data::Tuple(Tuple { value: _, metadata }) => Some(metadata),
             Data::Address(Address { value: _, metadata }) => Some(metadata),
             Data::PtrAccess(PtrAccess { value: _, metadata }) => Some(metadata),
             Data::Variable(Variable { metadata, .. }) => Some(metadata),
             Data::Unit => None,
-            Data::Map(Map {
-                fields: _,
-                metadata,
-            }) => Some(metadata),
-            Data::Struct(Struct {
-                id: _,
-                fields: _,
-                metadata,
-            }) => Some(metadata),
-            Data::Union(Union {
-                typename: _,
-                variant: _,
-                fields: _,
-                metadata,
-            }) => Some(metadata),
-            Data::Enum(Enum {
-                typename: _,
-                value: _,
-                metadata,
-            }) => Some(metadata),
+            Data::Map(Map { metadata, .. }) => Some(metadata),
+            Data::Struct(Struct { metadata, .. }) => Some(metadata),
+            Data::Union(Union { metadata, .. }) => Some(metadata),
+            Data::Enum(Enum { metadata, .. }) => Some(metadata),
             Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
             Data::Call(Call { metadata, .. }) => Some(metadata),
             Data::Lambda(Lambda { metadata, .. }) => Some(metadata),
@@ -294,26 +276,10 @@ impl Data {
             Data::PtrAccess(PtrAccess { value: _, metadata }) => Some(metadata),
             Data::Variable(Variable { metadata, .. }) => Some(metadata),
             Data::Unit => None,
-            Data::Map(Map {
-                fields: _,
-                metadata,
-            }) => Some(metadata),
-            Data::Struct(Struct {
-                id: _,
-                fields: _,
-                metadata,
-            }) => Some(metadata),
-            Data::Union(Union {
-                typename: _,
-                variant: _,
-                fields: _,
-                metadata,
-            }) => Some(metadata),
-            Data::Enum(Enum {
-                typename: _,
-                value: _,
-                metadata,
-            }) => Some(metadata),
+            Data::Map(Map { metadata, .. }) => Some(metadata),
+            Data::Struct(Struct { metadata, .. }) => Some(metadata),
+            Data::Union(Union { metadata, .. }) => Some(metadata),
+            Data::Enum(Enum { metadata, .. }) => Some(metadata),
             Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
             Data::Call(Call { metadata, .. }) => Some(metadata),
             Data::Lambda(Lambda { metadata, .. }) => Some(metadata),
@@ -347,38 +313,17 @@ impl Data {
                 )),
             },
             Data::Slice(Slice { metadata, .. }) => metadata.signature(),
-            Data::Vec(Vector {
-                value: _,
-                metadata,
-                length: _,
-                capacity: _,
-            }) => metadata.signature(),
+            Data::Vec(Vector { metadata, .. }) => metadata.signature(),
             Data::Closure(Closure { metadata, .. }) => metadata.signature(),
             Data::Tuple(Tuple { value: _, metadata }) => metadata.signature(),
             Data::Address(Address { value: _, metadata }) => metadata.signature(),
             Data::PtrAccess(PtrAccess { value: _, metadata }) => metadata.signature(),
             Data::Variable(Variable { metadata, .. }) => metadata.signature(),
             Data::Unit => Some(e_static!(StaticType::Unit)),
-            Data::Map(Map {
-                fields: _,
-                metadata,
-            }) => metadata.signature(),
-            Data::Struct(Struct {
-                id: _,
-                fields: _,
-                metadata,
-            }) => metadata.signature(),
-            Data::Union(Union {
-                typename: _,
-                variant: _,
-                fields: _,
-                metadata,
-            }) => metadata.signature(),
-            Data::Enum(Enum {
-                typename: _,
-                value: _,
-                metadata,
-            }) => metadata.signature(),
+            Data::Map(Map { metadata, .. }) => metadata.signature(),
+            Data::Struct(Struct { metadata, .. }) => metadata.signature(),
+            Data::Union(Union { metadata, .. }) => metadata.signature(),
+            Data::Enum(Enum { metadata, .. }) => metadata.signature(),
             Data::StrSlice(StrSlice { metadata, .. }) => metadata.signature(),
             Data::Call(Call { metadata, .. }) => metadata.signature(),
             Data::Lambda(Lambda { metadata, .. }) => metadata.signature(),

@@ -7,6 +7,7 @@ use crate::semantic::scope::static_types::FunctionType;
 use crate::semantic::scope::BuildUserType;
 use crate::semantic::Desugar;
 use crate::semantic::EType;
+use crate::semantic::SizeOf;
 use crate::semantic::{
     scope::{static_types::StaticType, user_types::UserType},
     Resolve, SemanticError, TypeOf,
@@ -72,8 +73,20 @@ impl Resolve for TypeDef {
         };
 
         let type_def = UserType::build_usertype(self, &scope_manager, scope_id)?;
+        let size = type_def.size_of();
+        let id = scope_manager.register_type(id, type_def.clone(), scope_id)?;
 
-        let _ = scope_manager.register_type(id, type_def, scope_id)?;
+        match self {
+            TypeDef::Struct(value) => {
+                let _ = value.signature.insert((EType::User { id, size }, type_def));
+            }
+            TypeDef::Union(value) => {
+                let _ = value.signature.insert((EType::User { id, size }, type_def));
+            }
+            TypeDef::Enum(value) => {
+                let _ = value.signature.insert((EType::User { id, size }, type_def));
+            }
+        }
         Ok(())
     }
 }
@@ -255,7 +268,9 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope_manager.find_type_by_name(&"Point", None).unwrap();
+        let res_type = scope_manager
+            .find_type_by_name(None, &"Point", None)
+            .unwrap();
 
         assert_eq!(
             UserType::Struct(Struct {
@@ -309,7 +324,9 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope_manager.find_type_by_name(&"Line", None).unwrap();
+        let res_type = scope_manager
+            .find_type_by_name(None, &"Line", None)
+            .unwrap();
 
         assert_eq!(
             UserType::Struct(Struct {
@@ -364,7 +381,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope_manager.find_type_by_name(&"Geo", None).unwrap();
+        let res_type = scope_manager.find_type_by_name(None, &"Geo", None).unwrap();
 
         assert_eq!(
             UserType::Union(Union {
@@ -422,7 +439,7 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope_manager.find_type_by_name(&"Geo", None).unwrap();
+        let res_type = scope_manager.find_type_by_name(None, &"Geo", None).unwrap();
 
         assert_eq!(
             UserType::Enum(Enum {

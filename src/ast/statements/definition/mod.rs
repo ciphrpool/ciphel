@@ -1,6 +1,6 @@
 use crate::{
     ast::{types::Type, utils::strings::ID},
-    semantic::EType,
+    semantic::{scope::user_types::UserType, EType},
 };
 
 use super::{block::FunctionBlock, declaration::TypedVar};
@@ -27,18 +27,21 @@ pub enum TypeDef {
 pub struct StructDef {
     pub id: ID,
     pub fields: Vec<(ID, Type)>,
+    pub signature: Option<(EType, UserType)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionDef {
     pub id: ID,
     pub variants: Vec<(ID, Vec<(ID, Type)>)>,
+    pub signature: Option<(EType, UserType)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumDef {
     pub id: ID,
     pub values: Vec<ID>,
+    pub signature: Option<(EType, UserType)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

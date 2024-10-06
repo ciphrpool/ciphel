@@ -986,8 +986,16 @@ impl Resolve for Struct {
     where
         Self: Sized,
     {
-        let UserType::Struct(semantic::scope::user_types::Struct { fields, .. }) =
-            scope_manager.find_type_by_name(&self.id, scope_id)?.def
+        let UserType::Struct(semantic::scope::user_types::Struct { fields, .. }) = scope_manager
+            .find_type_by_name(
+                match &self.path {
+                    crate::ast::expressions::Path::Segment(vec) => Some(vec.as_slice()),
+                    crate::ast::expressions::Path::Empty => None,
+                },
+                &self.id,
+                scope_id,
+            )?
+            .def
         else {
             return Err(SemanticError::ExpectedStruct);
         };
@@ -1033,6 +1041,46 @@ impl Desugar<Atomic> for Struct {
                 *expr = output;
             }
         }
+
+        if let Path::Segment(segment) = &self.path {
+            let maybe = scope_manager.find_type_by_name(
+                if segment.len() > 1 {
+                    Some(&segment[0..segment.len() - 1])
+                } else {
+                    None
+                },
+                segment.last().unwrap(),
+                scope_id,
+            );
+            if let Ok(semantic::scope::scope::Type {
+                def: UserType::Union(semantic::scope::user_types::Union { id, variants }),
+                ..
+            }) = maybe
+            {
+                let mut path = self.path.clone();
+                let typename = match &mut path {
+                    crate::ast::expressions::Path::Segment(vec) => match vec.pop() {
+                        Some(typename) => {
+                            if vec.len() == 0 {
+                                path = crate::ast::expressions::Path::Empty;
+                                typename
+                            } else {
+                                typename
+                            }
+                        }
+                        None => "".to_string(), // unreachable
+                    },
+                    crate::ast::expressions::Path::Empty => "".to_string(), // unreachable
+                };
+                return Ok(Some(Atomic::Data(Data::Union(Union {
+                    path,
+                    typename,
+                    variant: self.id.clone(),
+                    fields: self.fields.clone(),
+                    metadata: self.metadata.clone(),
+                }))));
+            }
+        }
         Ok(None)
     }
 }
@@ -1052,7 +1100,14 @@ impl Resolve for Union {
         Self: Sized,
     {
         let UserType::Union(semantic::scope::user_types::Union { variants, .. }) = scope_manager
-            .find_type_by_name(&self.typename, scope_id)?
+            .find_type_by_name(
+                match &self.path {
+                    crate::ast::expressions::Path::Segment(vec) => Some(vec.as_slice()),
+                    crate::ast::expressions::Path::Empty => None,
+                },
+                &self.typename,
+                scope_id,
+            )?
             .def
         else {
             return Err(SemanticError::ExpectedStruct);
@@ -1124,7 +1179,14 @@ impl Resolve for Enum {
         Self: Sized,
     {
         let UserType::Enum(semantic::scope::user_types::Enum { values, .. }) = scope_manager
-            .find_type_by_name(&self.typename, scope_id)?
+            .find_type_by_name(
+                match &self.path {
+                    crate::ast::expressions::Path::Segment(vec) => Some(vec.as_slice()),
+                    crate::ast::expressions::Path::Empty => None,
+                },
+                &self.typename,
+                scope_id,
+            )?
             .def
         else {
             return Err(SemanticError::ExpectedStruct);

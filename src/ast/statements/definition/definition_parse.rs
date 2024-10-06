@@ -63,7 +63,11 @@ impl TryParse for StructDef {
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 )),
             ),
-            |(id, fields)| StructDef { id, fields },
+            |(id, fields)| StructDef {
+                id,
+                fields,
+                signature: None,
+            },
         )(input)
     }
 }
@@ -100,7 +104,11 @@ impl TryParse for UnionDef {
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 )),
             ),
-            |(id, variants)| UnionDef { id, variants },
+            |(id, variants)| UnionDef {
+                id,
+                variants,
+                signature: None,
+            },
         )(input)
     }
 }
@@ -124,7 +132,11 @@ impl TryParse for EnumDef {
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 )),
             ),
-            |(id, values)| EnumDef { id, values },
+            |(id, values)| EnumDef {
+                id,
+                values,
+                signature: None,
+            },
         )(input)
     }
 }
@@ -202,7 +214,8 @@ mod tests {
                         "y".to_string().into(),
                         Type::Primitive(PrimitiveType::Number(NumberType::U64))
                     )
-                ]
+                ],
+                signature: None,
             },
             value
         );
@@ -238,7 +251,8 @@ mod tests {
                             Type::Primitive(PrimitiveType::Number(NumberType::U64))
                         )
                     ]
-                ),]
+                ),],
+                signature: None,
             },
             value
         );
@@ -263,7 +277,8 @@ mod tests {
                 values: vec![
                     "Football".to_string().into(),
                     "Basketball".to_string().into()
-                ]
+                ],
+                signature: None,
             },
             value
         );
