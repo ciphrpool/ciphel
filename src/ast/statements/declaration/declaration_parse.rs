@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    combinator::{map, opt},
+    combinator::{cut, map, opt},
     multi::separated_list1,
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
@@ -10,9 +10,10 @@ use crate::ast::{
     statements::assignation::AssignValue,
     types::Type,
     utils::{
+        error::squash,
         io::{PResult, Span},
         lexem,
-        strings::{parse_id, wst},
+        strings::{parse_id, wst, wst_closed},
     },
     TryParse,
 };
@@ -29,17 +30,20 @@ impl TryParse for Declaration {
      */
     fn parse(input: Span) -> PResult<Self> {
         preceded(
-            wst(lexem::LET),
-            alt((
+            wst_closed(lexem::LET),
+            cut(alt((
                 map(
-                    terminated(TypedVar::parse, wst(lexem::SEMI_COLON)).context("expected a ;"),
+                    terminated(
+                        TypedVar::parse.context("Expected a valid variable definition"),
+                        wst(lexem::SEMI_COLON),
+                    ),
                     |value| Declaration::Declared(value),
                 ),
                 map(
                     separated_pair(DeclaredVar::parse, wst(lexem::EQUAL), AssignValue::parse),
                     |(left, right)| Declaration::Assigned { left, right },
                 ),
-            )),
+            ))),
         )(input)
     }
 }
@@ -54,9 +58,9 @@ impl TryParse for TypedVar {
     fn parse(input: Span) -> PResult<Self> {
         map(
             separated_pair(
-                pair(opt(wst(lexem::REC)), parse_id),
+                pair(opt(wst_closed(lexem::REC)), parse_id),
                 wst(lexem::COLON),
-                Type::parse,
+                Type::parse.context("Invalid type"),
             ),
             |((rec, id), signature)| TypedVar {
                 id,
@@ -75,11 +79,14 @@ impl TryParse for DeclaredVar {
      * DeclaredVar := ID | TypedVar | PatternVar
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(TypedVar::parse, |value| DeclaredVar::Typed(value)),
-            map(PatternVar::parse, |value| DeclaredVar::Pattern(value)),
-            map(parse_id, |value| DeclaredVar::Id(value)),
-        ))(input)
+        squash(
+            alt((
+                map(TypedVar::parse, |value| DeclaredVar::Typed(value)),
+                map(PatternVar::parse, |value| DeclaredVar::Pattern(value)),
+                map(parse_id, |value| DeclaredVar::Id(value)),
+            )),
+            "Expected a valid variable or pattern",
+        )(input)
     }
 }
 
@@ -97,21 +104,6 @@ impl TryParse for PatternVar {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            // map(
-            //     pair(
-            //         separated_pair(parse_id, wst(lexem::SEP), parse_id),
-            //         delimited(
-            //             wst(lexem::BRA_O),
-            //             separated_list1(wst(lexem::COMA), parse_id),
-            //             wst(lexem::BRA_C),
-            //         ),
-            //     ),
-            //     |((typename, variant), vars)| PatternVar::UnionFields {
-            //         typename,
-            //         variant,
-            //         vars,
-            //     },
-            // ),
             map(
                 pair(
                     parse_id,
@@ -136,7 +128,6 @@ impl TryParse for PatternVar {
 }
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
 
     use crate::{
         ast::{
@@ -204,7 +195,10 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Assigned {
-                left: DeclaredVar::Pattern(PatternVar::Tuple(vec!["x".to_string().into(), "y".to_string().into()])),
+                left: DeclaredVar::Pattern(PatternVar::Tuple(vec![
+                    "x".to_string().into(),
+                    "y".to_string().into()
+                ])),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(Data::Tuple(
                     Tuple {
                         value: vec![

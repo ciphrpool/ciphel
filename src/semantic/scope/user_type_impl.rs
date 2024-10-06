@@ -1,7 +1,4 @@
-use std::{
-    cell::{Ref, RefCell},
-    rc::Rc,
-};
+use std::sync::Arc;
 
 use crate::{semantic::scope::scope::Scope, vm::casm};
 use ulid::Ulid;
@@ -70,8 +67,8 @@ pub struct Union {
     pub variants: Vec<(ID, Struct)>,
 }
 
-impl TypeOf for Rc<UserType> {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+impl TypeOf for Arc<UserType> {
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -80,7 +77,7 @@ impl TypeOf for Rc<UserType> {
 }
 
 impl TypeOf for UserType {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<Self, StaticType>, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<Either, SemanticError>
     where
         Self: Sized,
     {
@@ -89,7 +86,11 @@ impl TypeOf for UserType {
 }
 
 impl CompatibleWith for UserType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -104,7 +105,7 @@ impl CompatibleWith for UserType {
 impl BuildUserType for UserType {
     fn build_usertype(
         type_sig: &crate::ast::statements::definition::TypeDef,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<Self, SemanticError> {
         match type_sig {
             definition::TypeDef::Struct(value) => {
@@ -190,7 +191,11 @@ impl IsEnum for UserType {
 }
 
 impl MergeType for UserType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -232,7 +237,7 @@ impl SizeOf for UserType {
 }
 
 impl Printer for UserType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             UserType::Struct(value) => value.build_printer(instructions),
             UserType::Enum(value) => value.build_printer(instructions),
@@ -266,7 +271,11 @@ impl SizeOf for Enum {
 }
 
 impl CompatibleWith for Struct {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -293,7 +302,11 @@ impl CompatibleWith for Struct {
 }
 
 impl CompatibleWith for Union {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -334,7 +347,11 @@ impl CompatibleWith for Union {
     }
 }
 impl CompatibleWith for Enum {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -358,7 +375,10 @@ impl CompatibleWith for Enum {
 }
 
 impl Struct {
-    pub fn build(from: &definition::StructDef, scope: &Ref<Scope>) -> Result<Self, SemanticError> {
+    pub fn build(
+        from: &definition::StructDef,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<Self, SemanticError> {
         let mut fields = Vec::with_capacity(from.fields.len());
         for (id, field) in &from.fields {
             let field_type = field.type_of(&scope)?;
@@ -376,7 +396,10 @@ impl Struct {
 }
 
 impl Union {
-    pub fn build(from: &definition::UnionDef, scope: &Ref<Scope>) -> Result<Self, SemanticError> {
+    pub fn build(
+        from: &definition::UnionDef,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<Self, SemanticError> {
         let mut variants = Vec::new();
         for (id, variant) in &from.variants {
             let mut fields = Vec::with_capacity(variant.len());
@@ -403,7 +426,10 @@ impl Union {
 }
 
 impl Enum {
-    pub fn build(from: &definition::EnumDef, _scope: &Ref<Scope>) -> Result<Self, SemanticError> {
+    pub fn build(
+        from: &definition::EnumDef,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<Self, SemanticError> {
         let mut values = Vec::new();
         for id in &from.values {
             values.push(id.clone());
@@ -457,17 +483,17 @@ impl DeserializeFrom for Struct {
             id: self.id.clone(),
             fields: value,
             metadata: Metadata {
-                info: Rc::new(RefCell::new(Info::Resolved {
+                info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::User(Rc::new(UserType::Struct(self.clone())))),
-                })),
+                    signature: Some(Either::User(Arc::new(UserType::Struct(self.clone())))),
+                },
             },
         })
     }
 }
 
 impl Printer for Struct {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
             PrintCasm::PrintID(self.id.clone()),
         )))));
@@ -517,17 +543,17 @@ impl DeserializeFrom for Union {
             variant: variant.clone(),
             fields: data.fields,
             metadata: Metadata {
-                info: Rc::new(RefCell::new(Info::Resolved {
+                info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::User(Rc::new(UserType::Union(self.clone())))),
-                })),
+                    signature: Some(Either::User(Arc::new(UserType::Union(self.clone())))),
+                },
             },
         })
     }
 }
 
 impl Printer for Union {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.variants.len());
         let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.variants.len());
 
@@ -583,17 +609,17 @@ impl DeserializeFrom for Enum {
             typename: self.id.clone(),
             value: value.clone(),
             metadata: Metadata {
-                info: Rc::new(RefCell::new(Info::Resolved {
+                info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::User(Rc::new(UserType::Enum(self.clone())))),
-                })),
+                    signature: Some(Either::User(Arc::new(UserType::Enum(self.clone())))),
+                },
             },
         })
     }
 }
 
 impl Printer for Enum {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.values.len());
         let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.values.len());
         let end_label = Label::gen();

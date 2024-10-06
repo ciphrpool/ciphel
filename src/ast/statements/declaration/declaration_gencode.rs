@@ -1,8 +1,9 @@
 use crate::ast::utils::lexem;
 use crate::semantic::scope::scope::Scope;
+use crate::{arw_read, arw_write};
 use crate::{
     ast::statements::declaration::{DeclaredVar, PatternVar},
-    semantic::{MutRc, SizeOf},
+    semantic::SizeOf,
     vm::{
         allocator::{stack::Offset, MemoryAddress},
         casm::{alloc::Alloc, locate::Locate, mem::Mem, Casm, CasmProgram},
@@ -15,36 +16,41 @@ use super::{Declaration, TypedVar};
 impl GenerateCode for Declaration {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Declaration::Declared(TypedVar { id, .. }) => {
                 // When the variable is created in the general block,
                 // the block can't assign a stackpointer to the variable
                 // therefore the variable have to live at the current offset
-                let borrow = scope.as_ref().borrow();
+                let borrow = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
+                let mut new_stack_top = borrow.stack_top();
                 for (v, o) in borrow.vars() {
-                    if v.id == *id && !v.is_declared.get() {
+                    let mut borrowed_var = arw_write!(v, CodeGenerationError::ConcurrencyError)?;
+                    if borrowed_var.id == *id && !borrowed_var.is_declared {
                         let var = v;
+                        borrowed_var.is_declared = true;
 
-                        var.is_declared.set(true);
-
-                        if let Some(stack_top) = scope.borrow().stack_top() {
-                            o.set(Offset::SB(stack_top));
-                            if var.type_sig.size_of() == 0 {
+                        if let Some(ref mut stack_top) = new_stack_top {
+                            let mut o = arw_write!(o, CodeGenerationError::ConcurrencyError)?;
+                            *o = Offset::SB(*stack_top);
+                            if borrowed_var.type_sig.size_of() == 0 {
                                 continue;
                             }
                             instructions.push(Casm::Alloc(Alloc::Stack {
-                                size: var.type_sig.size_of(),
+                                size: borrowed_var.type_sig.size_of(),
                             }));
-                            let _ = scope
-                                .borrow()
-                                .update_stack_top(stack_top + var.type_sig.size_of())
-                                .map_err(|_| CodeGenerationError::UnresolvedError)?;
+                            *stack_top = *stack_top + borrowed_var.type_sig.size_of();
                         }
                         break;
                     }
+                }
+                drop(borrow);
+                if let Some(stack_top) = new_stack_top {
+                    let _ = arw_write!(scope, CodeGenerationError::ConcurrencyError)?
+                        .update_stack_top(stack_top)
+                        .map_err(|_| CodeGenerationError::UnresolvedError)?;
                 }
 
                 // let (address, level) = block
@@ -75,18 +81,22 @@ impl GenerateCode for Declaration {
                 };
 
                 for id in &vars {
-                    let borrow = scope.as_ref().borrow();
+                    let borrow = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
                     for (v, o) in borrow.vars() {
-                        if v.id == *id && !v.is_declared.get() {
-                            let var = v;
-                            let var_size = var.type_sig.size_of();
+                        let borrowed_var = arw_write!(v, CodeGenerationError::ConcurrencyError)?;
+                        if borrowed_var.id == *id && !borrowed_var.is_declared {
+                            let var_size = borrowed_var.type_sig.size_of();
                             if var_size == 0 {
                                 continue;
                             }
-                            if let Some(stack_top) = scope.borrow().stack_top() {
-                                o.set(Offset::SB(stack_top));
+                            if let Some(stack_top) =
+                                arw_read!(scope, CodeGenerationError::ConcurrencyError)?.stack_top()
+                            {
+                                let mut o = arw_write!(o, CodeGenerationError::ConcurrencyError)?;
+                                *o = Offset::SB(stack_top);
                                 instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
-                                let _ = scope.borrow().update_stack_top(stack_top + var_size)?;
+                                let _ = arw_read!(scope, CodeGenerationError::ConcurrencyError)?
+                                    .update_stack_top(stack_top + var_size)?;
                             }
                             break;
                         }
@@ -97,10 +107,12 @@ impl GenerateCode for Declaration {
                 let _ = right.gencode(scope, instructions)?;
 
                 for id in &vars {
-                    let borrow = scope.as_ref().borrow();
+                    let borrow = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
                     for (v, _o) in borrow.vars() {
-                        if v.id == *id && !v.is_declared.get() {
-                            v.is_declared.set(true);
+                        let mut borrowed_var =
+                            arw_write!(v, CodeGenerationError::ConcurrencyError)?;
+                        if borrowed_var.id == *id && !borrowed_var.is_declared {
+                            borrowed_var.is_declared = true;
                             break;
                         }
                     }
@@ -111,9 +123,13 @@ impl GenerateCode for Declaration {
                 vars.reverse();
 
                 for id in &vars {
-                    let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
+                    let (var, address, level) =
+                        crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
+                            .access_var(id)?;
 
-                    let var_size = var.type_sig.size_of();
+                    let var_size = arw_read!(var, CodeGenerationError::ConcurrencyError)?
+                        .type_sig
+                        .size_of();
                     if var_size == 0 {
                         continue;
                     }
@@ -137,28 +153,22 @@ impl GenerateCode for Declaration {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
 
     use num_traits::Zero;
 
     use crate::{
-        ast::{
-            expressions::data::{Number, Primitive},
-            statements::Statement,
-            TryParse,
-        },
+        ast::{statements::Statement, TryParse},
         clear_stack, compile_statement, p_num,
         semantic::{
             scope::{
                 scope::Scope,
-                static_types::{NumberType, PrimitiveType, StaticType},
+                static_types::{NumberType, PrimitiveType},
                 user_type_impl::{self, UserType},
             },
-            Either, Resolve,
+            Resolve,
         },
         v_num,
         vm::{
-            allocator::Memory,
             casm::CasmProgram,
             vm::{DeserializeFrom, Executable, Runtime},
         },
@@ -168,7 +178,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_inplace_in_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let x:u64 = 420;
@@ -190,7 +200,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_underscore() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let _ = 420;
@@ -212,7 +222,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_inplace_tuple_in_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let (x,y) = {
             let (x,y) = (420,69);
@@ -240,7 +250,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_tuple_underscore() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let (x,y) = {
             let (x,_) = (420,69);
@@ -268,7 +278,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_inplace_tuple_general_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let (x,y) = (420,69);
         "##
@@ -302,7 +312,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let (x,y) = {
             let Point {x,y} = Point {
@@ -317,33 +327,35 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(&"Point".to_string().into(), UserType::Struct(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -372,7 +384,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let Point {x,y} = Point {
                 x : 420,
@@ -384,32 +396,34 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(&"Point".to_string().into(), UserType::Struct(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -430,7 +444,7 @@ mod tests {
 
     #[test]
     fn valid_shadowing_same_type() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let var = 5;
@@ -446,28 +460,30 @@ mod tests {
         let scope = Scope::new();
 
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -482,7 +498,7 @@ mod tests {
 
     #[test]
     fn valid_shadowing_different_type() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let var = 5u8;
@@ -498,32 +514,34 @@ mod tests {
         let scope = Scope::new();
 
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let engine = crate::vm::vm::NoopGameEngine {};
 
         let value = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
@@ -535,7 +553,7 @@ mod tests {
 
     #[test]
     fn valid_shadowing_outer_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let var = 5u8;
@@ -553,28 +571,30 @@ mod tests {
         let scope = Scope::new();
 
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);

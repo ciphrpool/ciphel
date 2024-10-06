@@ -1,5 +1,3 @@
-use std::cell::{Cell, Ref};
-
 use num_traits::ToBytes;
 
 use crate::{
@@ -10,7 +8,7 @@ use crate::{
             scope::Scope,
             static_types::{AddrType, MapType, StaticType, TupleType, VecType},
         },
-        AccessLevel, EType, Either, Info, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf,
+        AccessLevel, EType, Either, Info, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         allocator::{
@@ -29,18 +27,18 @@ use crate::{
 pub enum IterFn {
     MapItems {
         metadata: Metadata,
-        key_size: Cell<usize>,
-        value_size: Cell<usize>,
+        key_size: usize,
+        value_size: usize,
     },
     MapValues {
         metadata: Metadata,
-        key_size: Cell<usize>,
-        value_size: Cell<usize>,
+        key_size: usize,
+        value_size: usize,
     },
     MapKeys {
         metadata: Metadata,
-        key_size: Cell<usize>,
-        value_size: Cell<usize>,
+        key_size: usize,
+        value_size: usize,
     },
 }
 
@@ -51,13 +49,16 @@ pub enum IterCasm {
     MapKeys { key_size: usize, value_size: usize },
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for IterCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IterCasm {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             IterCasm::MapItems { .. } => stdio.push_casm_lib(engine, "items"),
             IterCasm::MapValues { .. } => stdio.push_casm_lib(engine, "values"),
             IterCasm::MapKeys { .. } => stdio.push_casm_lib(engine, "keys"),
         }
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::HIGH
     }
 }
 
@@ -73,18 +74,18 @@ impl IterFn {
         }
         match id.as_str() {
             lexem::ITEMS => Some(IterFn::MapItems {
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
+                key_size: 0,
+                value_size: 0,
                 metadata: Metadata::default(),
             }),
             lexem::KEYS => Some(IterFn::MapKeys {
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
+                key_size: 0,
+                value_size: 0,
                 metadata: Metadata::default(),
             }),
             lexem::VALUES => Some(IterFn::MapValues {
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
+                key_size: 0,
+                value_size: 0,
                 metadata: Metadata::default(),
             }),
             _ => None,
@@ -96,11 +97,11 @@ impl Resolve for IterFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             IterFn::MapItems {
@@ -111,9 +112,10 @@ impl Resolve for IterFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let map = &extra[0];
-                let _ = map.resolve(scope, &None, &None)?;
-                let mut map_type = map.type_of(&scope.borrow())?;
+                let map = &mut extra[0];
+                let _ = map.resolve::<G>(scope, &None, &mut None)?;
+                let mut map_type =
+                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -128,14 +130,10 @@ impl Resolve for IterFn {
                             keys_type,
                             values_type,
                         }) => {
-                            key_size.set(keys_type.as_ref().size_of());
-                            value_size.set(values_type.as_ref().size_of());
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            *key_size = keys_type.as_ref().size_of();
+                            *value_size = values_type.as_ref().size_of();
+
+                            metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(e_static!(StaticType::Vec(VecType(Box::new(
                                     e_static!(StaticType::Tuple(TupleType(vec![
@@ -163,9 +161,10 @@ impl Resolve for IterFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let map = &extra[0];
-                let _ = map.resolve(scope, &None, &None)?;
-                let mut map_type = map.type_of(&scope.borrow())?;
+                let map = &mut extra[0];
+                let _ = map.resolve::<G>(scope, &None, &mut None)?;
+                let mut map_type =
+                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -180,14 +179,10 @@ impl Resolve for IterFn {
                             keys_type,
                             values_type,
                         }) => {
-                            key_size.set(keys_type.as_ref().size_of());
-                            value_size.set(values_type.as_ref().size_of());
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            *key_size = keys_type.as_ref().size_of();
+                            *value_size = values_type.as_ref().size_of();
+
+                            metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(e_static!(StaticType::Vec(VecType(Box::new(
                                     e_static!(StaticType::Address(AddrType(Box::new(
@@ -210,9 +205,10 @@ impl Resolve for IterFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let map = &extra[0];
-                let _ = map.resolve(scope, &None, &None)?;
-                let mut map_type = map.type_of(&scope.borrow())?;
+                let map = &mut extra[0];
+                let _ = map.resolve::<G>(scope, &None, &mut None)?;
+                let mut map_type =
+                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -227,14 +223,10 @@ impl Resolve for IterFn {
                             keys_type,
                             values_type,
                         }) => {
-                            key_size.set(keys_type.as_ref().size_of());
-                            value_size.set(values_type.as_ref().size_of());
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            *key_size = keys_type.as_ref().size_of();
+                            *value_size = values_type.as_ref().size_of();
+
+                            metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(e_static!(StaticType::Vec(VecType(Box::new(
                                     e_static!(StaticType::Address(AddrType(Box::new(
@@ -254,7 +246,7 @@ impl Resolve for IterFn {
 }
 
 impl TypeOf for IterFn {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -275,8 +267,8 @@ impl TypeOf for IterFn {
 impl GenerateCode for IterFn {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             IterFn::MapItems {
@@ -285,8 +277,8 @@ impl GenerateCode for IterFn {
                 value_size,
             } => instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::Iter(
                 IterCasm::MapItems {
-                    key_size: key_size.get(),
-                    value_size: value_size.get(),
+                    key_size: *key_size,
+                    value_size: *value_size,
                 },
             )))),
             IterFn::MapValues {
@@ -295,8 +287,8 @@ impl GenerateCode for IterFn {
                 value_size,
             } => instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::Iter(
                 IterCasm::MapValues {
-                    key_size: key_size.get(),
-                    value_size: value_size.get(),
+                    key_size: *key_size,
+                    value_size: *value_size,
                 },
             )))),
             IterFn::MapKeys {
@@ -305,8 +297,8 @@ impl GenerateCode for IterFn {
                 value_size,
             } => instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::Iter(
                 IterCasm::MapKeys {
-                    key_size: key_size.get(),
-                    value_size: value_size.get(),
+                    key_size: *key_size,
+                    value_size: *value_size,
                 },
             )))),
         }
@@ -314,14 +306,15 @@ impl GenerateCode for IterFn {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IterCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             IterCasm::MapItems {
@@ -329,13 +322,11 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IterCasm {
                 value_size,
             } => {
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let map_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(map_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let map_heap_address_bytes = stack.read(
+                    Offset::SB(map_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -357,34 +348,28 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IterCasm {
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 /* Write len */
-                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes)?;
                 /* Write data */
-                let _ = heap
-                    .write(address + 16, &items_data)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address + 16, &items_data)?;
 
-                let _ = stack
-                    .push_with(&address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&address.to_le_bytes())?;
             }
             IterCasm::MapValues {
                 key_size,
                 value_size,
             } => {
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let map_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(map_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let map_heap_address_bytes = stack.read(
+                    Offset::SB(map_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -404,42 +389,34 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IterCasm {
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 /* Write len */
-                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes)?;
                 /* Write data */
-                let _ = heap
-                    .write(address + 16, &values_data)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address + 16, &values_data)?;
 
-                let _ = stack
-                    .push_with(&address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&address.to_le_bytes())?;
             }
             IterCasm::MapKeys {
                 key_size,
                 value_size,
             } => {
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let map_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(map_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let map_heap_address_bytes = stack.read(
+                    Offset::SB(map_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
                 let map_layout =
                     map_impl::map_layout(map_heap_address, *key_size, *value_size, heap)?;
                 let keys_ptr = map_layout.retrieve_vec_keys(heap)?;
-
-                dbg!(&keys_ptr);
 
                 let len = keys_ptr.len() as u64;
                 let cap = align(len as usize) as u64;
@@ -453,19 +430,17 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IterCasm {
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 /* Write len */
-                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes)?;
                 /* Write data */
-                let _ = heap.write(address + 16, &keys_data).map_err(|e| e.into())?;
+                let _ = heap.write(address + 16, &keys_data)?;
 
-                let _ = stack
-                    .push_with(&address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&address.to_le_bytes())?;
             }
         }
         program.incr();
@@ -487,7 +462,7 @@ mod tests {
 
     #[test]
     fn valid_values() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -530,7 +505,7 @@ mod tests {
 
     #[test]
     fn valid_keys() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -573,7 +548,7 @@ mod tests {
 
     #[test]
     fn valid_items() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();

@@ -1,16 +1,12 @@
-use std::{
-    cell::{Cell, Ref},
-    vec,
-};
+use std::vec;
 
 use crate::{
     ast::utils::strings::ID,
     err_tuple,
     semantic::scope::{
         scope::Scope,
-        static_types::{MapType, SliceType, TupleType},
+        static_types::{MapType, SliceType},
         type_traits::TypeChecking,
-        user_type_impl::UserType,
     },
     vm::{
         allocator::{heap::Heap, stack::Stack},
@@ -33,7 +29,7 @@ use crate::{
             static_types::{AddrType, NumberType, PrimitiveType, StaticType, StringType, VecType},
             type_traits::GetSubTypes,
         },
-        AccessLevel, EType, Either, Info, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf,
+        AccessLevel, EType, Either, Info, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         allocator::{align, stack::Offset},
@@ -83,61 +79,61 @@ pub enum ClearKind {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AllocFn {
     Append {
-        item_size: Cell<usize>,
-        append_kind: Cell<AppendKind>,
+        item_size: usize,
+        append_kind: AppendKind,
     },
     Extend {
-        item_size: Cell<usize>,
-        extend_kind: Cell<ExtendKind>,
+        item_size: usize,
+        extend_kind: ExtendKind,
     },
     Insert {
-        key_size: Cell<usize>,
-        value_size: Cell<usize>,
-        ref_access: Cell<DerefHashing>,
+        key_size: usize,
+        value_size: usize,
+        ref_access: DerefHashing,
     },
     Get {
-        key_size: Cell<usize>,
-        value_size: Cell<usize>,
-        ref_access: Cell<DerefHashing>,
+        key_size: usize,
+        value_size: usize,
+        ref_access: DerefHashing,
         metadata: Metadata,
     },
     Delete {
-        key_size: Cell<usize>,
-        value_size: Cell<usize>,
-        delete_kind: Cell<DeleteKind>,
+        key_size: usize,
+        value_size: usize,
+        delete_kind: DeleteKind,
         metadata: Metadata,
     },
     Len,
     Cap {
-        for_map: Cell<bool>,
+        for_map: bool,
     },
     Free,
     Alloc,
     Vec {
-        with_capacity: Cell<bool>,
-        item_size: Cell<usize>,
+        with_capacity: bool,
+        item_size: usize,
         metadata: Metadata,
     },
     Map {
-        with_capacity: Cell<bool>,
-        value_size: Cell<usize>,
-        key_size: Cell<usize>,
+        with_capacity: bool,
+        value_size: usize,
+        key_size: usize,
         metadata: Metadata,
     },
     String {
-        len: Cell<usize>,
-        from_char: Cell<bool>,
+        len: usize,
+        from_char: bool,
     },
 
     SizeOf {
-        size: Cell<usize>,
+        size: usize,
     },
 
     MemCopy,
     Clear {
-        item_size: Cell<usize>,
-        key_size: Cell<usize>,
-        clear_kind: Cell<ClearKind>,
+        item_size: usize,
+        key_size: usize,
+        clear_kind: ClearKind,
     },
 }
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -147,8 +143,8 @@ pub enum DerefHashing {
     Default,
 }
 
-impl From<&Either<UserType, StaticType>> for DerefHashing {
-    fn from(value: &Either<UserType, StaticType>) -> Self {
+impl From<&Either> for DerefHashing {
+    fn from(value: &Either) -> Self {
         match value {
             Either::Static(tmp) => match tmp.as_ref() {
                 StaticType::String(_) => DerefHashing::String,
@@ -229,8 +225,8 @@ pub enum AllocCasm {
     StringFromChar,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for AllocCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for AllocCasm {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             AllocCasm::AppendChar => stdio.push_casm_lib(engine, "append"),
             AllocCasm::AppendItem(_) => stdio.push_casm_lib(engine, "append"),
@@ -281,6 +277,36 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for AllocCasm {
             AllocCasm::StringFromChar => stdio.push_casm_lib(engine, "string"),
         }
     }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            AllocCasm::AppendChar => crate::vm::vm::CasmWeight::LOW,
+            AllocCasm::AppendItem(_) => crate::vm::vm::CasmWeight::MEDIUM,
+            AllocCasm::AppendStrSlice(_) => crate::vm::vm::CasmWeight::MEDIUM,
+            AllocCasm::AppendString => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::ExtendItemFromSlice { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::ExtendItemFromVec { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::ExtendStringFromSlice { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::ExtendStringFromVec => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::Insert { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::InsertAndForward { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::Get { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::DeleteVec(_) => crate::vm::vm::CasmWeight::MEDIUM,
+            AllocCasm::DeleteMapKey { .. } => crate::vm::vm::CasmWeight::MEDIUM,
+            AllocCasm::ClearVec(_) => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::ClearString(_) => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::ClearMap { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::Len => crate::vm::vm::CasmWeight::LOW,
+            AllocCasm::Cap => crate::vm::vm::CasmWeight::LOW,
+            AllocCasm::CapMap => crate::vm::vm::CasmWeight::LOW,
+            AllocCasm::Vec { item_size } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::VecWithCapacity { item_size } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::Map { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::MapWithCapacity { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::StringFromSlice => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::StringFromChar => crate::vm::vm::CasmWeight::MEDIUM,
+        }
+    }
 }
 
 impl AllocFn {
@@ -296,58 +322,56 @@ impl AllocFn {
 
         match id.as_str() {
             lexem::APPEND => Some(AllocFn::Append {
-                item_size: Cell::new(0),
-                append_kind: Cell::new(AppendKind::Vec),
+                item_size: (0),
+                append_kind: (AppendKind::Vec),
             }),
             lexem::EXTEND => Some(AllocFn::Extend {
-                item_size: Cell::new(0),
-                extend_kind: Cell::new(ExtendKind::VecFromVec),
+                item_size: 0,
+                extend_kind: ExtendKind::VecFromVec,
             }),
             lexem::INSERT => Some(AllocFn::Insert {
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
-                ref_access: Cell::new(DerefHashing::Default),
+                key_size: 0,
+                value_size: 0,
+                ref_access: DerefHashing::Default,
             }),
             lexem::GET => Some(AllocFn::Get {
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
+                key_size: 0,
+                value_size: 0,
                 metadata: Metadata::default(),
-                ref_access: Cell::new(DerefHashing::Default),
+                ref_access: DerefHashing::Default,
             }),
             lexem::DELETE => Some(AllocFn::Delete {
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
-                delete_kind: Cell::new(DeleteKind::Vec),
+                key_size: 0,
+                value_size: 0,
+                delete_kind: DeleteKind::Vec,
                 metadata: Metadata::default(),
             }),
             lexem::LEN => Some(AllocFn::Len),
-            lexem::CAP => Some(AllocFn::Cap {
-                for_map: Cell::new(false),
-            }),
+            lexem::CAP => Some(AllocFn::Cap { for_map: false }),
             lexem::FREE => Some(AllocFn::Free),
             lexem::VEC => Some(AllocFn::Vec {
-                with_capacity: Cell::new(false),
-                item_size: Cell::new(0),
+                with_capacity: false,
+                item_size: 0,
                 metadata: Metadata::default(),
             }),
             lexem::MAP => Some(AllocFn::Map {
-                with_capacity: Cell::new(false),
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
+                with_capacity: false,
+                key_size: 0,
+                value_size: 0,
                 metadata: Metadata::default(),
             }),
             lexem::STRING => Some(AllocFn::String {
-                len: Cell::new(0),
-                from_char: Cell::new(false),
+                len: 0,
+                from_char: false,
             }),
             lexem::ALLOC => Some(AllocFn::Alloc),
             lexem::MEMCPY => Some(AllocFn::MemCopy),
             lexem::CLEAR => Some(AllocFn::Clear {
-                item_size: Cell::new(0),
-                key_size: Cell::new(0),
-                clear_kind: Cell::new(ClearKind::Vec),
+                item_size: 0,
+                key_size: 0,
+                clear_kind: ClearKind::Vec,
             }),
-            lexem::SIZEOF => Some(AllocFn::SizeOf { size: Cell::new(0) }),
+            lexem::SIZEOF => Some(AllocFn::SizeOf { size: 0 }),
             _ => None,
         }
     }
@@ -357,11 +381,11 @@ impl Resolve for AllocFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             AllocFn::Append {
@@ -371,12 +395,13 @@ impl Resolve for AllocFn {
                 if extra.len() != 2 {
                     return Err(SemanticError::IncorrectArguments);
                 }
+                let (first_part, second_part) = extra.split_at_mut(1);
+                let vector = &mut first_part[0];
+                let item = &mut second_part[0];
 
-                let vector = &extra[0];
-                let item = &extra[1];
-
-                let _ = vector.resolve(scope, &None, &None)?;
-                let mut vector_type = vector.type_of(&scope.borrow())?;
+                let _ = vector.resolve::<G>(scope, &None, &mut None)?;
+                let mut vector_type =
+                    vector.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => vector_type = sub.as_ref().clone(),
@@ -389,33 +414,36 @@ impl Resolve for AllocFn {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
                             let item_type = vector_type.get_item();
-                            append_kind.set(AppendKind::Vec);
-                            let _ = item.resolve(scope, &item_type, &None)?;
+                            *append_kind = AppendKind::Vec;
+                            let _ = item.resolve::<G>(scope, &item_type, &mut None)?;
                             let Some(item_type) = item_type else {
                                 return Err(SemanticError::IncorrectArguments);
                             };
-                            item_size.set(item_type.size_of());
+                            *item_size = item_type.size_of();
                             Ok(())
                         }
                         StaticType::String(_) => {
-                            let _ = item.resolve(scope, &None, &None)?;
-                            let item_type = item.type_of(&scope.borrow())?;
+                            let _ = item.resolve::<G>(scope, &None, &mut None)?;
+                            let item_type = item.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?;
                             match &item_type {
                                 Either::Static(value) => match value.as_ref() {
                                     StaticType::Primitive(PrimitiveType::Char) => {
-                                        append_kind.set(AppendKind::Char);
+                                        *append_kind = AppendKind::Char;
                                     }
                                     StaticType::String(_) => {
-                                        append_kind.set(AppendKind::String);
+                                        *append_kind = AppendKind::String;
                                     }
                                     StaticType::StrSlice(_) => {
-                                        append_kind.set(AppendKind::StrSlice);
+                                        *append_kind = AppendKind::StrSlice;
                                     }
                                     _ => return Err(SemanticError::IncorrectArguments),
                                 },
                                 _ => return Err(SemanticError::IncorrectArguments),
                             }
-                            item_size.set(item_type.size_of());
+                            *item_size = item_type.size_of();
                             Ok(())
                         }
                         _ => return Err(SemanticError::IncorrectArguments),
@@ -431,11 +459,13 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let vector = &extra[0];
-                let items = &extra[1];
+                let (first_part, second_part) = extra.split_at_mut(1);
+                let vector = &mut first_part[0];
+                let items = &mut second_part[0];
 
-                let _ = vector.resolve(scope, &None, &None)?;
-                let mut vector_type = vector.type_of(&scope.borrow())?;
+                let _ = vector.resolve::<G>(scope, &None, &mut None)?;
+                let mut vector_type =
+                    vector.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => vector_type = sub.as_ref().clone(),
@@ -446,8 +476,11 @@ impl Resolve for AllocFn {
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
-                            let _ = items.resolve(scope, &None, &None)?;
-                            let items_type = items.type_of(&scope.borrow())?;
+                            let _ = items.resolve::<G>(scope, &None, &mut None)?;
+                            let items_type = items.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?;
 
                             match items_type {
                                 Either::Static(value) => match value.as_ref() {
@@ -455,14 +488,14 @@ impl Resolve for AllocFn {
                                         size: len,
                                         item_type,
                                     }) => {
-                                        extend_kind.set(ExtendKind::VecFromSlice(*len));
+                                        *extend_kind = ExtendKind::VecFromSlice(*len);
 
-                                        item_size.set(item_type.size_of());
+                                        *item_size = item_type.size_of();
                                         Ok(())
                                     }
                                     StaticType::Vec(VecType(item_type)) => {
-                                        extend_kind.set(ExtendKind::VecFromVec);
-                                        item_size.set(item_type.size_of());
+                                        *extend_kind = ExtendKind::VecFromVec;
+                                        *item_size = item_type.size_of();
                                         Ok(())
                                     }
                                     _ => return Err(SemanticError::IncorrectArguments),
@@ -471,8 +504,11 @@ impl Resolve for AllocFn {
                             }
                         }
                         StaticType::String(_) => {
-                            let _ = items.resolve(scope, &None, &None)?;
-                            let items_type = items.type_of(&scope.borrow())?;
+                            let _ = items.resolve::<G>(scope, &None, &mut None)?;
+                            let items_type = items.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?;
 
                             match items_type {
                                 Either::Static(value) => match value.as_ref() {
@@ -483,14 +519,14 @@ impl Resolve for AllocFn {
                                         if !item_type.is_string() {
                                             return Err(SemanticError::IncorrectArguments);
                                         }
-                                        extend_kind.set(ExtendKind::StringFromSlice(*len));
+                                        *extend_kind = ExtendKind::StringFromSlice(*len);
                                         Ok(())
                                     }
                                     StaticType::Vec(VecType(item_type)) => {
                                         if !item_type.is_string() {
                                             return Err(SemanticError::IncorrectArguments);
                                         }
-                                        extend_kind.set(ExtendKind::StringFromVec);
+                                        *extend_kind = ExtendKind::StringFromVec;
                                         Ok(())
                                     }
                                     _ => return Err(SemanticError::IncorrectArguments),
@@ -512,12 +548,16 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let map = &extra[0];
-                let key = &extra[1];
-                let item = &extra[2];
+                let (first_part, rest) = extra.split_at_mut(1);
+                let (second_part, third_part) = rest.split_at_mut(1);
 
-                let _ = map.resolve(scope, &None, &None)?;
-                let mut map_type = map.type_of(&scope.borrow())?;
+                let map = &mut first_part[0];
+                let key = &mut second_part[0];
+                let item = &mut third_part[0];
+
+                let _ = map.resolve::<G>(scope, &None, &mut None)?;
+                let mut map_type =
+                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -532,22 +572,29 @@ impl Resolve for AllocFn {
                             keys_type,
                             values_type,
                         }) => {
-                            let _ = key.resolve(scope, &Some(keys_type.as_ref().clone()), &None)?;
-                            let _ =
-                                item.resolve(scope, &Some(values_type.as_ref().clone()), &None)?;
+                            let _ = key.resolve::<G>(
+                                scope,
+                                &Some(keys_type.as_ref().clone()),
+                                &mut None,
+                            )?;
+                            let _ = item.resolve::<G>(
+                                scope,
+                                &Some(values_type.as_ref().clone()),
+                                &mut None,
+                            )?;
 
                             match keys_type.as_ref() {
                                 Either::Static(tmp) => match tmp.as_ref() {
-                                    StaticType::String(_) => ref_access.set(DerefHashing::String),
+                                    StaticType::String(_) => *ref_access = DerefHashing::String,
                                     StaticType::Vec(VecType(item_subtype)) => {
-                                        ref_access.set(DerefHashing::Vec(item_subtype.size_of()))
+                                        *ref_access = DerefHashing::Vec(item_subtype.size_of())
                                     }
                                     _ => {}
                                 },
                                 Either::User(_) => {}
                             }
-                            value_size.set(values_type.size_of());
-                            key_size.set(keys_type.size_of());
+                            *value_size = values_type.size_of();
+                            *key_size = keys_type.size_of();
                             Ok(())
                         }
                         _ => return Err(SemanticError::IncorrectArguments),
@@ -565,11 +612,13 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let map = &extra[0];
-                let key = &extra[1];
+                let (first_part, second_part) = extra.split_at_mut(1);
+                let map = &mut first_part[0];
+                let key = &mut second_part[0];
 
-                let _ = map.resolve(scope, &None, &None)?;
-                let mut map_type = map.type_of(&scope.borrow())?;
+                let _ = map.resolve::<G>(scope, &None, &mut None)?;
+                let mut map_type =
+                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -584,26 +633,25 @@ impl Resolve for AllocFn {
                             keys_type,
                             values_type,
                         }) => {
-                            let _ = key.resolve(scope, &Some(keys_type.as_ref().clone()), &None)?;
-                            value_size.set(values_type.size_of());
-                            key_size.set(keys_type.size_of());
+                            let _ = key.resolve::<G>(
+                                scope,
+                                &Some(keys_type.as_ref().clone()),
+                                &mut None,
+                            )?;
+                            *value_size = values_type.size_of();
+                            *key_size = keys_type.size_of();
 
                             match keys_type.as_ref() {
                                 Either::Static(tmp) => match tmp.as_ref() {
-                                    StaticType::String(_) => ref_access.set(DerefHashing::String),
+                                    StaticType::String(_) => *ref_access = DerefHashing::String,
                                     StaticType::Vec(VecType(item_subtype)) => {
-                                        ref_access.set(DerefHashing::Vec(item_subtype.size_of()))
+                                        *ref_access = DerefHashing::Vec(item_subtype.size_of())
                                     }
                                     _ => {}
                                 },
                                 Either::User(_) => {}
                             }
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(values_type.as_ref().clone()),
                             };
@@ -623,12 +671,13 @@ impl Resolve for AllocFn {
                 if extra.len() != 2 {
                     return Err(SemanticError::IncorrectArguments);
                 }
+                let (first_part, second_part) = extra.split_at_mut(1);
+                let vector = &mut first_part[0];
+                let index = &mut second_part[0];
 
-                let vector = &extra[0];
-                let index = &extra[1];
-
-                let _ = vector.resolve(scope, &None, &None)?;
-                let mut vector_type = vector.type_of(&scope.borrow())?;
+                let _ = vector.resolve::<G>(scope, &None, &mut None)?;
+                let mut vector_type =
+                    vector.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => vector_type = sub.as_ref().clone(),
@@ -640,8 +689,11 @@ impl Resolve for AllocFn {
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
-                            let _ = index.resolve(scope, &Some(p_num!(U64)), &None)?;
-                            let index_type = index.type_of(&scope.borrow())?;
+                            let _ = index.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
+                            let index_type = index.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?;
                             match &index_type {
                                 Either::Static(value) => match value.as_ref() {
                                     StaticType::Primitive(PrimitiveType::Number(
@@ -652,17 +704,12 @@ impl Resolve for AllocFn {
                                 _ => return Err(SemanticError::IncorrectArguments),
                             }
                             let item_type = vector_type.get_item();
-                            delete_kind.set(DeleteKind::Vec);
+                            *delete_kind = DeleteKind::Vec;
                             let Some(item_type) = item_type else {
                                 return Err(SemanticError::IncorrectArguments);
                             };
-                            value_size.set(item_type.size_of());
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            *value_size = item_type.size_of();
+                            metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(item_type),
                             };
@@ -675,30 +722,30 @@ impl Resolve for AllocFn {
                             match keys_type.as_ref() {
                                 Either::Static(tmp) => match tmp.as_ref() {
                                     StaticType::String(_) => {
-                                        delete_kind.set(DeleteKind::Map(DerefHashing::String))
+                                        *delete_kind = DeleteKind::Map(DerefHashing::String)
                                     }
-                                    StaticType::Vec(VecType(item_subtype)) => delete_kind.set(
-                                        DeleteKind::Map(DerefHashing::Vec(item_subtype.size_of())),
-                                    ),
+                                    StaticType::Vec(VecType(item_subtype)) => {
+                                        *delete_kind = DeleteKind::Map(DerefHashing::Vec(
+                                            item_subtype.size_of(),
+                                        ))
+                                    }
                                     _ => {
-                                        delete_kind.set(DeleteKind::Map(DerefHashing::Default));
+                                        *delete_kind = DeleteKind::Map(DerefHashing::Default);
                                     }
                                 },
                                 Either::User(_) => {
-                                    delete_kind.set(DeleteKind::Map(DerefHashing::Default));
+                                    *delete_kind = DeleteKind::Map(DerefHashing::Default);
                                 }
                             }
 
-                            let _ =
-                                index.resolve(scope, &Some(keys_type.as_ref().clone()), &None)?;
-                            value_size.set(values_type.size_of());
-                            key_size.set(keys_type.size_of());
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            let _ = index.resolve::<G>(
+                                scope,
+                                &Some(keys_type.as_ref().clone()),
+                                &mut None,
+                            )?;
+                            *value_size = values_type.size_of();
+                            *key_size = keys_type.size_of();
+                            metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(values_type.as_ref().clone()),
                             };
@@ -714,10 +761,11 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let address = &extra[0];
+                let address = &mut extra[0];
 
-                let _ = address.resolve(scope, &None, &None)?;
-                let address_type = address.type_of(&scope.borrow())?;
+                let _ = address.resolve::<G>(scope, &None, &mut None)?;
+                let address_type =
+                    address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &address_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(_)) => {}
@@ -736,32 +784,30 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 if extra.len() == 2 {
-                    with_capacity.set(true);
+                    *with_capacity = true;
                 } else {
-                    with_capacity.set(false);
+                    *with_capacity = false;
                 }
                 for param in extra {
-                    let _ = param.resolve(scope, &Some(p_num!(U64)), &None)?;
+                    let _ = param.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
                 }
                 if context.is_none() {
-                    return Err(SemanticError::CantInferType);
+                    return Err(SemanticError::CantInferType(format!(
+                        "of this vector allocation"
+                    )));
                 }
                 match &context {
                     Some(value) => match value {
                         Either::Static(value) => match value.as_ref() {
-                            StaticType::Vec(VecType(item)) => item_size.set(item.size_of()),
+                            StaticType::Vec(VecType(item)) => *item_size = item.size_of(),
                             _ => return Err(SemanticError::IncompatibleTypes),
                         },
                         Either::User(_) => return Err(SemanticError::IncompatibleTypes),
                     },
                     None => unreachable!(),
                 }
-                let mut borrowed_metadata = metadata
-                    .info
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| SemanticError::Default)?;
-                *borrowed_metadata = Info::Resolved {
+
+                metadata.info = Info::Resolved {
                     context: context.clone(),
                     signature: context.clone(),
                 };
@@ -777,15 +823,17 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 if extra.len() == 1 {
-                    with_capacity.set(true);
+                    *with_capacity = true;
                 } else {
-                    with_capacity.set(false);
+                    *with_capacity = false;
                 }
                 for param in extra {
-                    let _ = param.resolve(scope, &Some(p_num!(U64)), &None)?;
+                    let _ = param.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
                 }
                 if context.is_none() {
-                    return Err(SemanticError::CantInferType);
+                    return Err(SemanticError::CantInferType(format!(
+                        "of this map allocation"
+                    )));
                 }
                 match &context {
                     Some(value) => match value {
@@ -794,8 +842,8 @@ impl Resolve for AllocFn {
                                 keys_type,
                                 values_type,
                             }) => {
-                                value_size.set(values_type.size_of());
-                                key_size.set(keys_type.size_of());
+                                *value_size = values_type.size_of();
+                                *key_size = keys_type.size_of();
                             }
                             _ => return Err(SemanticError::IncompatibleTypes),
                         },
@@ -803,12 +851,8 @@ impl Resolve for AllocFn {
                     },
                     None => unreachable!(),
                 }
-                let mut borrowed_metadata = metadata
-                    .info
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| SemanticError::Default)?;
-                *borrowed_metadata = Info::Resolved {
+
+                metadata.info = Info::Resolved {
                     context: context.clone(),
                     signature: context.clone(),
                 };
@@ -818,17 +862,18 @@ impl Resolve for AllocFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let param = extra.first().unwrap();
-                let _ = param.resolve(scope, &None, &None)?;
-                let param_type = param.type_of(&scope.borrow())?;
+                let param = extra.first_mut().unwrap();
+                let _ = param.resolve::<G>(scope, &None, &mut None)?;
+                let param_type =
+                    param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match param_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::StrSlice(slice) => {
-                            from_char.set(false);
-                            len.set(slice.size_of());
+                            *from_char = false;
+                            *len = slice.size_of();
                         }
                         StaticType::Primitive(PrimitiveType::Char) => {
-                            from_char.set(true);
+                            *from_char = true;
                         }
                         _ => {
                             return Err(SemanticError::IncorrectArguments);
@@ -845,10 +890,11 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let size = &extra[0];
+                let size = &mut extra[0];
 
-                let _ = size.resolve(scope, &Some(p_num!(U64)), &None)?;
-                let size_type = size.type_of(&scope.borrow())?;
+                let _ = size.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
+                let size_type =
+                    size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)) => {}
@@ -862,10 +908,11 @@ impl Resolve for AllocFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let address = &extra[0];
+                let address = &mut extra[0];
 
-                let _ = address.resolve(scope, &None, &None)?;
-                let address_type = address.type_of(&scope.borrow())?;
+                let _ = address.resolve::<G>(scope, &None, &mut None)?;
+                let address_type =
+                    address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &address_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::String(_) => {}
@@ -881,17 +928,18 @@ impl Resolve for AllocFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let address = &extra[0];
+                let address = &mut extra[0];
 
-                let _ = address.resolve(scope, &None, &None)?;
-                let address_type = address.type_of(&scope.borrow())?;
-                for_map.set(false);
+                let _ = address.resolve::<G>(scope, &None, &mut None)?;
+                let address_type =
+                    address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                *for_map = false;
                 match &address_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::String(_) => {}
                         StaticType::Vec(_) => {}
                         StaticType::Map(_) => {
-                            for_map.set(true);
+                            *for_map = true;
                         }
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -903,12 +951,13 @@ impl Resolve for AllocFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let param = &extra[0];
+                let param = &mut extra[0];
 
-                let _ = param.resolve(scope, &None, &None)?;
-                let param_type = param.type_of(&scope.borrow())?;
+                let _ = param.resolve::<G>(scope, &None, &mut None)?;
+                let param_type =
+                    param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
-                size.set(param_type.size_of());
+                *size = param_type.size_of();
 
                 Ok(())
             }
@@ -916,15 +965,20 @@ impl Resolve for AllocFn {
                 if extra.len() != 3 {
                     return Err(SemanticError::IncorrectArguments);
                 }
+                let (first_part, rest) = extra.split_at_mut(1);
+                let (second_part, third_part) = rest.split_at_mut(1);
 
-                let dest = &extra[0];
-                let src = &extra[1];
-                let size = &extra[2];
+                // Get mutable references to the elements
+                let dest = &mut first_part[0];
+                let src = &mut second_part[0];
+                let size = &mut third_part[0];
 
-                let _ = dest.resolve(scope, &None, &None)?;
-                let _ = src.resolve(scope, &None, &None)?;
-                let dest_type = dest.type_of(&scope.borrow())?;
-                let src_type = src.type_of(&scope.borrow())?;
+                let _ = dest.resolve::<G>(scope, &None, &mut None)?;
+                let _ = src.resolve::<G>(scope, &None, &mut None)?;
+                let dest_type =
+                    dest.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let src_type =
+                    src.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &dest_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(_) => {}
@@ -945,8 +999,9 @@ impl Resolve for AllocFn {
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
-                let _ = size.resolve(scope, &Some(p_num!(U64)), &None)?;
-                let size_type = size.type_of(&scope.borrow())?;
+                let _ = size.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
+                let size_type =
+                    size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)) => {}
@@ -965,35 +1020,36 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let src = &extra[0];
+                let src = &mut extra[0];
 
-                let _ = src.resolve(scope, &None, &None)?;
-                let src_type = src.type_of(&scope.borrow())?;
+                let _ = src.resolve::<G>(scope, &None, &mut None)?;
+                let src_type =
+                    src.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 match &src_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(inner)) => match inner.as_ref() {
                             Either::Static(value) => match value.as_ref() {
                                 StaticType::String(_) => {
-                                    clear_kind.set(ClearKind::String);
-                                    item_size.set(1);
+                                    *clear_kind = ClearKind::String;
+                                    *item_size = 1;
                                 }
                                 StaticType::Vec(_) => {
-                                    clear_kind.set(ClearKind::Vec);
+                                    *clear_kind = ClearKind::Vec;
                                     let item_type = src_type.get_item();
                                     let Some(item_type) = item_type else {
                                         return Err(SemanticError::IncorrectArguments);
                                     };
-                                    item_size.set(item_type.size_of());
+                                    *item_size = item_type.size_of();
                                 }
                                 StaticType::Map(MapType {
                                     keys_type,
                                     values_type,
                                 }) => {
-                                    clear_kind.set(ClearKind::Map);
+                                    *clear_kind = ClearKind::Map;
 
-                                    item_size.set(values_type.as_ref().size_of());
-                                    key_size.set(keys_type.as_ref().size_of());
+                                    *item_size = values_type.as_ref().size_of();
+                                    *key_size = keys_type.as_ref().size_of();
                                 }
                                 _ => return Err(SemanticError::IncorrectArguments),
                             },
@@ -1011,7 +1067,7 @@ impl Resolve for AllocFn {
     }
 }
 impl TypeOf for AllocFn {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -1051,19 +1107,19 @@ impl TypeOf for AllocFn {
 impl GenerateCode for AllocFn {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             AllocFn::Append {
                 item_size,
                 append_kind,
-            } => match append_kind.get() {
+            } => match append_kind {
                 AppendKind::Vec => instructions.push(Casm::Platform(LibCasm::Core(
-                    super::CoreCasm::Alloc(AllocCasm::AppendItem(item_size.get())),
+                    super::CoreCasm::Alloc(AllocCasm::AppendItem(*item_size)),
                 ))),
                 AppendKind::StrSlice => instructions.push(Casm::Platform(LibCasm::Core(
-                    super::CoreCasm::Alloc(AllocCasm::AppendStrSlice(item_size.get())),
+                    super::CoreCasm::Alloc(AllocCasm::AppendStrSlice(*item_size)),
                 ))),
                 AppendKind::Char => instructions.push(Casm::Platform(LibCasm::Core(
                     super::CoreCasm::Alloc(AllocCasm::AppendChar),
@@ -1075,21 +1131,19 @@ impl GenerateCode for AllocFn {
             AllocFn::Extend {
                 item_size,
                 extend_kind,
-            } => match extend_kind.get() {
+            } => match extend_kind {
                 ExtendKind::VecFromSlice(len) => instructions.push(Casm::Platform(LibCasm::Core(
                     super::CoreCasm::Alloc(AllocCasm::ExtendItemFromSlice {
-                        len,
-                        size: item_size.get(),
+                        len: *len,
+                        size: *item_size,
                     }),
                 ))),
                 ExtendKind::VecFromVec => instructions.push(Casm::Platform(LibCasm::Core(
-                    super::CoreCasm::Alloc(AllocCasm::ExtendItemFromVec {
-                        size: item_size.get(),
-                    }),
+                    super::CoreCasm::Alloc(AllocCasm::ExtendItemFromVec { size: *item_size }),
                 ))),
                 ExtendKind::StringFromSlice(len) => {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
-                        AllocCasm::ExtendStringFromSlice { len },
+                        AllocCasm::ExtendStringFromSlice { len: *len },
                     ))))
                 }
                 ExtendKind::StringFromVec => instructions.push(Casm::Platform(LibCasm::Core(
@@ -1102,9 +1156,9 @@ impl GenerateCode for AllocFn {
                 ref_access,
             } => instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                 AllocCasm::Insert {
-                    key_size: key_size.get(),
-                    value_size: value_size.get(),
-                    ref_access: ref_access.get(),
+                    key_size: *key_size,
+                    value_size: *value_size,
+                    ref_access: *ref_access,
                 },
             )))),
             AllocFn::Get {
@@ -1114,9 +1168,9 @@ impl GenerateCode for AllocFn {
                 ..
             } => instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                 AllocCasm::Get {
-                    key_size: key_size.get(),
-                    value_size: value_size.get(),
-                    ref_access: ref_access.get(),
+                    key_size: *key_size,
+                    value_size: *value_size,
+                    ref_access: *ref_access,
                 },
             )))),
             AllocFn::Delete {
@@ -1124,15 +1178,15 @@ impl GenerateCode for AllocFn {
                 value_size,
                 key_size,
                 ..
-            } => match delete_kind.get() {
+            } => match delete_kind {
                 DeleteKind::Vec => instructions.push(Casm::Platform(LibCasm::Core(
-                    super::CoreCasm::Alloc(AllocCasm::DeleteVec(value_size.get())),
+                    super::CoreCasm::Alloc(AllocCasm::DeleteVec(*value_size)),
                 ))),
                 DeleteKind::Map(ref_access) => instructions.push(Casm::Platform(LibCasm::Core(
                     super::CoreCasm::Alloc(AllocCasm::DeleteMapKey {
-                        key_size: key_size.get(),
-                        value_size: value_size.get(),
-                        ref_access,
+                        key_size: *key_size,
+                        value_size: *value_size,
+                        ref_access: *ref_access,
                     }),
                 ))),
             },
@@ -1145,16 +1199,16 @@ impl GenerateCode for AllocFn {
                 item_size,
                 ..
             } => {
-                if with_capacity.get() {
+                if *with_capacity {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::VecWithCapacity {
-                            item_size: item_size.get(),
+                            item_size: *item_size,
                         },
                     ))))
                 } else {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::Vec {
-                            item_size: item_size.get(),
+                            item_size: *item_size,
                         },
                     ))))
                 }
@@ -1165,24 +1219,24 @@ impl GenerateCode for AllocFn {
                 key_size,
                 ..
             } => {
-                if with_capacity.get() {
+                if *with_capacity {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::MapWithCapacity {
-                            key_size: key_size.get(),
-                            value_size: value_size.get(),
+                            key_size: *key_size,
+                            value_size: *value_size,
                         },
                     ))))
                 } else {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::Map {
-                            key_size: key_size.get(),
-                            value_size: value_size.get(),
+                            key_size: *key_size,
+                            value_size: *value_size,
                         },
                     ))))
                 }
             }
             AllocFn::String { from_char, .. } => {
-                if from_char.get() {
+                if *from_char {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::StringFromChar,
                     ))))
@@ -1199,7 +1253,7 @@ impl GenerateCode for AllocFn {
                 super::CoreCasm::Alloc(AllocCasm::Len),
             ))),
             AllocFn::Cap { for_map } => {
-                if for_map.get() {
+                if *for_map {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::CapMap,
                     ))))
@@ -1210,9 +1264,9 @@ impl GenerateCode for AllocFn {
                 }
             }
             AllocFn::SizeOf { size } => {
-                instructions.push(Casm::Pop(size.get()));
+                instructions.push(Casm::Pop(*size));
                 instructions.push(Casm::Data(Data::Serialized {
-                    data: Box::new(size.get().to_le_bytes()),
+                    data: Box::new(size.to_le_bytes()),
                 }));
             }
             AllocFn::MemCopy => instructions.push(Casm::Mem(Mem::MemCopy)),
@@ -1220,17 +1274,17 @@ impl GenerateCode for AllocFn {
                 clear_kind,
                 item_size,
                 key_size,
-            } => match clear_kind.get() {
+            } => match clear_kind {
                 ClearKind::Vec => instructions.push(Casm::Platform(LibCasm::Core(
-                    super::CoreCasm::Alloc(AllocCasm::ClearVec(item_size.get())),
+                    super::CoreCasm::Alloc(AllocCasm::ClearVec(*item_size)),
                 ))),
                 ClearKind::String => instructions.push(Casm::Platform(LibCasm::Core(
                     super::CoreCasm::Alloc(AllocCasm::ClearString(1)),
                 ))),
                 ClearKind::Map => instructions.push(Casm::Platform(LibCasm::Core(
                     super::CoreCasm::Alloc(AllocCasm::ClearMap {
-                        key_size: key_size.get(),
-                        value_size: item_size.get(),
+                        key_size: *key_size,
+                        value_size: *item_size,
                     }),
                 ))),
             },
@@ -1313,9 +1367,8 @@ pub mod map_impl {
                 }
                 if *self_top_hash == top_hash {
                     // Read key
-                    let found_key = heap
-                        .read(self.ptr_keys as usize + idx * self.key_size, self.key_size)
-                        .map_err(|e| e.into())?;
+                    let found_key =
+                        heap.read(self.ptr_keys as usize + idx * self.key_size, self.key_size)?;
                     match ref_access {
                         DerefHashing::Vec(item_size) => {
                             // found_key is a pointer to a vec
@@ -1323,16 +1376,13 @@ pub mod map_impl {
                                 TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
                                     .map_err(|_| RuntimeError::Deserialization)?;
                             let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                            let len_bytes = heap
-                                .read(vec_heap_address as usize, 8)
-                                .map_err(|e| e.into())?;
+                            let len_bytes = heap.read(vec_heap_address as usize, 8)?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes);
 
                             let items_bytes = heap
-                                .read(vec_heap_address as usize + 16, len as usize * item_size)
-                                .map_err(|e| e.into())?;
+                                .read(vec_heap_address as usize + 16, len as usize * item_size)?;
                             if items_bytes.as_slice() == key {
                                 indexes = Some((
                                     self.ptr_top_hash + idx as u64,
@@ -1348,16 +1398,13 @@ pub mod map_impl {
                                 TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
                                     .map_err(|_| RuntimeError::Deserialization)?;
                             let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                            let len_bytes = heap
-                                .read(vec_heap_address as usize, 8)
-                                .map_err(|e| e.into())?;
+                            let len_bytes = heap.read(vec_heap_address as usize, 8)?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes);
 
-                            let items_bytes = heap
-                                .read(vec_heap_address as usize + 16, len as usize)
-                                .map_err(|e| e.into())?;
+                            let items_bytes =
+                                heap.read(vec_heap_address as usize + 16, len as usize)?;
                             if items_bytes.as_slice() == key {
                                 indexes = Some((
                                     self.ptr_top_hash + idx as u64,
@@ -1415,9 +1462,8 @@ pub mod map_impl {
                 }
                 if *self_top_hash == top_hash {
                     // Read key
-                    let found_key = heap
-                        .read(self.ptr_keys as usize + idx * self.key_size, self.key_size)
-                        .map_err(|e| e.into())?;
+                    let found_key =
+                        heap.read(self.ptr_keys as usize + idx * self.key_size, self.key_size)?;
                     match ref_access {
                         DerefHashing::Vec(item_size) => {
                             // found_key is a pointer to a vec
@@ -1425,16 +1471,13 @@ pub mod map_impl {
                                 TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
                                     .map_err(|_| RuntimeError::Deserialization)?;
                             let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                            let len_bytes = heap
-                                .read(vec_heap_address as usize, 8)
-                                .map_err(|e| e.into())?;
+                            let len_bytes = heap.read(vec_heap_address as usize, 8)?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes);
 
                             let items_bytes = heap
-                                .read(vec_heap_address as usize + 16, len as usize * item_size)
-                                .map_err(|e| e.into())?;
+                                .read(vec_heap_address as usize + 16, len as usize * item_size)?;
                             if items_bytes.as_slice() == key {
                                 return Ok(Some(self.ptr_values + (idx * self.value_size) as u64));
                             }
@@ -1445,16 +1488,13 @@ pub mod map_impl {
                                 TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
                                     .map_err(|_| RuntimeError::Deserialization)?;
                             let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                            let len_bytes = heap
-                                .read(vec_heap_address as usize, 8)
-                                .map_err(|e| e.into())?;
+                            let len_bytes = heap.read(vec_heap_address as usize, 8)?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes);
 
-                            let items_bytes = heap
-                                .read(vec_heap_address as usize + 16, len as usize)
-                                .map_err(|e| e.into())?;
+                            let items_bytes =
+                                heap.read(vec_heap_address as usize + 16, len as usize)?;
                             if items_bytes.as_slice() == key {
                                 return Ok(Some(self.ptr_values + (idx * self.value_size) as u64));
                             }
@@ -1487,9 +1527,8 @@ pub mod map_impl {
                 }
                 if *self_top_hash == top_hash {
                     // Read key
-                    let found_key = heap
-                        .read(self.ptr_keys as usize + idx * self.key_size, self.key_size)
-                        .map_err(|e| e.into())?;
+                    let found_key =
+                        heap.read(self.ptr_keys as usize + idx * self.key_size, self.key_size)?;
                     match ref_access {
                         DerefHashing::Vec(item_size) => {
                             // found_key is a pointer to a vec
@@ -1497,16 +1536,13 @@ pub mod map_impl {
                                 TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
                                     .map_err(|_| RuntimeError::Deserialization)?;
                             let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                            let len_bytes = heap
-                                .read(vec_heap_address as usize, 8)
-                                .map_err(|e| e.into())?;
+                            let len_bytes = heap.read(vec_heap_address as usize, 8)?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes);
 
                             let items_bytes = heap
-                                .read(vec_heap_address as usize + 16, len as usize * item_size)
-                                .map_err(|e| e.into())?;
+                                .read(vec_heap_address as usize + 16, len as usize * item_size)?;
                             if items_bytes.as_slice() == key {
                                 found_idx = Some(idx);
                             }
@@ -1517,16 +1553,13 @@ pub mod map_impl {
                                 TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
                                     .map_err(|_| RuntimeError::Deserialization)?;
                             let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                            let len_bytes = heap
-                                .read(vec_heap_address as usize, 8)
-                                .map_err(|e| e.into())?;
+                            let len_bytes = heap.read(vec_heap_address as usize, 8)?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes);
 
-                            let items_bytes = heap
-                                .read(vec_heap_address as usize + 16, len as usize)
-                                .map_err(|e| e.into())?;
+                            let items_bytes =
+                                heap.read(vec_heap_address as usize + 16, len as usize)?;
                             if items_bytes.as_slice() == key {
                                 return Ok(Some(self.ptr_values + (idx * self.value_size) as u64));
                             }
@@ -1552,23 +1585,20 @@ pub mod map_impl {
                         heap.write(
                             self.ptr_top_hash as usize + idx,
                             &vec![TopHashValue::RestIsEmpty as u8],
-                        )
-                        .map_err(|e| e.into())?;
+                        )?;
                     } else {
                         // Write EmptyCell
                         heap.write(
                             self.ptr_top_hash as usize + idx,
                             &vec![TopHashValue::EmptyCell as u8],
-                        )
-                        .map_err(|e| e.into())?;
+                        )?;
                     }
                 } else {
                     // Write RestIsEmpty
                     heap.write(
                         self.ptr_top_hash as usize + idx,
                         &vec![TopHashValue::RestIsEmpty as u8],
-                    )
-                    .map_err(|e| e.into())?;
+                    )?;
                 }
                 Ok(Some(self.ptr_values + (idx * self.value_size) as u64))
             } else {
@@ -1611,7 +1641,7 @@ pub mod map_impl {
 
         pub fn init_in_mem(&self, heap: &mut Heap) -> Result<usize, RuntimeError> {
             // alloc map layout
-            let map_ptr = heap.alloc(MAP_LAYOUT_SIZE).map_err(|e| e.into())? + 8;
+            let map_ptr = heap.alloc(MAP_LAYOUT_SIZE)? + 8;
 
             let mut data = [0; MAP_LAYOUT_SIZE];
             // write len
@@ -1622,17 +1652,12 @@ pub mod map_impl {
             data[9..13].copy_from_slice(&self.hash_seed.to_le_bytes());
 
             // alloc buckets
-            let buckets_ptr = heap
-                .alloc((1 << self.log_cap) * self.bucket_size)
-                .map_err(|e| e.into())?
-                + 8;
+            let buckets_ptr = heap.alloc((1 << self.log_cap) * self.bucket_size)? + 8;
             // clean buckets
-            let _ = heap
-                .write(
-                    buckets_ptr,
-                    &vec![0u8; (1 << self.log_cap) * self.bucket_size],
-                )
-                .map_err(|e| e.into())?;
+            let _ = heap.write(
+                buckets_ptr,
+                &vec![0u8; (1 << self.log_cap) * self.bucket_size],
+            )?;
 
             let buckets_ptr = buckets_ptr as u64;
 
@@ -1640,28 +1665,24 @@ pub mod map_impl {
             data[13..].copy_from_slice(&buckets_ptr.to_le_bytes());
 
             // write map layout in mem
-            let _ = heap.write(map_ptr, &data.to_vec()).map_err(|e| e.into())?;
+            let _ = heap.write(map_ptr, &data.to_vec())?;
 
             Ok(map_ptr)
         }
 
         fn update_log_cap(&self, new_log_cap: u8, heap: &mut Heap) -> Result<(), RuntimeError> {
-            let _ = heap
-                .write(
-                    self.ptr_map_layout as usize + MapLayout::log_cap_offset(),
-                    &vec![new_log_cap],
-                )
-                .map_err(|e| e.into())?;
+            let _ = heap.write(
+                self.ptr_map_layout as usize + MapLayout::log_cap_offset(),
+                &vec![new_log_cap],
+            )?;
             Ok(())
         }
 
         fn update_buckets_ptr(&self, bucket_ptr: u64, heap: &mut Heap) -> Result<(), RuntimeError> {
-            let _ = heap
-                .write(
-                    self.ptr_map_layout as usize + MapLayout::ptr_buckets_offset(),
-                    &bucket_ptr.to_le_bytes().to_vec(),
-                )
-                .map_err(|e| e.into())?;
+            let _ = heap.write(
+                self.ptr_map_layout as usize + MapLayout::ptr_buckets_offset(),
+                &bucket_ptr.to_le_bytes().to_vec(),
+            )?;
             Ok(())
         }
 
@@ -1670,12 +1691,10 @@ pub mod map_impl {
 
             let previous_ptr_bucket = self.ptr_buckets;
             // get all buckets
-            let bytes_buckets = heap
-                .read(
-                    self.ptr_buckets as usize,
-                    (1 << self.log_cap) * self.bucket_size,
-                )
-                .map_err(|e| e.into())?;
+            let bytes_buckets = heap.read(
+                self.ptr_buckets as usize,
+                (1 << self.log_cap) * self.bucket_size,
+            )?;
             let mut resizing_is_over = false;
             let mut new_bytes_buckets = Vec::new();
             'again: while !resizing_is_over {
@@ -1754,17 +1773,13 @@ pub mod map_impl {
             let _ = self.update_log_cap(new_log_cap, heap)?;
 
             // free previous_buckets
-            let _ = heap
-                .free((previous_ptr_bucket - 8) as usize)
-                .map_err(|e| e.into())?;
+            let _ = heap.free((previous_ptr_bucket - 8) as usize)?;
 
             // alloc new buckets
             let new_buckets_ptr = heap
-            .alloc(new_bytes_buckets.len()).map_err(|e| e.into())? + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+            .alloc(new_bytes_buckets.len())? + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
             // copy new buckets in memory
-            let _ = heap
-                .write(new_buckets_ptr, &new_bytes_buckets)
-                .map_err(|e| e.into())?;
+            let _ = heap.write(new_buckets_ptr, &new_bytes_buckets)?;
 
             // update buckets ptr
             let _ = self.update_buckets_ptr(new_buckets_ptr as u64, heap)?;
@@ -1773,22 +1788,18 @@ pub mod map_impl {
         }
 
         pub fn clear_buckets(&self, heap: &mut Heap) -> Result<(), RuntimeError> {
-            let _ = heap
-                .write(
-                    self.ptr_buckets as usize,
-                    &vec![0; (1 << self.log_cap) * self.bucket_size],
-                )
-                .map_err(|e| e.into())?;
+            let _ = heap.write(
+                self.ptr_buckets as usize,
+                &vec![0; (1 << self.log_cap) * self.bucket_size],
+            )?;
             Ok(())
         }
         pub fn retrieve_vec_values(&self, heap: &mut Heap) -> Result<Vec<u64>, RuntimeError> {
             // get all buckets
-            let bytes_buckets = heap
-                .read(
-                    self.ptr_buckets as usize,
-                    (1 << self.log_cap) * self.bucket_size,
-                )
-                .map_err(|e| e.into())?;
+            let bytes_buckets = heap.read(
+                self.ptr_buckets as usize,
+                (1 << self.log_cap) * self.bucket_size,
+            )?;
 
             let mut items_ptr = Vec::with_capacity(self.len as usize);
 
@@ -1809,17 +1820,14 @@ pub mod map_impl {
         }
         pub fn retrieve_vec_keys(&self, heap: &mut Heap) -> Result<Vec<u64>, RuntimeError> {
             // get all buckets
-            let bytes_buckets = heap
-                .read(
-                    self.ptr_buckets as usize,
-                    (1 << self.log_cap) * self.bucket_size,
-                )
-                .map_err(|e| e.into())?;
+            let bytes_buckets = heap.read(
+                self.ptr_buckets as usize,
+                (1 << self.log_cap) * self.bucket_size,
+            )?;
 
             let mut items_ptr = Vec::with_capacity(self.len as usize);
 
             for (idx, bucket) in bytes_buckets.chunks_exact(self.bucket_size).enumerate() {
-                dbg!((idx, &bucket[0..MAP_BUCKET_SIZE]));
                 for idx_top_hash in 0..MAP_BUCKET_SIZE {
                     if bucket[idx_top_hash] > TopHashValue::MIN as u8 {
                         items_ptr.push(
@@ -1835,12 +1843,10 @@ pub mod map_impl {
         }
         pub fn retrieve_vec_items(&self, heap: &mut Heap) -> Result<Vec<(u64, u64)>, RuntimeError> {
             // get all buckets
-            let bytes_buckets = heap
-                .read(
-                    self.ptr_buckets as usize,
-                    (1 << self.log_cap) * self.bucket_size,
-                )
-                .map_err(|e| e.into())?;
+            let bytes_buckets = heap.read(
+                self.ptr_buckets as usize,
+                (1 << self.log_cap) * self.bucket_size,
+            )?;
 
             let mut items_ptr = Vec::with_capacity(self.len as usize);
 
@@ -1876,9 +1882,7 @@ pub mod map_impl {
 
         heap: &mut Heap,
     ) -> Result<BucketLayout, RuntimeError> {
-        let data = heap
-            .read(address as usize, MAP_BUCKET_SIZE)
-            .map_err(|e| e.into())?;
+        let data = heap.read(address as usize, MAP_BUCKET_SIZE)?;
         if data.len() != MAP_BUCKET_SIZE {
             return Err(RuntimeError::CodeSegmentation);
         }
@@ -1900,7 +1904,7 @@ pub mod map_impl {
         value_size: usize,
         heap: &mut Heap,
     ) -> Result<MapLayout, RuntimeError> {
-        let data = heap.read(address as usize, 21).map_err(|e| e.into())?;
+        let data = heap.read(address as usize, 21)?;
         if data.len() != 21 {
             return Err(RuntimeError::CodeSegmentation);
         }
@@ -1962,14 +1966,15 @@ pub mod map_impl {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             AllocCasm::AppendChar => {
@@ -1979,28 +1984,22 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let item_len = chara.len();
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let vec_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes = stack.read(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
 
-                let previous_len_bytes = heap
-                    .read(vec_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let previous_len_bytes = heap.read(vec_heap_address as usize, 8)?;
                 let previous_len_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = heap
-                    .read(vec_heap_address as usize + 8, 8)
-                    .map_err(|e| e.into())?;
+                let previous_cap_bytes = heap.read(vec_heap_address as usize + 8, 8)?;
                 let previous_cap_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
@@ -2011,9 +2010,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + (item_len as u64)) * 2) as usize) + 16;
-                    let address = heap
-                        .realloc(vec_heap_address as usize - 8, size)
-                        .map_err(|e| e.into())?;
+                    let address = heap.realloc(vec_heap_address as usize - 8, size)?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
                     (
                         address as u64,
@@ -2030,29 +2027,21 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = heap
-                    .write(new_vec_heap_address as usize, &len_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap
-                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize + 8, &cap_bytes)?;
 
                 /* Write new item */
-                let _ = heap
-                    .write(
-                        new_vec_heap_address as usize + 16 + new_len as usize - item_len,
-                        &item_data,
-                    )
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(
+                    new_vec_heap_address as usize + 16 + new_len as usize - item_len,
+                    &item_data,
+                )?;
                 /* Update vector pointer */
-                let _ = stack
-                    .write(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        &new_vec_heap_address.to_le_bytes(),
-                    )
-                    .map_err(|err| err.into())?;
+                let _ = stack.write(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    &new_vec_heap_address.to_le_bytes(),
+                )?;
             }
             AllocCasm::AppendItem(item_size) | AllocCasm::AppendStrSlice(item_size) => {
                 let item_size = match self {
@@ -2063,31 +2052,25 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                     }
                     _ => unreachable!(),
                 };
-                let item_data = stack.pop(item_size).map_err(|e| e.into())?.to_owned();
+                let item_data = stack.pop(item_size)?.to_owned();
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes = stack.read(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                let previous_len_bytes = heap
-                    .read(vec_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let previous_len_bytes = heap.read(vec_heap_address as usize, 8)?;
                 let previous_len_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = heap
-                    .read(vec_heap_address as usize + 8, 8)
-                    .map_err(|e| e.into())?;
+                let previous_cap_bytes = heap.read(vec_heap_address as usize + 8, 8)?;
                 let previous_cap_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
@@ -2110,9 +2093,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
-                    let address = heap
-                        .realloc(vec_heap_address as usize - 8, size)
-                        .map_err(|e| e.into())?;
+                    let address = heap.realloc(vec_heap_address as usize - 8, size)?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
                     (
                         address as u64,
@@ -2126,73 +2107,51 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = heap
-                    .write(new_vec_heap_address as usize, &len_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap
-                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize + 8, &cap_bytes)?;
 
                 /* Write new item */
-                let _ = heap
-                    .write(
-                        new_vec_heap_address as usize
-                            + 16
-                            + (new_len as usize * size_factor as usize)
-                            - item_size,
-                        &item_data.to_vec(),
-                    )
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(
+                    new_vec_heap_address as usize + 16 + (new_len as usize * size_factor as usize)
+                        - item_size,
+                    &item_data.to_vec(),
+                )?;
                 /* Update vector pointer */
-                let _ = stack
-                    .write(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        &new_vec_heap_address.to_le_bytes(),
-                    )
-                    .map_err(|err| err.into())?;
+                let _ = stack.write(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    &new_vec_heap_address.to_le_bytes(),
+                )?;
             }
             AllocCasm::AppendString => {
                 let item_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let item_len_bytes = heap
-                    .read(item_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let item_len_bytes = heap.read(item_heap_address as usize, 8)?;
                 let item_len_bytes = TryInto::<&[u8; 8]>::try_into(item_len_bytes.as_slice())
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let item_len = u64::from_le_bytes(*item_len_bytes);
 
-                let item_data = heap
-                    .read(item_heap_address as usize + 16, item_len as usize)
-                    .map_err(|e| e.into())?;
+                let item_data = heap.read(item_heap_address as usize + 16, item_len as usize)?;
 
-                let _ = heap
-                    .free(item_heap_address as usize - 8)
-                    .map_err(|e| e.into())?;
+                let _ = heap.free(item_heap_address as usize - 8)?;
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let vec_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes = stack.read(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
 
-                let previous_len_bytes = heap
-                    .read(vec_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let previous_len_bytes = heap.read(vec_heap_address as usize, 8)?;
                 let previous_len_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = heap
-                    .read(vec_heap_address as usize + 8, 8)
-                    .map_err(|e| e.into())?;
+                let previous_cap_bytes = heap.read(vec_heap_address as usize + 8, 8)?;
                 let previous_cap_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
@@ -2203,9 +2162,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + item_len) * 2) as usize) + 16;
-                    let address = heap
-                        .realloc(vec_heap_address as usize - 8, size)
-                        .map_err(|e| e.into())?;
+                    let address = heap.realloc(vec_heap_address as usize - 8, size)?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
                     (address as u64, previous_len + item_len, size as u64)
                 } else {
@@ -2214,78 +2171,60 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = heap
-                    .write(new_vec_heap_address as usize, &len_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap
-                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize + 8, &cap_bytes)?;
 
                 /* Write new item */
-                let _ = heap
-                    .write(
-                        new_vec_heap_address as usize + 16 + new_len as usize - item_len as usize,
-                        &item_data,
-                    )
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(
+                    new_vec_heap_address as usize + 16 + new_len as usize - item_len as usize,
+                    &item_data,
+                )?;
                 /* Update vector pointer */
-                let _ = stack
-                    .write(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        &new_vec_heap_address.to_le_bytes(),
-                    )
-                    .map_err(|err| err.into())?;
+                let _ = stack.write(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    &new_vec_heap_address.to_le_bytes(),
+                )?;
             }
             AllocCasm::Insert {
                 key_size,
                 value_size,
                 ref_access,
             } => {
-                let value_data = stack.pop(*value_size).map_err(|e| e.into())?.to_owned();
+                let value_data = stack.pop(*value_size)?.to_owned();
                 let (key_data_ref_if_exist, key_data) = match ref_access {
                     DerefHashing::Vec(item_size) => {
                         let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                        let len_bytes = heap
-                            .read(vec_heap_address as usize, 8)
-                            .map_err(|e| e.into())?;
+                        let len_bytes = heap.read(vec_heap_address as usize, 8)?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = heap
-                            .read(vec_heap_address as usize + 16, len as usize * *item_size)
-                            .map_err(|e| e.into())?;
+                        let items_bytes =
+                            heap.read(vec_heap_address as usize + 16, len as usize * *item_size)?;
                         (Some(vec_heap_address.to_le_bytes()), items_bytes)
                     }
                     DerefHashing::String => {
                         let str_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
-                        let len_bytes = heap
-                            .read(str_heap_address as usize, 8)
-                            .map_err(|e| e.into())?;
+                        let len_bytes = heap.read(str_heap_address as usize, 8)?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = heap
-                            .read(str_heap_address as usize + 16, len as usize)
-                            .map_err(|e| e.into())?;
+                        let items_bytes =
+                            heap.read(str_heap_address as usize + 16, len as usize)?;
                         (Some(str_heap_address.to_le_bytes()), items_bytes)
                     }
-                    DerefHashing::Default => {
-                        (None, stack.pop(*key_size).map_err(|e| e.into())?.to_vec())
-                    }
+                    DerefHashing::Default => (None, stack.pop(*key_size)?.to_vec()),
                 };
 
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let map_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(map_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let map_heap_address_bytes = stack.read(
+                    Offset::SB(map_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -2305,8 +2244,6 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                     let bucket_layout =
                         bucket_layout(bucket_address, *key_size, *value_size, heap)?;
 
-                    // dbg!((bucket_idx, &bucket_layout));
-
                     let opt_ptr_key_value =
                         bucket_layout.assign(top_hash, &key_data, *ref_access, heap)?;
                     match opt_ptr_key_value {
@@ -2320,32 +2257,23 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                                 }
                             }
                             // insert in found place
-                            let _ = heap
-                                .write(ptr_tophash as usize, &vec![top_hash])
-                                .map_err(|e| e.into())?;
+                            let _ = heap.write(ptr_tophash as usize, &vec![top_hash])?;
                             match key_data_ref_if_exist {
                                 Some(real_key_data) => {
-                                    let _ = heap
-                                        .write(ptr_key as usize, &real_key_data.to_vec())
-                                        .map_err(|e| e.into())?;
+                                    let _ =
+                                        heap.write(ptr_key as usize, &real_key_data.to_vec())?;
                                 }
                                 None => {
-                                    let _ = heap
-                                        .write(ptr_key as usize, &key_data)
-                                        .map_err(|e| e.into())?;
+                                    let _ = heap.write(ptr_key as usize, &key_data)?;
                                 }
                             }
-                            let _ = heap
-                                .write(ptr_value as usize, &value_data.to_vec())
-                                .map_err(|e| e.into())?;
+                            let _ = heap.write(ptr_value as usize, &value_data.to_vec())?;
                             if is_new_value {
                                 // update len
-                                let _ = heap
-                                    .write(
-                                        map_heap_address as usize,
-                                        &(map_layout.len + 1).to_le_bytes().to_vec(),
-                                    )
-                                    .map_err(|e| e.into())?;
+                                let _ = heap.write(
+                                    map_heap_address as usize,
+                                    &(map_layout.len + 1).to_le_bytes().to_vec(),
+                                )?;
                             }
                             insertion_successful = true;
                         }
@@ -2361,38 +2289,30 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 key_size,
                 value_size,
             } => {
-                let value_data = stack.pop(*value_size).map_err(|e| e.into())?.to_owned();
+                let value_data = stack.pop(*value_size)?.to_owned();
                 let (key_data_ref_if_exist, key_data) = match ref_access {
                     DerefHashing::Vec(item_size) => {
                         let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                        let len_bytes = heap
-                            .read(vec_heap_address as usize, 8)
-                            .map_err(|e| e.into())?;
+                        let len_bytes = heap.read(vec_heap_address as usize, 8)?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = heap
-                            .read(vec_heap_address as usize + 16, len as usize * *item_size)
-                            .map_err(|e| e.into())?;
+                        let items_bytes =
+                            heap.read(vec_heap_address as usize + 16, len as usize * *item_size)?;
                         (Some(vec_heap_address.to_le_bytes()), items_bytes)
                     }
                     DerefHashing::String => {
                         let str_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
-                        let len_bytes = heap
-                            .read(str_heap_address as usize, 8)
-                            .map_err(|e| e.into())?;
+                        let len_bytes = heap.read(str_heap_address as usize, 8)?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = heap
-                            .read(str_heap_address as usize + 16, len as usize)
-                            .map_err(|e| e.into())?;
+                        let items_bytes =
+                            heap.read(str_heap_address as usize + 16, len as usize)?;
                         (Some(str_heap_address.to_le_bytes()), items_bytes)
                     }
-                    DerefHashing::Default => {
-                        (None, stack.pop(*key_size).map_err(|e| e.into())?.to_vec())
-                    }
+                    DerefHashing::Default => (None, stack.pop(*key_size)?.to_vec()),
                 };
 
                 let map_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
@@ -2413,8 +2333,6 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                     let bucket_layout =
                         bucket_layout(bucket_address, *key_size, *value_size, heap)?;
 
-                    // dbg!((bucket_idx, &bucket_layout));
-
                     let opt_ptr_key_value =
                         bucket_layout.assign(top_hash, &key_data, *ref_access, heap)?;
                     match opt_ptr_key_value {
@@ -2428,32 +2346,23 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                                 }
                             }
                             // insert in found place
-                            let _ = heap
-                                .write(ptr_tophash as usize, &vec![top_hash])
-                                .map_err(|e| e.into())?;
+                            let _ = heap.write(ptr_tophash as usize, &vec![top_hash])?;
                             match key_data_ref_if_exist {
                                 Some(real_key_data) => {
-                                    let _ = heap
-                                        .write(ptr_key as usize, &real_key_data.to_vec())
-                                        .map_err(|e| e.into())?;
+                                    let _ =
+                                        heap.write(ptr_key as usize, &real_key_data.to_vec())?;
                                 }
                                 None => {
-                                    let _ = heap
-                                        .write(ptr_key as usize, &key_data)
-                                        .map_err(|e| e.into())?;
+                                    let _ = heap.write(ptr_key as usize, &key_data)?;
                                 }
                             }
-                            let _ = heap
-                                .write(ptr_value as usize, &value_data.to_vec())
-                                .map_err(|e| e.into())?;
+                            let _ = heap.write(ptr_value as usize, &value_data.to_vec())?;
                             if is_new_value {
                                 // update len
-                                let _ = heap
-                                    .write(
-                                        map_heap_address as usize,
-                                        &(map_layout.len + 1).to_le_bytes().to_vec(),
-                                    )
-                                    .map_err(|e| e.into())?;
+                                let _ = heap.write(
+                                    map_heap_address as usize,
+                                    &(map_layout.len + 1).to_le_bytes().to_vec(),
+                                )?;
                             }
                             insertion_successful = true;
                         }
@@ -2464,9 +2373,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                     }
                 }
 
-                let _ = stack
-                    .push_with(&map_heap_address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&map_heap_address.to_le_bytes())?;
             }
 
             AllocCasm::Get {
@@ -2478,42 +2385,34 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                     DerefHashing::Vec(item_size) => {
                         let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                        let len_bytes = heap
-                            .read(vec_heap_address as usize, 8)
-                            .map_err(|e| e.into())?;
+                        let len_bytes = heap.read(vec_heap_address as usize, 8)?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = heap
-                            .read(vec_heap_address as usize + 16, len as usize * *item_size)
-                            .map_err(|e| e.into())?;
+                        let items_bytes =
+                            heap.read(vec_heap_address as usize + 16, len as usize * *item_size)?;
                         items_bytes
                     }
                     DerefHashing::String => {
                         let str_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
-                        let len_bytes = heap
-                            .read(str_heap_address as usize, 8)
-                            .map_err(|e| e.into())?;
+                        let len_bytes = heap.read(str_heap_address as usize, 8)?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = heap
-                            .read(str_heap_address as usize + 16, len as usize)
-                            .map_err(|e| e.into())?;
+                        let items_bytes =
+                            heap.read(str_heap_address as usize + 16, len as usize)?;
                         items_bytes
                     }
-                    DerefHashing::Default => stack.pop(*key_size).map_err(|e| e.into())?.to_vec(),
+                    DerefHashing::Default => stack.pop(*key_size)?.to_vec(),
                 };
 
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let map_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(map_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let map_heap_address_bytes = stack.read(
+                    Offset::SB(map_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -2529,26 +2428,19 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
 
                 let bucket_layout = bucket_layout(bucket_address, *key_size, *value_size, heap)?;
 
-                // dbg!(&map_layout);
-                // dbg!((bucket_idx, &bucket_layout));
-
                 let opt_ptr_value = bucket_layout.get(top_hash, &key_data, *ref_access, heap)?;
                 match opt_ptr_value {
                     Some(ptr_value) => {
-                        let value_data = heap
-                            .read(ptr_value as usize, *value_size)
-                            .map_err(|e| e.into())?;
+                        let value_data = heap.read(ptr_value as usize, *value_size)?;
 
-                        let _ = stack.push_with(&value_data).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&value_data)?;
                         // push NO_ERROR
-                        let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&OK_VALUE)?;
                     }
                     None => {
-                        let _ = stack
-                            .push_with(&vec![0u8; *value_size])
-                            .map_err(|e| e.into())?;
+                        let _ = stack.push_with(&vec![0u8; *value_size])?;
                         // push ERROR
-                        let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&ERROR_VALUE)?;
                     }
                 }
             }
@@ -2561,42 +2453,34 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                     DerefHashing::Vec(item_size) => {
                         let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                        let len_bytes = heap
-                            .read(vec_heap_address as usize, 8)
-                            .map_err(|e| e.into())?;
+                        let len_bytes = heap.read(vec_heap_address as usize, 8)?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = heap
-                            .read(vec_heap_address as usize + 16, len as usize * *item_size)
-                            .map_err(|e| e.into())?;
+                        let items_bytes =
+                            heap.read(vec_heap_address as usize + 16, len as usize * *item_size)?;
                         items_bytes
                     }
                     DerefHashing::String => {
                         let str_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
-                        let len_bytes = heap
-                            .read(str_heap_address as usize, 8)
-                            .map_err(|e| e.into())?;
+                        let len_bytes = heap.read(str_heap_address as usize, 8)?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = heap
-                            .read(str_heap_address as usize + 16, len as usize)
-                            .map_err(|e| e.into())?;
+                        let items_bytes =
+                            heap.read(str_heap_address as usize + 16, len as usize)?;
                         items_bytes
                     }
-                    DerefHashing::Default => stack.pop(*key_size).map_err(|e| e.into())?.to_vec(),
+                    DerefHashing::Default => stack.pop(*key_size)?.to_vec(),
                 };
 
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let map_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(map_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let map_heap_address_bytes = stack.read(
+                    Offset::SB(map_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -2612,34 +2496,25 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
 
                 let bucket_layout = bucket_layout(bucket_address, *key_size, *value_size, heap)?;
 
-                // dbg!(&map_layout);
-                // dbg!((bucket_idx, &bucket_layout));
-
                 let opt_ptr_value = bucket_layout.delete(top_hash, &key_data, *ref_access, heap)?;
                 match opt_ptr_value {
                     Some(ptr_value) => {
                         // update len
-                        let _ = heap
-                            .write(
-                                map_heap_address as usize,
-                                &(map_layout.len - 1).to_le_bytes().to_vec(),
-                            )
-                            .map_err(|e| e.into())?;
+                        let _ = heap.write(
+                            map_heap_address as usize,
+                            &(map_layout.len - 1).to_le_bytes().to_vec(),
+                        )?;
                         // read in found place
-                        let value_data = heap
-                            .read(ptr_value as usize, *value_size)
-                            .map_err(|e| e.into())?;
+                        let value_data = heap.read(ptr_value as usize, *value_size)?;
 
-                        let _ = stack.push_with(&value_data).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&value_data)?;
                         // push NO_ERROR
-                        let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&OK_VALUE)?;
                     }
                     None => {
-                        let _ = stack
-                            .push_with(&vec![0u8; *value_size])
-                            .map_err(|e| e.into())?;
+                        let _ = stack.push_with(&vec![0u8; *value_size])?;
                         // push ERROR
-                        let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&ERROR_VALUE)?;
                     }
                 }
             }
@@ -2647,20 +2522,16 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let index = OpPrimitive::get_num8::<u64>(stack)?;
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes = stack.read(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
 
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                let previous_len_bytes = heap
-                    .read(vec_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let previous_len_bytes = heap.read(vec_heap_address as usize, 8)?;
                 let previous_len_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
@@ -2670,56 +2541,42 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
 
                 if index < previous_len {
                     // Read deleted item
-                    let deleted_item_data = heap
-                        .read(
-                            vec_heap_address as usize + 16 + ((index) * item_size) as usize,
-                            item_size as usize,
-                        )
-                        .map_err(|e| e.into())?;
+                    let deleted_item_data = heap.read(
+                        vec_heap_address as usize + 16 + ((index) * item_size) as usize,
+                        item_size as usize,
+                    )?;
                     if index < previous_len - 1
                     /* index not last item */
                     {
                         /* move below */
-                        let data = heap
-                            .read(
-                                vec_heap_address as usize + 16 + ((index + 1) * item_size) as usize,
-                                (previous_len * item_size - (index + 1) * item_size) as usize,
-                            )
-                            .map_err(|e| e.into())?;
-                        let _ = heap
-                            .write(
-                                vec_heap_address as usize + 16 + (index * item_size) as usize,
-                                &data,
-                            )
-                            .map_err(|e| e.into())?;
+                        let data = heap.read(
+                            vec_heap_address as usize + 16 + ((index + 1) * item_size) as usize,
+                            (previous_len * item_size - (index + 1) * item_size) as usize,
+                        )?;
+                        let _ = heap.write(
+                            vec_heap_address as usize + 16 + (index * item_size) as usize,
+                            &data,
+                        )?;
                     }
                     /* clear last item */
-                    let _ = heap
-                        .write(
-                            vec_heap_address as usize
-                                + 16
-                                + ((previous_len - 1) * item_size) as usize,
-                            &vec![0; item_size as usize],
-                        )
-                        .map_err(|e| e.into())?;
+                    let _ = heap.write(
+                        vec_heap_address as usize + 16 + ((previous_len - 1) * item_size) as usize,
+                        &vec![0; item_size as usize],
+                    )?;
 
                     let len_bytes = (previous_len - 1).to_le_bytes().as_slice().to_vec();
                     /* Write len */
-                    let _ = heap
-                        .write(vec_heap_address as usize, &len_bytes)
-                        .map_err(|e| e.into())?;
+                    let _ = heap.write(vec_heap_address as usize, &len_bytes)?;
 
                     // Push deleted item and error
-                    let _ = stack.push_with(&deleted_item_data).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&deleted_item_data)?;
                     // Push no error
-                    let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&OK_VALUE)?;
                 } else {
                     // Push zeroes and error
-                    let _ = stack
-                        .push_with(&vec![0; item_size as usize])
-                        .map_err(|e| e.into())?;
+                    let _ = stack.push_with(&vec![0; item_size as usize])?;
                     // Push no error
-                    let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&ERROR_VALUE)?;
                 }
             }
             AllocCasm::Vec { item_size } | AllocCasm::VecWithCapacity { item_size } => {
@@ -2742,17 +2599,15 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 /* Write len */
-                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes)?;
 
-                let _ = stack
-                    .push_with(&address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&address.to_le_bytes())?;
             }
             AllocCasm::Map {
                 key_size,
@@ -2788,9 +2643,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
 
                 let map = MapLayout::new(*key_size, *value_size, log_cap);
                 let map_ptr = map.init_in_mem(heap)?;
-                let _ = stack
-                    .push_with(&(map_ptr as u64).to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&(map_ptr as u64).to_le_bytes())?;
             }
             AllocCasm::StringFromSlice => {
                 let len = OpPrimitive::get_num8::<u64>(stack)?;
@@ -2800,22 +2653,18 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
-                let data = stack.pop(len as usize).map_err(|e| e.into())?;
+                let data = stack.pop(len as usize)?;
                 /* Write len */
-                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes)?;
                 /* Write slice */
-                let _ = heap
-                    .write(address + 16, &data.to_vec())
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address + 16, &data.to_vec())?;
 
-                let _ = stack
-                    .push_with(&address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&address.to_le_bytes())?;
             }
             AllocCasm::StringFromChar => {
                 let chara = OpPrimitive::get_char(stack)?;
@@ -2829,52 +2678,42 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 /* Write len */
-                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes)?;
                 /* Write slice */
-                let _ = heap
-                    .write(address + 16, &chara.to_vec())
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address + 16, &chara.to_vec())?;
 
-                let _ = stack
-                    .push_with(&address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&address.to_le_bytes())?;
             }
             AllocCasm::Len => {
                 let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let len_bytes = heap
-                    .read(vec_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let len_bytes = heap.read(vec_heap_address as usize, 8)?;
                 let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let len = u64::from_le_bytes(*len_bytes);
 
-                let _ = stack.push_with(&len.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&len.to_le_bytes())?;
             }
             AllocCasm::Cap => {
                 let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let cap_bytes = heap
-                    .read(vec_heap_address as usize + 8, 8)
-                    .map_err(|e| e.into())?;
+                let cap_bytes = heap.read(vec_heap_address as usize + 8, 8)?;
                 let cap_bytes = TryInto::<&[u8; 8]>::try_into(cap_bytes.as_slice())
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let cap = u64::from_le_bytes(*cap_bytes);
 
-                let _ = stack.push_with(&cap.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&cap.to_le_bytes())?;
             }
             AllocCasm::CapMap => {
                 let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let log_cap_bytes = heap
-                    .read(vec_heap_address as usize + 8, 1)
-                    .map_err(|e| e.into())?;
+                let log_cap_bytes = heap.read(vec_heap_address as usize + 8, 1)?;
                 let log_cap = log_cap_bytes[0];
 
                 let cap = if log_cap == 1 {
@@ -2882,27 +2721,21 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 } else {
                     (1u64 << log_cap) as usize * MAP_BUCKET_SIZE
                 };
-                let _ = stack
-                    .push_with(&(cap as u64).to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&(cap as u64).to_le_bytes())?;
             }
             AllocCasm::ClearVec(item_size) | AllocCasm::ClearString(item_size) => {
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes = stack.read(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
 
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                let previous_len_bytes = heap
-                    .read(vec_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let previous_len_bytes = heap.read(vec_heap_address as usize, 8)?;
                 let previous_len_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
@@ -2911,18 +2744,14 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let item_size = *item_size as u64;
 
                 /* clear */
-                let _ = heap
-                    .write(
-                        vec_heap_address as usize + 16,
-                        &vec![0; (previous_len * item_size) as usize],
-                    )
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(
+                    vec_heap_address as usize + 16,
+                    &vec![0; (previous_len * item_size) as usize],
+                )?;
 
                 let len_bytes = 0u64.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = heap
-                    .write(vec_heap_address as usize, &len_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(vec_heap_address as usize, &len_bytes)?;
             }
             AllocCasm::ClearMap {
                 key_size,
@@ -2930,13 +2759,11 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
             } => {
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let map_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(map_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let map_heap_address_bytes = stack.read(
+                    Offset::SB(map_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
 
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
@@ -2944,42 +2771,31 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let map_layout = map_layout(map_heap_address, *key_size, *value_size, heap)?;
                 let _ = map_layout.clear_buckets(heap)?;
                 // update len
-                let _ = heap
-                    .write(map_heap_address as usize, &(0u64).to_le_bytes().to_vec())
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(map_heap_address as usize, &(0u64).to_le_bytes().to_vec())?;
             }
             AllocCasm::ExtendItemFromSlice { size, len } => {
                 let item_size = *size;
                 let slice_len = *len;
-                let slice_data = stack
-                    .pop(item_size * slice_len)
-                    .map_err(|e| e.into())?
-                    .to_owned();
+                let slice_data = stack.pop(item_size * slice_len)?.to_owned();
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes = stack.read(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
 
-                let previous_len_bytes = heap
-                    .read(vec_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let previous_len_bytes = heap.read(vec_heap_address as usize, 8)?;
                 let previous_len_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = heap
-                    .read(vec_heap_address as usize + 8, 8)
-                    .map_err(|e| e.into())?;
+                let previous_cap_bytes = heap.read(vec_heap_address as usize + 8, 8)?;
                 let previous_cap_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
@@ -2992,9 +2808,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
-                    let address = heap
-                        .realloc(vec_heap_address as usize - 8, size)
-                        .map_err(|e| e.into())?;
+                    let address = heap.realloc(vec_heap_address as usize - 8, size)?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
                     (
                         address as u64,
@@ -3007,75 +2821,57 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = heap
-                    .write(new_vec_heap_address as usize, &len_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap
-                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize + 8, &cap_bytes)?;
 
                 /* Write new items */
-                let _ = heap
-                    .write(
-                        new_vec_heap_address as usize
-                            + 16
-                            + (previous_len as usize * size_factor as usize),
-                        &slice_data.to_vec(),
-                    )
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(
+                    new_vec_heap_address as usize
+                        + 16
+                        + (previous_len as usize * size_factor as usize),
+                    &slice_data.to_vec(),
+                )?;
 
                 /* Update vector pointer */
-                let _ = stack
-                    .write(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        &new_vec_heap_address.to_le_bytes(),
-                    )
-                    .map_err(|err| err.into())?;
+                let _ = stack.write(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    &new_vec_heap_address.to_le_bytes(),
+                )?;
             }
             AllocCasm::ExtendItemFromVec { size } => {
                 let item_size = *size;
 
                 let other_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let previous_len_bytes = heap
-                    .read(other_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let previous_len_bytes = heap.read(other_heap_address as usize, 8)?;
                 let previous_len_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let slice_len = u64::from_le_bytes(*previous_len_bytes);
-                let slice_data = heap
-                    .read(
-                        other_heap_address as usize + 16,
-                        slice_len as usize * item_size,
-                    )
-                    .map_err(|e| e.into())?;
+                let slice_data = heap.read(
+                    other_heap_address as usize + 16,
+                    slice_len as usize * item_size,
+                )?;
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes = stack.read(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
 
-                let previous_len_bytes = heap
-                    .read(vec_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let previous_len_bytes = heap.read(vec_heap_address as usize, 8)?;
                 let previous_len_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = heap
-                    .read(vec_heap_address as usize + 8, 8)
-                    .map_err(|e| e.into())?;
+                let previous_cap_bytes = heap.read(vec_heap_address as usize + 8, 8)?;
                 let previous_cap_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
@@ -3088,9 +2884,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
-                    let address = heap
-                        .realloc(vec_heap_address as usize - 8, size)
-                        .map_err(|e| e.into())?;
+                    let address = heap.realloc(vec_heap_address as usize - 8, size)?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
                     (
                         address as u64,
@@ -3103,48 +2897,37 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = heap
-                    .write(new_vec_heap_address as usize, &len_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap
-                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize + 8, &cap_bytes)?;
 
                 /* Write new items */
-                let _ = heap
-                    .write(
-                        new_vec_heap_address as usize
-                            + 16
-                            + (previous_len as usize * size_factor as usize),
-                        &slice_data,
-                    )
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(
+                    new_vec_heap_address as usize
+                        + 16
+                        + (previous_len as usize * size_factor as usize),
+                    &slice_data,
+                )?;
 
                 /* Update vector pointer */
-                let _ = stack
-                    .write(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        &new_vec_heap_address.to_le_bytes(),
-                    )
-                    .map_err(|err| err.into())?;
+                let _ = stack.write(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    &new_vec_heap_address.to_le_bytes(),
+                )?;
             }
             AllocCasm::ExtendStringFromSlice { len } => {
                 let mut slice_data = Vec::new();
                 for _ in 0..*len {
                     let string_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                    let string_len_bytes = heap
-                        .read(string_heap_address as usize, 8)
-                        .map_err(|e| e.into())?;
+                    let string_len_bytes = heap.read(string_heap_address as usize, 8)?;
                     let string_len_bytes =
                         TryInto::<&[u8; 8]>::try_into(string_len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                     let string_len = u64::from_le_bytes(*string_len_bytes);
-                    let string_data = heap
-                        .read(string_heap_address as usize + 16, string_len as usize)
-                        .map_err(|e| e.into())?;
+                    let string_data =
+                        heap.read(string_heap_address as usize + 16, string_len as usize)?;
                     slice_data.push(string_data);
                 }
                 let slice_data = slice_data.into_iter().rev().flatten().collect::<Vec<u8>>();
@@ -3152,28 +2935,22 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes = stack.read(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
 
-                let previous_len_bytes = heap
-                    .read(vec_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let previous_len_bytes = heap.read(vec_heap_address as usize, 8)?;
                 let previous_len_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = heap
-                    .read(vec_heap_address as usize + 8, 8)
-                    .map_err(|e| e.into())?;
+                let previous_cap_bytes = heap.read(vec_heap_address as usize + 8, 8)?;
                 let previous_cap_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
@@ -3186,9 +2963,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
-                    let address = heap
-                        .realloc(vec_heap_address as usize - 8, size)
-                        .map_err(|e| e.into())?;
+                    let address = heap.realloc(vec_heap_address as usize - 8, size)?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
                     (
                         address as u64,
@@ -3201,38 +2976,28 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = heap
-                    .write(new_vec_heap_address as usize, &len_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap
-                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize + 8, &cap_bytes)?;
 
                 /* Write new items */
-                let _ = heap
-                    .write(
-                        new_vec_heap_address as usize
-                            + 16
-                            + (previous_len as usize * size_factor as usize),
-                        &slice_data,
-                    )
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(
+                    new_vec_heap_address as usize
+                        + 16
+                        + (previous_len as usize * size_factor as usize),
+                    &slice_data,
+                )?;
 
                 /* Update vector pointer */
-                let _ = stack
-                    .write(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        &new_vec_heap_address.to_le_bytes(),
-                    )
-                    .map_err(|err| err.into())?;
+                let _ = stack.write(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    &new_vec_heap_address.to_le_bytes(),
+                )?;
             }
             AllocCasm::ExtendStringFromVec => {
                 let other_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let previous_len_bytes = heap
-                    .read(other_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let previous_len_bytes = heap.read(other_heap_address as usize, 8)?;
                 let previous_len_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
@@ -3240,52 +3005,42 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
 
                 let mut slice_data = Vec::new();
                 for i in 0..other_len as usize {
-                    let string_heap_address = heap
-                        .read(other_heap_address as usize + 16 + 8 * i, 8)
-                        .map_err(|e| e.into())?;
+                    let string_heap_address =
+                        heap.read(other_heap_address as usize + 16 + 8 * i, 8)?;
                     let string_heap_address =
                         TryInto::<&[u8; 8]>::try_into(string_heap_address.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                     let string_heap_address = u64::from_le_bytes(*string_heap_address);
 
-                    let string_len_bytes = heap
-                        .read(string_heap_address as usize, 8)
-                        .map_err(|e| e.into())?;
+                    let string_len_bytes = heap.read(string_heap_address as usize, 8)?;
                     let string_len_bytes =
                         TryInto::<&[u8; 8]>::try_into(string_len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                     let string_len = u64::from_le_bytes(*string_len_bytes);
-                    let string_data = heap
-                        .read(string_heap_address as usize + 16, string_len as usize)
-                        .map_err(|e| e.into())?;
+                    let string_data =
+                        heap.read(string_heap_address as usize + 16, string_len as usize)?;
                     slice_data.extend(string_data);
                 }
                 let slice_len = slice_data.len();
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes = stack.read(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
 
-                let previous_len_bytes = heap
-                    .read(vec_heap_address as usize, 8)
-                    .map_err(|e| e.into())?;
+                let previous_len_bytes = heap.read(vec_heap_address as usize, 8)?;
                 let previous_len_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = heap
-                    .read(vec_heap_address as usize + 8, 8)
-                    .map_err(|e| e.into())?;
+                let previous_cap_bytes = heap.read(vec_heap_address as usize + 8, 8)?;
                 let previous_cap_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
@@ -3298,9 +3053,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
-                    let address = heap
-                        .realloc(vec_heap_address as usize - 8, size)
-                        .map_err(|e| e.into())?;
+                    let address = heap.realloc(vec_heap_address as usize - 8, size)?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
                     (
                         address as u64,
@@ -3313,32 +3066,24 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = heap
-                    .write(new_vec_heap_address as usize, &len_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap
-                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(new_vec_heap_address as usize + 8, &cap_bytes)?;
 
                 /* Write new items */
-                let _ = heap
-                    .write(
-                        new_vec_heap_address as usize
-                            + 16
-                            + (previous_len as usize * size_factor as usize),
-                        &slice_data,
-                    )
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(
+                    new_vec_heap_address as usize
+                        + 16
+                        + (previous_len as usize * size_factor as usize),
+                    &slice_data,
+                )?;
 
                 /* Update vector pointer */
-                let _ = stack
-                    .write(
-                        Offset::SB(vec_stack_address as usize),
-                        AccessLevel::Direct,
-                        &new_vec_heap_address.to_le_bytes(),
-                    )
-                    .map_err(|err| err.into())?;
+                let _ = stack.write(
+                    Offset::SB(vec_stack_address as usize),
+                    AccessLevel::Direct,
+                    &new_vec_heap_address.to_le_bytes(),
+                )?;
             }
         }
 
@@ -3368,7 +3113,7 @@ mod tests {
 
     #[test]
     fn valid_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = string("Hello World");
         "##
@@ -3384,7 +3129,7 @@ mod tests {
 
     #[test]
     fn valid_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x:Vec<u64> = vec(8);
         "##
@@ -3394,27 +3139,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3434,7 +3181,7 @@ mod tests {
 
     #[test]
     fn valid_vec_modify() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let arr : Vec<u64> = vec(8);
@@ -3450,27 +3197,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3483,7 +3232,7 @@ mod tests {
     }
     #[test]
     fn valid_append() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
@@ -3497,27 +3246,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3551,7 +3302,7 @@ mod tests {
 
     #[test]
     fn valid_append_no_realloc() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec(8,16);
@@ -3565,27 +3316,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3619,7 +3372,7 @@ mod tests {
 
     #[test]
     fn valid_append_str_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello ");
@@ -3639,7 +3392,7 @@ mod tests {
 
     #[test]
     fn valid_append_str_char() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello Worl");
@@ -3659,7 +3412,7 @@ mod tests {
 
     #[test]
     fn valid_append_str_char_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello Worl");
@@ -3679,7 +3432,7 @@ mod tests {
 
     #[test]
     fn valid_append_str_str() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello ");
@@ -3700,7 +3453,7 @@ mod tests {
 
     #[test]
     fn valid_len_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello World");
@@ -3722,7 +3475,7 @@ mod tests {
 
     #[test]
     fn valid_cap_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello World");
@@ -3744,7 +3497,7 @@ mod tests {
 
     #[test]
     fn valid_len_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x : Vec<u64> = vec(11,16);
@@ -3767,7 +3520,7 @@ mod tests {
 
     #[test]
     fn valid_cap_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x : Vec<u64> = vec(11,16);
@@ -3789,7 +3542,7 @@ mod tests {
     }
     #[test]
     fn valid_free() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello ");
@@ -3803,27 +3556,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         assert_eq!(heap.allocated_size(), 0);
@@ -3831,7 +3586,7 @@ mod tests {
 
     #[test]
     fn valid_alloc() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = alloc(8) as &u64;
@@ -3845,27 +3600,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         assert_eq!(heap.allocated_size(), 16);
@@ -3888,7 +3645,7 @@ mod tests {
 
     #[test]
     fn valid_delete_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
@@ -3902,27 +3659,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3956,7 +3715,7 @@ mod tests {
 
     #[test]
     fn valid_delete_vec_inner() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
@@ -3970,27 +3729,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4024,7 +3785,7 @@ mod tests {
 
     #[test]
     fn robustness_delete_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
@@ -4045,7 +3806,7 @@ mod tests {
 
     #[test]
     fn valid_size_of_type() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 struct Point {
@@ -4061,27 +3822,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4095,7 +3858,7 @@ mod tests {
 
     #[test]
     fn valid_size_of_expr() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = size_of(420u64);
         "##
@@ -4105,27 +3868,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4139,7 +3904,7 @@ mod tests {
 
     #[test]
     fn valid_memcpy_heap() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
@@ -4154,27 +3919,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4208,7 +3975,7 @@ mod tests {
 
     #[test]
     fn valid_memcpy_stack() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:[8]u64 = [1,2,3,4,5,6,7,8];
@@ -4223,27 +3990,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4262,7 +4031,7 @@ mod tests {
 
     #[test]
     fn valid_clear_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
@@ -4276,27 +4045,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4330,7 +4101,7 @@ mod tests {
 
     #[test]
     fn valid_clear_str() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello ");
@@ -4344,27 +4115,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4392,7 +4165,7 @@ mod tests {
 
     #[test]
     fn valid_alloc_cast() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 struct Point {
@@ -4419,27 +4192,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4453,7 +4228,7 @@ mod tests {
 
     #[test]
     fn valid_alloc_modify() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 struct Point {
@@ -4474,27 +4249,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4508,7 +4285,7 @@ mod tests {
 
     #[test]
     fn valid_extend_vec_from_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let slice = [5,6,7,8];
@@ -4523,27 +4300,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4557,7 +4336,7 @@ mod tests {
 
     #[test]
     fn valid_extend_vec_from_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let vec1 = vec[5,6,7,8];
@@ -4582,7 +4361,7 @@ mod tests {
 
     #[test]
     fn valid_extend_string_from_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let vec1 = [string("lo"),string(" Wor"),string("ld")];
@@ -4597,27 +4376,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4646,7 +4427,7 @@ mod tests {
 
     #[test]
     fn valid_extend_string_from_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let vec1 = vec[string("lo"),string(" Wor"),string("ld")];
@@ -4661,27 +4442,29 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4710,7 +4493,7 @@ mod tests {
 
     #[test]
     fn valid_map_init_no_cap() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -4726,7 +4509,7 @@ mod tests {
 
     #[test]
     fn valid_map_init_with_cap() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(8);
@@ -4742,7 +4525,7 @@ mod tests {
 
     #[test]
     fn valid_map_len_empty() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(8);
@@ -4769,7 +4552,7 @@ mod tests {
 
     #[test]
     fn valid_map_len() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -4804,7 +4587,7 @@ mod tests {
 
     #[test]
     fn valid_map_len_with_upsert() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -4838,7 +4621,7 @@ mod tests {
     }
     #[test]
     fn valid_map_cap() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(8);
@@ -4865,7 +4648,7 @@ mod tests {
 
     #[test]
     fn valid_map_cap_over_min() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(60);
@@ -4892,7 +4675,7 @@ mod tests {
 
     #[test]
     fn valid_map_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(64);
@@ -4923,7 +4706,7 @@ mod tests {
 
     #[test]
     fn valid_map_access_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(64);
@@ -4951,7 +4734,7 @@ mod tests {
     }
     #[test]
     fn robustness_map_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(64);
@@ -4972,7 +4755,7 @@ mod tests {
 
     #[test]
     fn valid_map_insert_resize() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -5011,7 +4794,7 @@ mod tests {
 
     #[test]
     fn valid_map_upsert_resize() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -5052,7 +4835,7 @@ mod tests {
 
     #[test]
     fn valid_map_insert() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(64);
@@ -5080,7 +4863,7 @@ mod tests {
 
     #[test]
     fn valid_map_delete() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(64);
@@ -5096,38 +4879,35 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <TupleType as DeserializeFrom>::deserialize_from(
-            &TupleType(vec![p_num!(U64), p_num!(U64)]),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <crate::semantic::scope::static_types::TupleType as DeserializeFrom>::deserialize_from(
+                &crate::semantic::scope::static_types::TupleType(vec![p_num!(U64), p_num!(U64)]),
+                &data,
+            )
+            .expect("Deserialization should have succeeded");
         let value = &result.value[0];
         let value = match value {
-            Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(v)))) => {
-                match v.get() {
-                    Number::U64(n) => n,
-                    _ => unreachable!("Should be a u64"),
-                }
-            }
+            Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(v)))) => match v {
+                Number::U64(n) => n,
+                _ => unreachable!("Should be a u64"),
+            },
             _ => unreachable!("Should be a u64"),
         };
         let len = &result.value[1];
         let len = match len {
-            Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(v)))) => {
-                match v.get() {
-                    Number::U64(n) => n,
-                    _ => unreachable!("Should be a u64"),
-                }
-            }
+            Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(v)))) => match v {
+                Number::U64(n) => n,
+                _ => unreachable!("Should be a u64"),
+            },
             _ => unreachable!("Should be a u64"),
         };
-        assert_eq!(value, 69);
-        assert_eq!(len, 1);
+        assert_eq!(*value, 69);
+        assert_eq!(*len, 1);
     }
 
     #[test]
     fn valid_map_clear() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -5162,7 +4942,7 @@ mod tests {
     }
     #[test]
     fn valid_map_delete_cant_read_after() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(64);
@@ -5187,7 +4967,7 @@ mod tests {
 
     #[test]
     fn valid_map_insert_key_str() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<str<10>,u64> = map(64);
@@ -5220,7 +5000,7 @@ mod tests {
 
     #[test]
     fn valid_map_insert_key_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<String,u64> = map(64);
@@ -5253,7 +5033,7 @@ mod tests {
     }
     #[test]
     fn valid_map_upsert_key_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = 1;

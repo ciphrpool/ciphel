@@ -1,5 +1,3 @@
-use std::cell::Ref;
-
 use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::Scope;
 use crate::vm::allocator::heap::Heap;
@@ -8,7 +6,7 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::CasmMetadata;
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
+    semantic::{EType, Resolve, SemanticError, TypeOf},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
@@ -35,11 +33,17 @@ pub enum CoreCasm {
     Thread(ThreadCasm),
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for CoreCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CoreCasm {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             CoreCasm::Alloc(value) => value.name(stdio, program, engine),
             CoreCasm::Thread(value) => value.name(stdio, program, engine),
+        }
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            CoreCasm::Alloc(value) => <AllocCasm as CasmMetadata<G>>::weight(value),
+            CoreCasm::Thread(value) => <ThreadCasm as CasmMetadata<G>>::weight(value),
         }
     }
 }
@@ -60,21 +64,21 @@ impl Resolve for CoreFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
-            CoreFn::Alloc(value) => value.resolve(scope, context, extra),
-            CoreFn::Thread(value) => value.resolve(scope, context, extra),
+            CoreFn::Alloc(value) => value.resolve::<G>(scope, context, extra),
+            CoreFn::Thread(value) => value.resolve::<G>(scope, context, extra),
         }
     }
 }
 
 impl TypeOf for CoreFn {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -88,8 +92,8 @@ impl TypeOf for CoreFn {
 impl GenerateCode for CoreFn {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             CoreFn::Alloc(value) => value.gencode(scope, instructions),
@@ -98,18 +102,19 @@ impl GenerateCode for CoreFn {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for CoreCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for CoreCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
-            CoreCasm::Alloc(value) => value.execute(program, stack, heap, stdio, engine),
-            CoreCasm::Thread(value) => value.execute(program, stack, heap, stdio, engine),
+            CoreCasm::Alloc(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            CoreCasm::Thread(value) => value.execute(program, stack, heap, stdio, engine, tid),
         }
     }
 }

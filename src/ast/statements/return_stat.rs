@@ -1,5 +1,5 @@
-use std::cell::Ref;
-
+use crate::ast::utils::error::squash;
+use crate::ast::utils::strings::wst_closed;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::Info;
 
@@ -13,10 +13,9 @@ use crate::{
         },
         TryParse,
     },
-    resolve_metadata,
     semantic::{
         scope::{static_types::StaticType, type_traits::TypeChecking, BuildStaticType},
-        CompatibleWith, EType, Either, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf,
+        CompatibleWith, EType, Either, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         casm::{alloc::StackFrame, Casm, CasmProgram},
@@ -24,6 +23,7 @@ use crate::{
     },
 };
 use nom::branch::alt;
+use nom::combinator::cut;
 use nom::sequence::terminated;
 use nom::{
     combinator::{map, opt},
@@ -52,41 +52,44 @@ impl TryParse for Return {
      *      | Λ
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
-                delimited(
-                    wst(lexem::RETURN),
-                    opt(Expression::parse),
-                    wst(lexem::SEMI_COLON),
-                ),
-                |value| match value {
-                    Some(expr) => Return::Expr {
-                        expr: Box::new(expr),
-                        metadata: Metadata::default(),
+        squash(
+            alt((
+                map(
+                    delimited(
+                        wst_closed(lexem::RETURN),
+                        cut(opt(Expression::parse)),
+                        cut(wst(lexem::SEMI_COLON)),
+                    ),
+                    |value| match value {
+                        Some(expr) => Return::Expr {
+                            expr: Box::new(expr),
+                            metadata: Metadata::default(),
+                        },
+                        None => Return::Unit,
                     },
-                    None => Return::Unit,
-                },
-            ),
-            map(
-                terminated(wst(lexem::BREAK), wst(lexem::SEMI_COLON)),
-                |_| Return::Break,
-            ),
-            map(
-                terminated(wst(lexem::CONTINUE), wst(lexem::SEMI_COLON)),
-                |_| Return::Continue,
-            ),
-        ))(input)
+                ),
+                map(
+                    terminated(wst_closed(lexem::BREAK), cut(wst(lexem::SEMI_COLON))),
+                    |_| Return::Break,
+                ),
+                map(
+                    terminated(wst_closed(lexem::CONTINUE), cut(wst(lexem::SEMI_COLON))),
+                    |_| Return::Continue,
+                ),
+            )),
+            "Expected a return, break or continue statement",
+        )(input)
     }
 }
 impl Resolve for Return {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -104,29 +107,51 @@ impl Resolve for Return {
                 Ok(())
             }
             Return::Expr { expr, metadata } => {
-                let _ = expr.resolve(scope, &context, &None)?;
+                let _ = expr.resolve::<G>(scope, &context, &mut None)?;
                 match context {
                     Some(c) => {
-                        let return_type = expr.type_of(&scope.borrow())?;
-                        let _ = c.compatible_with(&return_type, &scope.borrow())?;
-                        resolve_metadata!(metadata, self, scope, context);
+                        let return_type = expr
+                            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                        let _ = c.compatible_with(
+                            &return_type,
+                            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                        )?;
+                        metadata.info = Info::Resolved {
+                            context: context.clone(),
+                            signature: Some(expr.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?),
+                        };
                         Ok(())
                     }
                     None => {
-                        resolve_metadata!(metadata, self, scope, None);
+                        metadata.info = Info::Resolved {
+                            context: None,
+                            signature: Some(expr.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?),
+                        };
                         Ok(())
                     }
                 }
             }
             Return::Break => {
-                if scope.as_ref().borrow().state().is_loop {
+                if crate::arw_read!(scope, SemanticError::ConcurrencyError)?
+                    .state()?
+                    .is_loop
+                {
                     Ok(())
                 } else {
                     Err(SemanticError::ExpectedLoop)
                 }
             }
             Return::Continue => {
-                if scope.as_ref().borrow().state().is_loop {
+                if crate::arw_read!(scope, SemanticError::ConcurrencyError)?
+                    .state()?
+                    .is_loop
+                {
                     Ok(())
                 } else {
                     Err(SemanticError::ExpectedLoop)
@@ -137,7 +162,7 @@ impl Resolve for Return {
 }
 
 impl TypeOf for Return {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -159,8 +184,8 @@ impl TypeOf for Return {
 impl GenerateCode for Return {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Return::Unit => {
@@ -195,11 +220,11 @@ impl GenerateCode for Return {
 #[cfg(test)]
 mod tests {
     use crate::{
-        e_static, p_num,
+        arw_write, e_static, p_num,
         semantic::{
             scope::{
-                scope::{self},
-                static_types::{NumberType, PrimitiveType, StaticType},
+                scope,
+                static_types::{PrimitiveType, StaticType},
             },
             Either,
         },
@@ -241,7 +266,7 @@ mod tests {
 
     #[test]
     fn valid_resolved_return() {
-        let return_statement = Return::parse(
+        let mut return_statement = Return::parse(
             r#"
             return ;
         "#
@@ -251,10 +276,10 @@ mod tests {
         .1;
         let scope = scope::Scope::new();
 
-        let res = return_statement.resolve(&scope, &None, &());
+        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let return_statement = Return::parse(
+        let mut return_statement = Return::parse(
             r#"
             return 10;
         "#
@@ -262,13 +287,15 @@ mod tests {
         )
         .unwrap()
         .1;
-        let res = return_statement.resolve(&scope, &None, &());
+        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
+        let return_type = return_statement
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(p_num!(I64), return_type);
 
-        let return_statement = Return::parse(
+        let mut return_statement = Return::parse(
             r#"
             break ;
         "#
@@ -279,15 +306,20 @@ mod tests {
 
         let inner_scope = scope::Scope::spawn(&scope, Vec::default())
             .expect("Scope should be able to have child block");
-        inner_scope.as_ref().borrow_mut().to_loop();
+        let _ = arw_write!(inner_scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
+            .to_loop();
 
-        let res = return_statement.resolve(&inner_scope, &None, &());
+        let res =
+            return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&inner_scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
+        let return_type = return_statement
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(e_static!(StaticType::Unit), return_type);
 
-        let return_statement = Return::parse(
+        let mut return_statement = Return::parse(
             r#"
             continue ;
         "#
@@ -296,16 +328,19 @@ mod tests {
         .unwrap()
         .1;
 
-        let res = return_statement.resolve(&inner_scope, &None, &());
+        let res =
+            return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&inner_scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
+        let return_type = return_statement
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(e_static!(StaticType::Unit), return_type);
     }
 
     #[test]
     fn robustness_return() {
-        let return_statement = Return::parse(
+        let mut return_statement = Return::parse(
             r#"
             return 10;
         "#
@@ -314,12 +349,12 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = return_statement.resolve(
+        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(
             &scope,
             &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Char).into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_err());
     }

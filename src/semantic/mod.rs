@@ -1,67 +1,92 @@
-use std::{
-    borrow::Borrow,
-    cell::{Ref, RefCell},
-    ops::Deref,
-    rc::Rc,
-};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::Scope;
 
 use self::scope::{static_types::StaticType, user_type_impl::UserType};
 
+use thiserror::Error;
 pub mod scope;
 pub mod utils;
 
-pub type MutRc<T> = Rc<RefCell<T>>;
+pub type ArcMutex<T> = Arc<Mutex<T>>;
+pub type ArcRwLock<T> = Arc<RwLock<T>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum SemanticError {
+    #[error("NotResolvedYet")]
     NotResolvedYet,
+    #[error("PlatformAPIOverriding")]
     PlatformAPIOverriding,
 
-    CantReturn,
-    CantInferType,
-    CantRegisterType,
-    CantRegisterVar,
+    #[error("cannot infer type {0}")]
+    CantInferType(String),
 
+    #[error("expected a boolean")]
     ExpectedBoolean,
+    #[error("expected something iterable")]
     ExpectedIterable,
+    #[error("expected something indexable")]
     ExpectedIndexable,
+    #[error("expected a function")]
     ExpectedCallable,
+    #[error("expected an enum")]
     ExpectedEnum,
+    #[error("expected a struct")]
     ExpectedStruct,
+    #[error("expected to be inside a loop")]
     ExpectedLoop,
+    #[error("expected to be inside a moved closure")]
     ExpectedMovedClosure,
+    #[error("expected to be inside a closure")]
+    ExpectedClosure,
+    #[error("expected something assignable")]
     ExpectedLeftExpression,
 
+    #[error("unknown variable : {0}")]
     UnknownVar(ID),
+    #[error("unknown type : {0}")]
     UnknownType(ID),
+    #[error("unknown field")]
     UnknownField,
 
+    #[error("cannot have double open range like -∞:+∞")]
     DoubleInfinitRange,
 
+    #[error("incorrect function arguments")]
     IncorrectArguments,
-    IncorrectStruct,
-    IncorrectVariant,
+    #[error("invalid arguments for struct {0}")]
+    IncorrectStruct(String),
+    #[error("invalid arguments for union {0}")]
+    IncorrectUnion(String),
+    #[error("invalid variant {0}")]
+    IncorrectVariant(String),
+    #[error("invalid pattern")]
     InvalidPattern,
+    #[error("invalid range")]
     InvalidRange,
 
+    #[error("incompatible types")]
     IncompatibleTypes,
+    #[error("incompatible operation")]
     IncompatibleOperation,
+    #[error("incompatible operands")]
     IncompatibleOperands,
+
+    #[error("internal compilation error")]
+    ConcurrencyError,
+    #[error("unexpected error")]
     Default,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Metadata {
-    pub info: MutRc<Info>,
+    pub info: Info,
 }
 
 impl Metadata {
     pub fn context(&self) -> Option<EType> {
-        let borrowed = self.info.as_ref().borrow();
-        match borrowed.deref() {
+        match &self.info {
             Info::Unresolved => None,
             Info::Resolved {
                 context,
@@ -70,8 +95,7 @@ impl Metadata {
         }
     }
     pub fn signature(&self) -> Option<EType> {
-        let borrowed = self.info.as_ref().borrow();
-        match borrowed.deref() {
+        match &self.info {
             Info::Unresolved => None,
             Info::Resolved {
                 context: _,
@@ -93,18 +117,18 @@ pub enum Info {
 impl Default for Metadata {
     fn default() -> Self {
         Self {
-            info: Rc::new(RefCell::new(Info::Unresolved)),
+            info: Info::Unresolved,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Either<User, Static> {
-    Static(Rc<Static>),
-    User(Rc<User>),
+pub enum Either {
+    Static(Arc<StaticType>),
+    User(Arc<UserType>),
 }
 
-pub type EType = Either<UserType, StaticType>;
+pub type EType = Either;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AccessLevel {
@@ -126,11 +150,11 @@ pub trait Resolve {
     type Output;
     type Context: Default;
     type Extra: Default;
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized;
@@ -140,20 +164,24 @@ pub trait CompatibleWith {
     fn compatible_with<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<(), SemanticError>
     where
         Other: TypeOf;
 }
 
 pub trait TypeOf {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized;
 }
 
 pub trait MergeType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf;
 }

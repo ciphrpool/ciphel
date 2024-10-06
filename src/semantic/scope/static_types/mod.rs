@@ -1,9 +1,6 @@
-use std::cell::Ref;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::semantic::{EType, Either, SemanticError, TypeOf};
-
-use super::user_type_impl::Enum;
 
 pub mod st_builder;
 pub mod st_compatible_with;
@@ -109,10 +106,10 @@ pub struct MapType {
 }
 
 impl TypeOf for StaticType {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
-        Ok(Either::Static(Rc::new(self.clone())))
+        Ok(Either::Static(Arc::new(self.clone())))
     }
 }

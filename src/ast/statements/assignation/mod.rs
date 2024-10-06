@@ -1,7 +1,4 @@
-use crate::ast::expressions::{
-    data::{PtrAccess, Variable},
-    Expression,
-};
+use crate::ast::expressions::Expression;
 
 use super::block::Block;
 pub mod assignation_gencode;

@@ -1,7 +1,5 @@
 use super::{ExprFlow, FCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
-use crate::ast::expressions::data::{Data, StrSlice, Variable};
 use crate::ast::expressions::flows::FormatItem;
-use crate::ast::expressions::{Atomic, Expression};
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::TupleType;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
@@ -13,35 +11,36 @@ use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{EType, Info, MergeType, Metadata, MutRc};
-use crate::vm::platform::stdlib::StdFn;
-use crate::vm::platform::Lib;
-use crate::{e_static, resolve_metadata};
+use crate::semantic::{EType, Info, MergeType};
+use crate::{e_static, p_num, resolve_metadata};
 use std::collections::HashMap;
 
 impl Resolve for ExprFlow {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
-            ExprFlow::If(value) => value.resolve(scope, context, extra),
-            ExprFlow::Match(value) => value.resolve(scope, context, extra),
-            ExprFlow::Try(value) => value.resolve(scope, context, extra),
+            ExprFlow::If(value) => value.resolve::<G>(scope, context, extra),
+            ExprFlow::Match(value) => value.resolve::<G>(scope, context, extra),
+            ExprFlow::Try(value) => value.resolve::<G>(scope, context, extra),
             ExprFlow::SizeOf(value, metadata) => {
-                let _ = value.resolve(scope, &(), extra);
-                resolve_metadata!(metadata, self, scope, context);
+                let _ = value.resolve::<G>(scope, &(), extra);
+                metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(p_num!(U64)),
+                };
                 Ok(())
             }
-            ExprFlow::FCall(value) => value.resolve(scope, context, extra),
+            ExprFlow::FCall(value) => value.resolve::<G>(scope, context, extra),
         }
     }
 }
@@ -49,28 +48,39 @@ impl Resolve for IfExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.condition.resolve(scope, context, &None)?;
+        let _ = self.condition.resolve::<G>(scope, context, &mut None)?;
         // Check if condition is a boolean
-        let condition_type = self.condition.type_of(&scope.borrow())?;
+        let condition_type = self
+            .condition
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         if !<EType as TypeChecking>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
 
-        let _ = self.then_branch.resolve(scope, context, &Vec::default())?;
-        let _ = self.else_branch.resolve(scope, context, &Vec::default())?;
+        let _ = self
+            .then_branch
+            .resolve::<G>(scope, context, &mut Vec::default())?;
+        let _ = self
+            .else_branch
+            .resolve::<G>(scope, context, &mut Vec::default())?;
 
-        let then_branch_type = self.then_branch.type_of(&scope.borrow())?;
-        let _ = then_branch_type.compatible_with(&self.else_branch, &scope.borrow())?;
-        resolve_metadata!(self.metadata, self, scope, context);
+        let then_branch_type = self
+            .then_branch
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+        let _ = then_branch_type.compatible_with(
+            &self.else_branch,
+            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+        )?;
+        resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
     }
 }
@@ -78,18 +88,18 @@ impl Resolve for Pattern {
     type Output = Vec<Var>;
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
             Pattern::Primitive(value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve::<G>(scope, context, extra)?;
                 Ok(Vec::default())
             }
             Pattern::String(value) => {
@@ -104,18 +114,18 @@ impl Resolve for Pattern {
                     },
                     _ => return Err(SemanticError::IncompatibleTypes),
                 }
-                let _ = value.resolve(scope, &None, extra)?;
+                let _ = value.resolve::<G>(scope, &None, extra)?;
                 Ok(Vec::default())
             }
             Pattern::Enum { typename, value } => {
-                let borrowed_scope = scope.borrow();
+                let borrowed_scope = crate::arw_read!(scope, SemanticError::ConcurrencyError)?;
                 let user_type = borrowed_scope.find_type(typename)?;
                 match user_type.as_ref() {
                     UserType::Enum(_) => {}
-                    _ => return Err(SemanticError::IncorrectVariant),
+                    _ => return Err(SemanticError::IncorrectVariant(typename.to_string())),
                 }
                 let Some(_) = user_type.get_variant(value) else {
-                    return Err(SemanticError::IncorrectVariant);
+                    return Err(SemanticError::IncorrectVariant(typename.to_string()));
                 };
                 Ok(Vec::default())
             }
@@ -124,15 +134,18 @@ impl Resolve for Pattern {
                 variant,
                 vars,
             } => {
-                let borrowed_scope = scope.borrow();
+                let borrowed_scope = &crate::arw_read!(scope, SemanticError::ConcurrencyError)?;
                 let user_type = borrowed_scope.find_type(typename)?;
                 match user_type.as_ref() {
                     UserType::Union(_) => {}
-                    _ => return Err(SemanticError::IncorrectVariant),
+                    _ => return Err(SemanticError::IncorrectVariant(typename.to_string())),
                 }
                 let variant_type: Option<EType> = user_type.get_variant(variant);
                 let Some(variant_type) = variant_type else {
-                    return Err(SemanticError::CantInferType);
+                    return Err(SemanticError::CantInferType(format!(
+                        "of {}::{}",
+                        typename, variant
+                    )));
                 };
                 let mut scope_vars = Vec::with_capacity(vars.len());
                 let Some(fields) = <EType as GetSubTypes>::get_fields(&variant_type) else {
@@ -151,8 +164,8 @@ impl Resolve for Pattern {
                     }) else {
                         return Err(SemanticError::InvalidPattern);
                     };
-                    let var = <Var as BuildVar>::build_var(var_name, field_type);
-                    var.state.set(VarState::Parameter);
+                    let mut var = <Var as BuildVar>::build_var(var_name, field_type);
+                    var.state = VarState::Parameter;
                     scope_vars.push(var);
                 }
                 Ok(scope_vars)
@@ -205,28 +218,28 @@ impl Resolve for PatternExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let previous_vars = self.patterns[0].resolve(scope, &extra, &())?;
-        for pattern in &self.patterns[1..] {
-            let vars = pattern.resolve(scope, &extra, &())?;
+        let mut previous_vars = self.patterns[0].resolve::<G>(scope, &extra, &mut ())?;
+        for pattern in &mut self.patterns[1..] {
+            let vars = pattern.resolve::<G>(scope, &extra, &mut ())?;
             if previous_vars != vars {
-                return Err(SemanticError::IncorrectVariant);
+                return Err(SemanticError::IncorrectVariant("in pattern".to_string()));
             }
         }
-        for (_index, var) in previous_vars.iter().enumerate() {
-            var.state.set(VarState::Parameter);
-            var.is_declared.set(true);
+        for (_index, var) in previous_vars.iter_mut().enumerate() {
+            var.state = VarState::Parameter;
+            var.is_declared = true;
         }
         // create a block and assign the pattern variable to it before resolving the expression
-        let _ = self.expr.resolve(scope, context, &previous_vars)?;
+        let _ = self.expr.resolve::<G>(scope, context, &mut previous_vars)?;
         Ok(())
     }
 }
@@ -234,17 +247,20 @@ impl Resolve for MatchExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.expr.resolve(scope, &None, &None)?;
-        let expr_type = Some(self.expr.type_of(&scope.borrow())?);
+        let _ = self.expr.resolve::<G>(scope, &None, &mut None)?;
+        let mut expr_type = Some(
+            self.expr
+                .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
+        );
 
         let exhaustive_cases = match (&expr_type.as_ref()).unwrap() {
             Either::Static(value) => match value.as_ref() {
@@ -262,11 +278,11 @@ impl Resolve for MatchExpr {
             },
         };
 
-        match &self.else_branch {
+        match &mut self.else_branch {
             Some(else_branch) => {
-                let _ = else_branch.resolve(scope, &context, &Vec::default())?;
-                for pattern in &self.patterns {
-                    let _ = pattern.resolve(scope, &context, &expr_type)?;
+                let _ = else_branch.resolve::<G>(scope, &context, &mut Vec::default())?;
+                for pattern in &mut self.patterns {
+                    let _ = pattern.resolve::<G>(scope, &context, &mut expr_type)?;
                 }
 
                 if let Some(exhaustive_cases) = exhaustive_cases {
@@ -298,25 +314,47 @@ impl Resolve for MatchExpr {
                     }
                 }
 
-                let else_branch_type = else_branch.type_of(&scope.borrow())?;
+                let else_branch_type = else_branch
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 let (maybe_err, _) =
                     self.patterns
                         .iter()
                         .fold((None, else_branch_type), |mut previous, pattern| {
-                            if let Err(e) = previous.1.compatible_with(pattern, &scope.borrow()) {
-                                previous.0 = Some(e);
-                                previous
-                            } else {
-                                match pattern.type_of(&scope.borrow()) {
-                                    Ok(pattern_type) => (None, pattern_type),
-                                    Err(err) => (
-                                        Some(err),
-                                        Either::Static(
-                                            <StaticType as BuildStaticType>::build_unit().into(),
-                                        ),
-                                    ),
+                            let borrowed_scope =
+                                crate::arw_read!(scope, SemanticError::ConcurrencyError);
+                            if let Ok(borrowed_scope) = borrowed_scope {
+                                if let Err(e) = previous.1.compatible_with(pattern, &borrowed_scope)
+                                {
+                                    previous.0 = Some(e);
+                                    previous
+                                } else {
+                                    let borrowed_scope =
+                                        crate::arw_read!(scope, SemanticError::ConcurrencyError);
+                                    if let Ok(borrowed_scope) = borrowed_scope {
+                                        match pattern.type_of(&borrowed_scope) {
+                                            Ok(pattern_type) => (None, pattern_type),
+                                            Err(err) => (
+                                                Some(err),
+                                                Either::Static(
+                                                    <StaticType as BuildStaticType>::build_unit()
+                                                        .into(),
+                                                ),
+                                            ),
+                                        }
+                                    } else {
+                                        (
+                                            Some(SemanticError::ConcurrencyError),
+                                            Either::Static(
+                                                <StaticType as BuildStaticType>::build_unit()
+                                                    .into(),
+                                            ),
+                                        )
+                                    }
                                 }
+                            } else {
+                                previous.0 = Some(SemanticError::ConcurrencyError);
+                                previous
                             }
                         });
                 if let Some(err) = maybe_err {
@@ -327,13 +365,13 @@ impl Resolve for MatchExpr {
                 let Some(_exhaustive_cases) = exhaustive_cases else {
                     return Err(SemanticError::InvalidPattern);
                 };
-                for pattern in &self.patterns {
-                    let _ = pattern.resolve(scope, &context, &expr_type)?;
+                for pattern in &mut self.patterns {
+                    let _ = pattern.resolve::<G>(scope, &context, &mut expr_type)?;
                 }
             }
         }
 
-        resolve_metadata!(self.metadata, self, scope, context);
+        resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
     }
 }
@@ -341,24 +379,30 @@ impl Resolve for TryExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.try_branch.resolve(scope, context, &Vec::default())?;
-        match &self.else_branch {
-            Some(else_branch) => else_branch.resolve(scope, context, &Vec::default())?,
+        let _ = self
+            .try_branch
+            .resolve::<G>(scope, context, &mut Vec::default())?;
+        match &mut self.else_branch {
+            Some(else_branch) => else_branch.resolve::<G>(scope, context, &mut Vec::default())?,
             None => {}
         }
 
-        let try_branch_type = self.try_branch.type_of(&scope.borrow())?;
+        let try_branch_type = self
+            .try_branch
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let else_branch_type = match &self.else_branch {
-            Some(else_branch) => else_branch.type_of(&scope.borrow())?,
+            Some(else_branch) => {
+                else_branch.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?
+            }
             None => e_static!(StaticType::Unit),
         };
         match &try_branch_type {
@@ -377,54 +421,47 @@ impl Resolve for TryExpr {
                                 )));
                                 reconstructed_tuple
                             };
-                            let _ = ty.compatible_with(&else_branch_type, &scope.borrow())?;
-                            let res_type = ty.merge(&else_branch_type, &scope.borrow())?;
+                            let _ = ty.compatible_with(
+                                &else_branch_type,
+                                &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                            )?;
+                            let res_type = ty.merge(
+                                &else_branch_type,
+                                &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                            )?;
 
-                            self.pop_last_err.set(true);
-
-                            let mut borrowed_metadata = self
-                                .metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            self.pop_last_err = true;
+                            self.metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(res_type),
                             };
                             return Ok(());
                         } else {
-                            let _ = try_branch_type
-                                .compatible_with(&else_branch_type, &scope.borrow())?;
-                            let res_type =
-                                try_branch_type.merge(&else_branch_type, &scope.borrow())?;
-                            let mut borrowed_metadata = self
-                                .metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            let _ = try_branch_type.compatible_with(
+                                &else_branch_type,
+                                &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                            )?;
+                            let res_type = try_branch_type.merge(
+                                &else_branch_type,
+                                &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                            )?;
+                            self.metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(res_type),
                             };
                             return Ok(());
                         }
                     } else {
-                        return Err(SemanticError::CantInferType);
+                        return Err(SemanticError::CantInferType(
+                            "of this try-block".to_string(),
+                        ));
                     }
                 }
                 StaticType::Error => {
                     if else_branch_type.is_unit() {
-                        self.pop_last_err.set(true);
+                        self.pop_last_err = true;
 
-                        let mut borrowed_metadata = self
-                            .metadata
-                            .info
-                            .as_ref()
-                            .try_borrow_mut()
-                            .map_err(|_| SemanticError::Default)?;
-                        *borrowed_metadata = Info::Resolved {
+                        self.metadata.info = Info::Resolved {
                             context: context.clone(),
                             signature: Some(e_static!(StaticType::Unit)),
                         };
@@ -437,15 +474,16 @@ impl Resolve for TryExpr {
                     if else_branch_type.is_unit() {
                         return Err(SemanticError::IncompatibleTypes);
                     }
-                    let _ = try_branch_type.compatible_with(&else_branch_type, &scope.borrow())?;
-                    let res_type = try_branch_type.merge(&else_branch_type, &scope.borrow())?;
-                    let mut borrowed_metadata = self
-                        .metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-                    *borrowed_metadata = Info::Resolved {
+                    let _ = try_branch_type.compatible_with(
+                        &else_branch_type,
+                        &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                    )?;
+                    let res_type = try_branch_type.merge(
+                        &else_branch_type,
+                        &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                    )?;
+
+                    self.metadata.info = Info::Resolved {
                         context: context.clone(),
                         signature: Some(res_type),
                     };
@@ -456,15 +494,16 @@ impl Resolve for TryExpr {
                 if else_branch_type.is_unit() {
                     return Err(SemanticError::IncompatibleTypes);
                 }
-                let _ = try_branch_type.compatible_with(&else_branch_type, &scope.borrow())?;
-                let res_type = try_branch_type.merge(&else_branch_type, &scope.borrow())?;
-                let mut borrowed_metadata = self
-                    .metadata
-                    .info
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| SemanticError::Default)?;
-                *borrowed_metadata = Info::Resolved {
+                let _ = try_branch_type.compatible_with(
+                    &else_branch_type,
+                    &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                )?;
+                let res_type = try_branch_type.merge(
+                    &else_branch_type,
+                    &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                )?;
+
+                self.metadata.info = Info::Resolved {
                     context: context.clone(),
                     signature: Some(res_type),
                 };
@@ -478,24 +517,24 @@ impl Resolve for FCall {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        for item in &self.value {
+        for item in &mut self.value {
             match item {
                 FormatItem::Str(_) => {}
                 FormatItem::Expr(expr) => {
-                    let _ = expr.resolve(scope, &None, &None)?;
+                    let _ = expr.resolve::<G>(scope, &None, &mut None)?;
                 }
             }
         }
-        resolve_metadata!(self.metadata, self, scope, context);
+        resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
     }
 }
@@ -503,17 +542,12 @@ impl Resolve for FCall {
 #[cfg(test)]
 mod tests {
 
-    use std::cell::Cell;
-
     use crate::{
         ast::TryParse,
         e_static, p_num,
         semantic::scope::{
             scope::Scope,
-            static_types::{
-                AddrType, FnType, MapType, NumberType, PrimitiveType, SliceType, StaticType,
-                StringType, VecType,
-            },
+            static_types::{StaticType, StringType},
             user_type_impl::{Enum, Struct, Union, UserType},
             var_impl::Var,
         },
@@ -523,34 +557,34 @@ mod tests {
 
     #[test]
     fn valid_if() {
-        let expr = IfExpr::parse("if true then 10 else 20".into())
+        let mut expr = IfExpr::parse("if true then 10 else 20".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_if() {
-        let expr = IfExpr::parse("if 10 then 10 else 20".into())
+        let mut expr = IfExpr::parse("if 10 then 10 else 20".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
 
-        let expr = IfExpr::parse("if true then 10 else 'a'".into())
+        let mut expr = IfExpr::parse("if true then 10 else 'a'".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_match_basic() {
-        let expr = MatchExpr::parse(
+        let mut expr = MatchExpr::parse(
             r##"
             match x {
                 case 20 => 1,
@@ -563,22 +597,24 @@ mod tests {
         .unwrap()
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let match_type = expr.type_of(&scope.borrow()).unwrap();
+        let match_type = expr
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(p_num!(I64), match_type);
 
-        let expr = MatchExpr::parse(
+        let mut expr = MatchExpr::parse(
             r##"
             match x {
                 case Color::RED => 1,
@@ -590,8 +626,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Color".to_string().into(),
                 UserType::Enum(Enum {
@@ -605,10 +641,10 @@ mod tests {
                 }),
             )
             .unwrap();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: Either::User(
                     UserType::Enum(Enum {
@@ -622,15 +658,17 @@ mod tests {
                     })
                     .into(),
                 ),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
-        let match_type = expr.type_of(&scope.borrow()).unwrap();
+        let match_type = expr
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(p_num!(I64), match_type);
 
-        let expr = MatchExpr::parse(
+        let mut expr = MatchExpr::parse(
             r##"
             match x { 
                 case "red" => Color::RED,
@@ -643,8 +681,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Color".to_string().into(),
                 UserType::Enum(Enum {
@@ -659,19 +697,21 @@ mod tests {
                 }),
             )
             .unwrap();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: e_static!(StaticType::String(StringType())),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let match_type = expr.type_of(&scope.borrow()).unwrap();
+        let match_type = expr
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(
             Either::User(
                 UserType::Enum(Enum {
@@ -692,7 +732,7 @@ mod tests {
 
     #[test]
     fn robustness_match_basic() {
-        let expr = MatchExpr::parse(
+        let mut expr = MatchExpr::parse(
             r##"
             match x { 
                 case 20 => true,
@@ -705,19 +745,19 @@ mod tests {
         .unwrap()
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
 
-        let expr = MatchExpr::parse(
+        let mut expr = MatchExpr::parse(
             r##"
             match x { 
                 case 20 => true,
@@ -730,22 +770,22 @@ mod tests {
         .unwrap()
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_match_complex() {
-        let expr = MatchExpr::parse(
+        let mut expr = MatchExpr::parse(
             r##"
             match x { 
                 case Geo::Point {x,y} => x + y,
@@ -757,8 +797,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Geo".to_string().into(),
                 UserType::Union(Union {
@@ -791,10 +831,10 @@ mod tests {
                 }),
             )
             .unwrap();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: Either::User(
                     UserType::Union(Union {
@@ -829,73 +869,75 @@ mod tests {
                     })
                     .into(),
                 ),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
-        let match_type = expr.type_of(&scope.borrow()).unwrap();
+        let match_type = expr
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(p_num!(U64), match_type);
     }
 
     #[test]
     fn valid_try() {
-        let expr = TryExpr::parse("try 10 else 20".into())
+        let mut expr = TryExpr::parse("try 10 else 20".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn valid_try_no_else() {
-        let expr = TryExpr::parse("try Ok()".into())
+        let mut expr = TryExpr::parse("try Ok()".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
     fn valid_try_tuple_err() {
-        let expr = TryExpr::parse("try (10,Err()) else 20".into())
+        let mut expr = TryExpr::parse("try (10,Err()) else 20".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolutionb should have succeeded");
     }
 
     #[test]
     fn valid_try_tuple_multi_err() {
-        let expr = TryExpr::parse("try (10,20,Err()) else (20,30)".into())
+        let mut expr = TryExpr::parse("try (10,20,Err()) else (20,30)".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolutionb should have succeeded");
     }
     #[test]
     fn robustness_try_tuple_err() {
-        let expr = TryExpr::parse("try (10,20,Err()) else 20".into())
+        let mut expr = TryExpr::parse("try (10,20,Err()) else 20".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect_err("Resolution shoud have failed");
     }
     #[test]
     fn robustness_try_tuple_err_no_else() {
-        let expr = TryExpr::parse("try (10,Err())".into())
+        let mut expr = TryExpr::parse("try (10,Err())".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect_err("Resolution shoud have failed");
     }
 }

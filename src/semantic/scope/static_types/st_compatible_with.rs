@@ -1,12 +1,14 @@
-use std::cell::Ref;
-
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::{CompatibleWith, Either, SemanticError, TypeOf};
 
 use super::StaticType;
 
 impl CompatibleWith for StaticType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {

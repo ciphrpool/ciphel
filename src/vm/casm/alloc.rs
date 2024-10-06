@@ -1,12 +1,13 @@
+use std::sync::atomic::Ordering;
+
 use num_traits::ToBytes;
-use ulid::Ulid;
 
 use crate::{
     semantic::AccessLevel,
     vm::{
         allocator::{
             heap::Heap,
-            stack::{Offset, Stack, StackSlice, UReg, STACK_SIZE},
+            stack::{Offset, Stack, UReg, STACK_SIZE},
             MemoryAddress,
         },
         casm::operation::OpPrimitive,
@@ -17,14 +18,16 @@ use crate::{
 
 use super::CasmProgram;
 
+pub const ALLOC_SIZE_THRESHOLD: usize = STACK_SIZE / 10;
+
 #[derive(Debug, Clone)]
 pub enum Alloc {
     Heap { size: Option<usize> },
     Stack { size: usize },
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Alloc {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Alloc {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             Alloc::Heap { size } => match size {
                 None => stdio.push_casm(engine, "halloc"),
@@ -33,15 +36,35 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Alloc {
             Alloc::Stack { size } => stdio.push_casm(engine, &format!("salloc {size}")),
         }
     }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            Alloc::Heap { size } => {
+                if size.unwrap_or(0) > ALLOC_SIZE_THRESHOLD {
+                    crate::vm::vm::CasmWeight::EXTREME
+                } else {
+                    crate::vm::vm::CasmWeight::MEDIUM
+                }
+            }
+            Alloc::Stack { size } => {
+                if *size > ALLOC_SIZE_THRESHOLD {
+                    crate::vm::vm::CasmWeight::EXTREME
+                } else {
+                    crate::vm::vm::CasmWeight::MEDIUM
+                }
+            }
+        }
+    }
 }
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Alloc {
+impl<G: crate::GameEngineStaticFn> Executable<G> for Alloc {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             Alloc::Heap { size } => {
@@ -52,16 +75,16 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Alloc {
                         size as usize
                     }
                 };
-                let address = heap.alloc(size).map_err(|e| e.into())?;
+                let address = heap.alloc(size)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 let data = (address as u64).to_le_bytes().to_vec();
-                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                let _ = stack.push_with(&data)?;
                 program.incr();
                 Ok(())
             }
             Alloc::Stack { size } => {
-                let _ = stack.push(*size).map_err(|e| e.into())?;
+                let _ = stack.push(*size)?;
                 program.incr();
                 Ok(())
             }
@@ -73,22 +96,31 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Alloc {
 pub struct Realloc {
     pub size: Option<usize>,
 }
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Realloc {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Realloc {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self.size {
             Some(n) => stdio.push_casm(engine, &format!("realloc {n}")),
             None => stdio.push_casm(engine, "realloc"),
         }
     }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        if self.size.unwrap_or(0) > ALLOC_SIZE_THRESHOLD {
+            crate::vm::vm::CasmWeight::EXTREME
+        } else {
+            crate::vm::vm::CasmWeight::MEDIUM
+        }
+    }
 }
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Realloc {
+impl<G: crate::GameEngineStaticFn> Executable<G> for Realloc {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         let size = match self.size {
             Some(size) => size,
@@ -99,13 +131,11 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Realloc {
         };
 
         let heap_address = OpPrimitive::get_num8::<u64>(stack)? - 8;
-        let address = heap
-            .realloc(heap_address as usize, size)
-            .map_err(|e| e.into())?;
+        let address = heap.realloc(heap_address as usize, size)?;
         let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
         let data = (address as u64).to_le_bytes().to_vec();
-        let _ = stack.push_with(&data).map_err(|e| e.into())?;
+        let _ = stack.push_with(&data)?;
         program.incr();
         Ok(())
     }
@@ -113,25 +143,28 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Realloc {
 
 #[derive(Debug, Clone)]
 pub struct Free();
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Free {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Free {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         stdio.push_casm(engine, "free");
     }
 }
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Free {
+impl<G: crate::GameEngineStaticFn> Executable<G> for Free {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         let address = OpPrimitive::get_num8::<u64>(stack)? - 8;
         if address < STACK_SIZE as u64 {
-            return Err(RuntimeError::CodeSegmentation);
+            return Err(RuntimeError::StackError(
+                crate::vm::allocator::stack::StackError::WriteError,
+            ));
         } else {
-            heap.free(address as usize).map_err(|e| e.into())?;
+            heap.free(address as usize)?;
         }
         program.incr();
         Ok(())
@@ -149,9 +182,8 @@ pub enum StackFrame {
     Return { return_size: Option<usize> },
     Transfer { is_direct_loop: bool },
 }
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for StackFrame {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
-        stdio.push_casm(engine, "free");
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StackFrame {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             StackFrame::Clean => stdio.push_casm(engine, "clean"),
             StackFrame::SoftClean => stdio.push_casm(engine, "soft_clean"),
@@ -169,32 +201,46 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for StackFrame {
             },
         }
     }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            StackFrame::Clean => crate::vm::vm::CasmWeight::ZERO,
+            StackFrame::SoftClean => crate::vm::vm::CasmWeight::ZERO,
+            StackFrame::Break => crate::vm::vm::CasmWeight::LOW,
+            StackFrame::Continue => crate::vm::vm::CasmWeight::LOW,
+            StackFrame::OpenWindow => crate::vm::vm::CasmWeight::ZERO,
+            StackFrame::CloseWindow => crate::vm::vm::CasmWeight::ZERO,
+            StackFrame::Return { .. } => crate::vm::vm::CasmWeight::MEDIUM,
+            StackFrame::Transfer { .. } => crate::vm::vm::CasmWeight::ZERO,
+        }
+    }
 }
 pub const FLAG_VOID: u8 = 0u8;
 pub const FLAG_RETURN: u8 = 1u8;
 pub const FLAG_BREAK: u8 = 2u8;
 pub const FLAG_CONTINUE: u8 = 3u8;
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
+impl<G: crate::GameEngineStaticFn> Executable<G> for StackFrame {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             StackFrame::Break => {
                 // let idx = OpPrimitive::get_num8::<u64>(stack)? as usize;
                 // program.cursor_set(idx);
 
-                program.cursor.set(stack.registers.link.get());
+                program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                let _ = stack.clean().map_err(|e| e.into())?;
+                let _ = stack.clean()?;
 
-                let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
-                let _ = stack.push_with(&[FLAG_BREAK]).map_err(|e| e.into())?; /* return flag set to BREAK */
+                let _ = stack.push_with(&0u64.to_le_bytes())?;
+                let _ = stack.push_with(&[FLAG_BREAK])?; /* return flag set to BREAK */
 
                 Ok(())
             }
@@ -202,43 +248,44 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
                 // let idx = OpPrimitive::get_num8::<u64>(stack)? as usize;
                 // program.cursor_set(idx);
 
-                program.cursor.set(stack.registers.link.get());
+                program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                let _ = stack.clean().map_err(|e| e.into())?;
+                let _ = stack.clean()?;
 
-                let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
-                let _ = stack.push_with(&[FLAG_CONTINUE]).map_err(|e| e.into())?; /* return flag set to CONTINUE */
+                let _ = stack.push_with(&0u64.to_le_bytes())?;
+                let _ = stack.push_with(&[FLAG_CONTINUE])?; /* return flag set to CONTINUE */
 
                 Ok(())
             }
             StackFrame::SoftClean => {
                 program.incr();
-                let _ = stack.clean().map_err(|e| e.into())?;
+                let _ = stack.clean()?;
 
-                let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
-                let _ = stack.push_with(&[FLAG_VOID]).map_err(|e| e.into())?; /* return flag set to false */
+                let _ = stack.push_with(&0u64.to_le_bytes())?;
+                let _ = stack.push_with(&[FLAG_VOID])?; /* return flag set to false */
                 Ok(())
             }
             StackFrame::Clean => {
-                program.cursor.set(stack.registers.link.get());
-                let _ = stack.clean().map_err(|e| e.into())?;
+                program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
-                let _ = stack.push_with(&[FLAG_VOID]).map_err(|e| e.into())?; /* return flag set to false */
+                let _ = stack.clean()?;
+
+                let _ = stack.push_with(&0u64.to_le_bytes())?;
+                let _ = stack.push_with(&[FLAG_VOID])?; /* return flag set to false */
                 Ok(())
             }
             StackFrame::OpenWindow => {
-                let _ = stack.open_window().map_err(|e| e.into())?;
+                let _ = stack.open_window()?;
                 program.incr();
                 Ok(())
             }
             StackFrame::CloseWindow => {
-                let _ = stack.open_window().map_err(|e| e.into())?;
+                let _ = stack.open_window()?;
                 program.incr();
                 Ok(())
             }
             StackFrame::Return { return_size } => {
-                let link = stack.registers.link.get();
+                let link = stack.registers.link.as_ref().load(Ordering::Acquire);
                 let return_size = match return_size {
                     Some(size) => *size,
                     None => {
@@ -246,16 +293,15 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
                         size as usize
                     }
                 };
-                let return_data = stack.pop(return_size).map_err(|e| e.into())?.to_owned();
+                let return_data = stack.pop(return_size)?.to_owned();
 
-                program.cursor.set(link);
-                let _ = stack.clean().map_err(|e| e.into())?;
+                program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                let _ = stack.push_with(&return_data).map_err(|e| e.into())?;
-                let _ = stack
-                    .push_with(&(return_size as u64).to_le_bytes())
-                    .map_err(|e| e.into())?;
-                let _ = stack.push_with(&[FLAG_RETURN]).map_err(|e| e.into())?; /* return flag set to true */
+                let _ = stack.clean()?;
+
+                let _ = stack.push_with(&return_data)?;
+                let _ = stack.push_with(&(return_size as u64).to_le_bytes())?;
+                let _ = stack.push_with(&[FLAG_RETURN])?; /* return flag set to true */
 
                 Ok(())
             }
@@ -265,43 +311,43 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
                 match flag {
                     FLAG_BREAK => {
                         if !*is_direct_loop {
-                            program.cursor.set(stack.registers.link.get());
+                            program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                            let _ = stack.clean().map_err(|e| e.into())?;
+                            let _ = stack.clean()?;
 
-                            let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
-                            let _ = stack.push_with(&[FLAG_BREAK]).map_err(|e| e.into())?;
+                            let _ = stack.push_with(&0u64.to_le_bytes())?;
+                            let _ = stack.push_with(&[FLAG_BREAK])?;
                         /* return flag set to BREAK */
                         } else {
                             let break_link = stack.get_reg(UReg::R4);
-                            program.cursor.set(break_link as usize);
+                            program.cursor = break_link as usize;
                         }
                     }
                     FLAG_CONTINUE => {
                         if !*is_direct_loop {
-                            program.cursor.set(stack.registers.link.get());
+                            program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                            let _ = stack.clean().map_err(|e| e.into())?;
+                            let _ = stack.clean()?;
 
-                            let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
-                            let _ = stack.push_with(&[FLAG_CONTINUE]).map_err(|e| e.into())?;
+                            let _ = stack.push_with(&0u64.to_le_bytes())?;
+                            let _ = stack.push_with(&[FLAG_CONTINUE])?;
                         /* return flag set to CONTINUE */
                         } else {
                             let continue_link = stack.get_reg(UReg::R3);
-                            program.cursor.set(continue_link as usize);
+
+                            program.cursor = continue_link as usize;
                         }
                     }
                     FLAG_RETURN => {
-                        let return_data = stack.pop(return_size).map_err(|e| e.into())?.to_owned();
+                        let return_data = stack.pop(return_size)?.to_owned();
 
-                        program.cursor.set(stack.registers.link.get());
-                        let _ = stack.clean().map_err(|e| e.into())?;
+                        program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                        let _ = stack.push_with(&return_data).map_err(|e| e.into())?;
-                        let _ = stack
-                            .push_with(&(return_size as u64).to_le_bytes())
-                            .map_err(|e| e.into())?;
-                        let _ = stack.push_with(&[FLAG_RETURN]).map_err(|e| e.into())?;
+                        let _ = stack.clean()?;
+
+                        let _ = stack.push_with(&return_data)?;
+                        let _ = stack.push_with(&(return_size as u64).to_le_bytes())?;
+                        let _ = stack.push_with(&[FLAG_RETURN])?;
                         /* return flag set to true */
                     }
                     FLAG_VOID => {
@@ -323,8 +369,8 @@ pub enum Access {
     RuntimeCharUTF8AtIdx { len: Option<usize> },
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Access {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Access {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             Access::Static { address, size } => {
                 stdio.push_casm(engine, &format!("ld {} {size}", address.name()))
@@ -337,16 +383,26 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Access {
             Access::RuntimeCharUTF8AtIdx { .. } => stdio.push_casm(engine, "ld_utf8_at"),
         }
     }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            Access::Static { address, size } => crate::vm::vm::CasmWeight::LOW,
+            Access::Runtime { size } => crate::vm::vm::CasmWeight::LOW,
+            Access::RuntimeCharUTF8 => crate::vm::vm::CasmWeight::LOW,
+            Access::RuntimeCharUTF8AtIdx { len } => crate::vm::vm::CasmWeight::MEDIUM,
+        }
+    }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Access {
+impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         let index = match self {
             Access::RuntimeCharUTF8AtIdx { .. } => Some(OpPrimitive::get_num8::<u64>(stack)?),
@@ -400,89 +456,77 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Access {
 
                 let data = match self {
                     Access::RuntimeCharUTF8 => {
-                        let (bytes, _) = heap.read_utf8(offset, 0, 1).map_err(|err| err.into())?;
+                        let (bytes, _) = heap.read_utf8(offset, 0, 1)?;
 
                         bytes.to_vec()
                     }
                     Access::RuntimeCharUTF8AtIdx { .. } => {
-                        let len_bytes = heap.read(offset, 8).map_err(|e| e.into())?;
+                        let len_bytes = heap.read(offset, 8)?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes) as usize;
                         if index.unwrap_or(0) >= len as u64 {
                             return Err(RuntimeError::IndexOutOfBound);
                         }
-                        let (bytes, _) = heap
-                            .read_utf8(offset + 16, index.unwrap_or(0) as usize, len)
-                            .map_err(|err| err.into())?;
+                        let (bytes, _) =
+                            heap.read_utf8(offset + 16, index.unwrap_or(0) as usize, len)?;
 
                         bytes.to_vec()
                     }
                     _ => {
-                        let bytes = heap.read(offset, size).map_err(|err| err.into())?;
+                        let bytes = heap.read(offset, size)?;
                         bytes
                     }
                 };
 
-                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                let _ = stack.push_with(&data)?;
                 program.incr();
                 Ok(())
             }
             MemoryAddress::Stack { offset, level } => {
                 if let Offset::FE(stack_idx, heap_udx) = offset {
-                    let heap_address = stack
-                        .read(Offset::FP(stack_idx), level, 8)
-                        .map_err(|err| err.into())?;
+                    let heap_address = stack.read(Offset::FP(stack_idx), level, 8)?;
                     let data = TryInto::<&[u8; 8]>::try_into(heap_address)
                         .map_err(|_| RuntimeError::Deserialization)?;
                     let heap_address = u64::from_le_bytes(*data);
 
                     let data = match self {
                         Access::RuntimeCharUTF8 => {
-                            let (bytes, _) = heap
-                                .read_utf8(heap_address as usize + heap_udx, 0, 1)
-                                .map_err(|err| err.into())?;
+                            let (bytes, _) =
+                                heap.read_utf8(heap_address as usize + heap_udx, 0, 1)?;
 
                             bytes.to_vec()
                         }
                         Access::RuntimeCharUTF8AtIdx { .. } => {
-                            let len_bytes = heap
-                                .read(heap_address as usize + heap_udx, 8)
-                                .map_err(|e| e.into())?;
+                            let len_bytes = heap.read(heap_address as usize + heap_udx, 8)?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes) as usize;
                             if index.unwrap_or(0) >= len as u64 {
                                 return Err(RuntimeError::IndexOutOfBound);
                             }
-                            let (bytes, _) = heap
-                                .read_utf8(
-                                    heap_address as usize + heap_udx + 16,
-                                    index.unwrap_or(0) as usize,
-                                    len,
-                                )
-                                .map_err(|err| err.into())?;
+                            let (bytes, _) = heap.read_utf8(
+                                heap_address as usize + heap_udx + 16,
+                                index.unwrap_or(0) as usize,
+                                len,
+                            )?;
 
                             bytes.to_vec()
                         }
                         _ => {
-                            let bytes = heap
-                                .read(heap_address as usize + heap_udx, size)
-                                .map_err(|err| err.into())?;
+                            let bytes = heap.read(heap_address as usize + heap_udx, size)?;
                             bytes
                         }
                     };
 
-                    let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&data)?;
                     program.incr();
                     return Ok(());
                 }
 
                 let data = match self {
                     Access::RuntimeCharUTF8 => {
-                        let (bytes, _) = stack
-                            .read_utf8(offset, level, 0, 1)
-                            .map_err(|err| err.into())?;
+                        let (bytes, _) = stack.read_utf8(offset, level, 0, 1)?;
 
                         bytes.to_vec()
                     }
@@ -493,20 +537,19 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Access {
                         if index.unwrap_or(0) >= *len as u64 {
                             return Err(RuntimeError::IndexOutOfBound);
                         }
-                        let (bytes, _) = stack
-                            .read_utf8(offset, level, index.unwrap_or(0) as usize, *len)
-                            .map_err(|err| err.into())?;
+                        let (bytes, _) =
+                            stack.read_utf8(offset, level, index.unwrap_or(0) as usize, *len)?;
 
                         bytes.to_vec()
                     }
                     _ => {
-                        let bytes = stack.read(offset, level, size).map_err(|err| err.into())?;
+                        let bytes = stack.read(offset, level, size)?;
                         bytes.to_vec()
                     }
                 };
-                // dbg!(&data);
+
                 // Copy data onto stack;
-                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                let _ = stack.push_with(&data)?;
                 program.incr();
                 Ok(())
             }
@@ -521,20 +564,24 @@ pub struct CheckIndex {
     pub len: Option<usize>,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for CheckIndex {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CheckIndex {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         stdio.push_casm(engine, "chidx");
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::ZERO
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for CheckIndex {
+impl<G: crate::GameEngineStaticFn> Executable<G> for CheckIndex {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         let index = OpPrimitive::get_num8::<u64>(stack)?;
         let address = OpPrimitive::get_num8::<u64>(stack)?;
@@ -545,14 +592,12 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for CheckIndex {
                     return Err(RuntimeError::IndexOutOfBound);
                 }
                 let item_addr = (address as u64 + index * self.item_size as u64) as u64;
-                let _ = stack
-                    .push_with(&item_addr.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&item_addr.to_le_bytes())?;
             } else {
                 return Err(RuntimeError::CodeSegmentation);
             }
         } else {
-            let len_bytes = heap.read(address as usize, 8).map_err(|e| e.into())?;
+            let len_bytes = heap.read(address as usize, 8)?;
             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                 .map_err(|_| RuntimeError::Deserialization)?;
             let len = u64::from_le_bytes(*len_bytes);
@@ -560,9 +605,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for CheckIndex {
                 return Err(RuntimeError::IndexOutOfBound);
             }
             let item_addr = (address as u64 + 16 + index * self.item_size as u64) as u64;
-            let _ = stack
-                .push_with(&item_addr.to_le_bytes())
-                .map_err(|e| e.into())?;
+            let _ = stack.push_with(&item_addr.to_le_bytes())?;
         }
 
         program.incr();

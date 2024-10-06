@@ -1,14 +1,10 @@
-use std::cell::Ref;
-
-use crate::semantic::{
-    EType, Resolve, SemanticError, TypeOf,
-};
+use crate::semantic::{EType, Resolve, SemanticError, TypeOf};
 
 use super::{ForIterator, ForLoop, Loop, WhileLoop};
 use crate::semantic::scope::scope::Scope;
 
 impl TypeOf for Loop {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -20,7 +16,7 @@ impl TypeOf for Loop {
     }
 }
 impl TypeOf for ForIterator {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -28,7 +24,7 @@ impl TypeOf for ForIterator {
     }
 }
 impl TypeOf for ForLoop {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -36,7 +32,7 @@ impl TypeOf for ForLoop {
     }
 }
 impl TypeOf for WhileLoop {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {

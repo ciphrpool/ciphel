@@ -1,3 +1,4 @@
+use crate::arw_read;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{ClosureType, SliceType, StrSliceType};
 use crate::semantic::scope::type_traits::GetSubTypes;
@@ -13,7 +14,7 @@ use crate::vm::vm::Locatable;
 use crate::{
     semantic::{
         scope::static_types::{NumberType, RangeType, StaticType},
-        Either, MutRc, SizeOf, TypeOf,
+        Either, SizeOf, TypeOf,
     },
     vm::{
         casm::{
@@ -35,8 +36,8 @@ use super::{FieldAccess, ListAccess, Range, TupleAccess};
 impl GenerateCode for super::UnaryOperation {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::UnaryOperation::Minus { value, metadata: _ } => {
@@ -69,8 +70,8 @@ impl GenerateCode for super::UnaryOperation {
 impl Locatable for TupleAccess {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.var.locate(scope, instructions)?;
         let Some(from_type) = self.var.signature() else {
@@ -105,8 +106,8 @@ impl Locatable for TupleAccess {
 impl GenerateCode for TupleAccess {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.var.locate(scope, instructions)?;
         let Some(from_type) = self.var.signature() else {
@@ -138,8 +139,8 @@ impl GenerateCode for TupleAccess {
 impl Locatable for ListAccess {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
         let _ = self.var.locate(scope, instructions)?;
@@ -212,8 +213,8 @@ impl Locatable for ListAccess {
 impl GenerateCode for ListAccess {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
         let _ = self.var.locate(scope, instructions)?;
@@ -280,8 +281,8 @@ impl GenerateCode for ListAccess {
 impl Locatable for FieldAccess {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
         let _ = self.var.locate(scope, instructions)?;
@@ -322,8 +323,8 @@ impl Locatable for FieldAccess {
 impl GenerateCode for FieldAccess {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
         let _ = self.var.locate(scope, instructions)?;
@@ -356,8 +357,8 @@ impl GenerateCode for FieldAccess {
 impl GenerateCode for Range {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -396,8 +397,8 @@ impl GenerateCode for Range {
 impl Locatable for super::FnCall {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.gencode(scope, instructions)?;
         let Some(value_type) = self.metadata.signature() else {
@@ -424,8 +425,8 @@ impl Locatable for super::FnCall {
 impl GenerateCode for super::FnCall {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let params_size: usize = self
             .params
@@ -433,7 +434,18 @@ impl GenerateCode for super::FnCall {
             .map(|p| p.signature().map_or(0, |s| s.size_of()))
             .sum();
 
-        if let Some(platform_api) = self.platform.as_ref().borrow().as_ref() {
+        if let Some(dynamic_fn_id) = &self.is_dynamic_fn {
+            for param in &self.params {
+                let _ = param.gencode(scope, instructions)?;
+            }
+            instructions.push(Casm::Platform(crate::vm::platform::LibCasm::Engine(
+                dynamic_fn_id.clone(),
+            )));
+            return Ok(());
+        }
+
+        let borrowed_platform = arw_read!(self.platform, CodeGenerationError::ConcurrencyError)?;
+        if let Some(platform_api) = borrowed_platform.as_ref() {
             for param in &self.params {
                 let _ = param.gencode(scope, instructions)?;
             }
@@ -557,8 +569,8 @@ impl GenerateCode for super::FnCall {
 impl GenerateCode for super::Product {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Product::Mult {
@@ -637,8 +649,8 @@ impl GenerateCode for super::Product {
 impl GenerateCode for super::Addition {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -663,8 +675,8 @@ impl GenerateCode for super::Addition {
 impl GenerateCode for super::Substraction {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -689,8 +701,8 @@ impl GenerateCode for super::Substraction {
 impl GenerateCode for super::Shift {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Shift::Left {
@@ -746,8 +758,8 @@ impl GenerateCode for super::Shift {
 impl GenerateCode for super::BitwiseAnd {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -772,8 +784,8 @@ impl GenerateCode for super::BitwiseAnd {
 impl GenerateCode for super::BitwiseXOR {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -798,8 +810,8 @@ impl GenerateCode for super::BitwiseXOR {
 impl GenerateCode for super::BitwiseOR {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -824,16 +836,22 @@ impl GenerateCode for super::BitwiseOR {
 impl GenerateCode for super::Cast {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Some(right_type) = self.right.type_of(&scope.borrow()).ok() else {
+        let Some(right_type) = self
+            .right
+            .type_of(&crate::arw_read!(
+                scope,
+                CodeGenerationError::ConcurrencyError
+            )?)
+            .ok()
+        else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-
         let _ = self.left.gencode(scope, instructions)?;
 
         let op_left_type: Result<OpPrimitive, CodeGenerationError> = left_type.try_into();
@@ -856,8 +874,8 @@ impl GenerateCode for super::Cast {
 impl GenerateCode for super::Comparaison {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Comparaison::Less {
@@ -959,8 +977,8 @@ impl GenerateCode for super::Comparaison {
 impl GenerateCode for super::Equation {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Equation::Equal {
@@ -1016,8 +1034,8 @@ impl GenerateCode for super::Equation {
 impl GenerateCode for super::LogicalAnd {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.left.gencode(scope, instructions)?;
         let _ = self.right.gencode(scope, instructions)?;
@@ -1033,8 +1051,8 @@ impl GenerateCode for super::LogicalAnd {
 impl GenerateCode for super::LogicalOr {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.left.gencode(scope, instructions)?;
         let _ = self.right.gencode(scope, instructions)?;
@@ -1049,10 +1067,6 @@ impl GenerateCode for super::LogicalOr {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::{Cell, RefCell},
-        rc::Rc,
-    };
 
     use crate::{
         ast::{
@@ -1067,15 +1081,12 @@ mod tests {
         semantic::{
             scope::{
                 scope::Scope,
-                static_types::{PrimitiveType, StrSliceType, StringType},
+                static_types::{PrimitiveType, StrSliceType},
             },
             Resolve,
         },
         v_num,
-        vm::{
-            allocator::Memory,
-            vm::{DeserializeFrom, Runtime},
-        },
+        vm::vm::{DeserializeFrom, Runtime},
     };
 
     use super::*;
@@ -1085,47 +1096,47 @@ mod tests {
         eval_and_compare!(r##"400u128 + 20u128"##, v_num!(U128, 420), U128);
         eval_and_compare!(
             r##"400u128 - 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(400 - 20))),
+            Primitive::Number(Number::U128(400 - 20)),
             U128
         );
         eval_and_compare!(
             r##"400u128 * 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(400 * 20))),
+            Primitive::Number(Number::U128(400 * 20)),
             U128
         );
         eval_and_compare!(
             r##"400u128 / 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(400 / 20))),
+            Primitive::Number(Number::U128(400 / 20)),
             U128
         );
         eval_and_compare!(
             r##"400u128 % 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(400 % 20))),
+            Primitive::Number(Number::U128(400 % 20)),
             U128
         );
         eval_and_compare!(
             r##"400u128 << 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(400u128 << 20u128))),
+            Primitive::Number(Number::U128(400u128 << 20u128)),
             U128
         );
         eval_and_compare!(
             r##"400u128 >> 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(400u128 >> 20u128))),
+            Primitive::Number(Number::U128(400u128 >> 20u128)),
             U128
         );
         eval_and_compare!(
             r##"428u128 & 428u128"##,
-            Primitive::Number(Cell::new(Number::U128(428u128 & 428u128))),
+            Primitive::Number(Number::U128(428u128 & 428u128)),
             U128
         );
         eval_and_compare!(
             r##"400u128 | 420u128"##,
-            Primitive::Number(Cell::new(Number::U128(400u128 | 420u128))),
+            Primitive::Number(Number::U128(400u128 | 420u128)),
             U128
         );
         eval_and_compare!(
             r##"400u128 ^ 420u128"##,
-            Primitive::Number(Cell::new(Number::U128(400u128 ^ 420u128))),
+            Primitive::Number(Number::U128(400u128 ^ 420u128)),
             U128
         );
         eval_and_compare!(r##"400u128 as u64"##, v_num!(U64, 400), U64);
@@ -1173,47 +1184,47 @@ mod tests {
         eval_and_compare!(r##"400 + 20"##, v_num!(U64, 420), U64);
         eval_and_compare!(
             r##"400 - 20"##,
-            Primitive::Number(Cell::new(Number::U64(400 - 20))),
+            Primitive::Number(Number::U64(400 - 20)),
             U64
         );
         eval_and_compare!(
             r##"400 * 20"##,
-            Primitive::Number(Cell::new(Number::U64(400 * 20))),
+            Primitive::Number(Number::U64(400 * 20)),
             U64
         );
         eval_and_compare!(
             r##"400 / 20"##,
-            Primitive::Number(Cell::new(Number::U64(400 / 20))),
+            Primitive::Number(Number::U64(400 / 20)),
             U64
         );
         eval_and_compare!(
             r##"400 % 20"##,
-            Primitive::Number(Cell::new(Number::U64(400 % 20))),
+            Primitive::Number(Number::U64(400 % 20)),
             U64
         );
         eval_and_compare!(
             r##"400u64 << 20u64"##,
-            Primitive::Number(Cell::new(Number::U64(400u64 << 20u64))),
+            Primitive::Number(Number::U64(400u64 << 20u64)),
             U64
         );
         eval_and_compare!(
             r##"400u64 >> 20u64"##,
-            Primitive::Number(Cell::new(Number::U64(400u64 >> 20u64))),
+            Primitive::Number(Number::U64(400u64 >> 20u64)),
             U64
         );
         eval_and_compare!(
             r##"428u64 & 428u64"##,
-            Primitive::Number(Cell::new(Number::U64(428u64 & 428u64))),
+            Primitive::Number(Number::U64(428u64 & 428u64)),
             U64
         );
         eval_and_compare!(
             r##"400u64 | 420u64"##,
-            Primitive::Number(Cell::new(Number::U64(400u64 | 420u64))),
+            Primitive::Number(Number::U64(400u64 | 420u64)),
             U64
         );
         eval_and_compare!(
             r##"400u64 ^ 420u64"##,
-            Primitive::Number(Cell::new(Number::U64(400u64 ^ 420u64))),
+            Primitive::Number(Number::U64(400u64 ^ 420u64)),
             U64
         );
         eval_and_compare_bool!(r##"20u64 > 2u64"##, Primitive::Bool(true));
@@ -1235,47 +1246,47 @@ mod tests {
         eval_and_compare!(r##"400u32 + 20u32"##, v_num!(U32, 420), U32);
         eval_and_compare!(
             r##"400u32 - 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(400 - 20))),
+            Primitive::Number(Number::U32(400 - 20)),
             U32
         );
         eval_and_compare!(
             r##"400u32 * 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(400 * 20))),
+            Primitive::Number(Number::U32(400 * 20)),
             U32
         );
         eval_and_compare!(
             r##"400u32 / 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(400 / 20))),
+            Primitive::Number(Number::U32(400 / 20)),
             U32
         );
         eval_and_compare!(
             r##"400u32 % 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(400 % 20))),
+            Primitive::Number(Number::U32(400 % 20)),
             U32
         );
         eval_and_compare!(
             r##"400u32 << 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(400u32 << 20u32))),
+            Primitive::Number(Number::U32(400u32 << 20u32)),
             U32
         );
         eval_and_compare!(
             r##"400u32 >> 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(400u32 >> 20u32))),
+            Primitive::Number(Number::U32(400u32 >> 20u32)),
             U32
         );
         eval_and_compare!(
             r##"428u32 & 428u32"##,
-            Primitive::Number(Cell::new(Number::U32(428u32 & 428u32))),
+            Primitive::Number(Number::U32(428u32 & 428u32)),
             U32
         );
         eval_and_compare!(
             r##"400u32 | 420u32"##,
-            Primitive::Number(Cell::new(Number::U32(400u32 | 420u32))),
+            Primitive::Number(Number::U32(400u32 | 420u32)),
             U32
         );
         eval_and_compare!(
             r##"400u32 ^ 420u32"##,
-            Primitive::Number(Cell::new(Number::U32(400u32 ^ 420u32))),
+            Primitive::Number(Number::U32(400u32 ^ 420u32)),
             U32
         );
         eval_and_compare_bool!(r##"20u32 > 2u32"##, Primitive::Bool(true));
@@ -1296,47 +1307,47 @@ mod tests {
         eval_and_compare!(r##"400u16 + 20u16"##, v_num!(U16, 420), U16);
         eval_and_compare!(
             r##"400u16 - 20u16"##,
-            Primitive::Number(Cell::new(Number::U16(400 - 20))),
+            Primitive::Number(Number::U16(400 - 20)),
             U16
         );
         eval_and_compare!(
             r##"400u16 * 20u16"##,
-            Primitive::Number(Cell::new(Number::U16(400 * 20))),
+            Primitive::Number(Number::U16(400 * 20)),
             U16
         );
         eval_and_compare!(
             r##"400u16 / 20u16"##,
-            Primitive::Number(Cell::new(Number::U16(400 / 20))),
+            Primitive::Number(Number::U16(400 / 20)),
             U16
         );
         eval_and_compare!(
             r##"400u16 % 20u16"##,
-            Primitive::Number(Cell::new(Number::U16(400 % 20))),
+            Primitive::Number(Number::U16(400 % 20)),
             U16
         );
         eval_and_compare!(
             r##"400u16 << 2u16"##,
-            Primitive::Number(Cell::new(Number::U16(400u16 << 2u16))),
+            Primitive::Number(Number::U16(400u16 << 2u16)),
             U16
         );
         eval_and_compare!(
             r##"400u16 >> 2u16"##,
-            Primitive::Number(Cell::new(Number::U16(400u16 >> 2u16))),
+            Primitive::Number(Number::U16(400u16 >> 2u16)),
             U16
         );
         eval_and_compare!(
             r##"428u16 & 428u16"##,
-            Primitive::Number(Cell::new(Number::U16(428u16 & 428u16))),
+            Primitive::Number(Number::U16(428u16 & 428u16)),
             U16
         );
         eval_and_compare!(
             r##"400u16 | 420u16"##,
-            Primitive::Number(Cell::new(Number::U16(400u16 | 420u16))),
+            Primitive::Number(Number::U16(400u16 | 420u16)),
             U16
         );
         eval_and_compare!(
             r##"400u16 ^ 420u16"##,
-            Primitive::Number(Cell::new(Number::U16(400u16 ^ 420u16))),
+            Primitive::Number(Number::U16(400u16 ^ 420u16)),
             U16
         );
         eval_and_compare_bool!(r##"20u16 > 2u16"##, Primitive::Bool(true));
@@ -1355,49 +1366,33 @@ mod tests {
     #[test]
     fn valid_operation_u8() {
         eval_and_compare!(r##"100u8 + 20u8"##, v_num!(U8, 120), U8);
-        eval_and_compare!(
-            r##"50u8 - 2u8"##,
-            Primitive::Number(Cell::new(Number::U8(50 - 2))),
-            U8
-        );
-        eval_and_compare!(
-            r##"50u8 * 2u8"##,
-            Primitive::Number(Cell::new(Number::U8(50 * 2))),
-            U8
-        );
-        eval_and_compare!(
-            r##"50u8 / 2u8"##,
-            Primitive::Number(Cell::new(Number::U8(50 / 2))),
-            U8
-        );
-        eval_and_compare!(
-            r##"50u8 % 2u8"##,
-            Primitive::Number(Cell::new(Number::U8(50 % 2))),
-            U8
-        );
+        eval_and_compare!(r##"50u8 - 2u8"##, Primitive::Number(Number::U8(50 - 2)), U8);
+        eval_and_compare!(r##"50u8 * 2u8"##, Primitive::Number(Number::U8(50 * 2)), U8);
+        eval_and_compare!(r##"50u8 / 2u8"##, Primitive::Number(Number::U8(50 / 2)), U8);
+        eval_and_compare!(r##"50u8 % 2u8"##, Primitive::Number(Number::U8(50 % 2)), U8);
         eval_and_compare!(
             r##"40u8 << 2u8"##,
-            Primitive::Number(Cell::new(Number::U8(40u8 << 2u8))),
+            Primitive::Number(Number::U8(40u8 << 2u8)),
             U8
         );
         eval_and_compare!(
             r##"40u8 >> 2u8"##,
-            Primitive::Number(Cell::new(Number::U8(40u8 >> 2u8))),
+            Primitive::Number(Number::U8(40u8 >> 2u8)),
             U8
         );
         eval_and_compare!(
             r##"48u8 & 48u8"##,
-            Primitive::Number(Cell::new(Number::U8(48u8 & 48u8))),
+            Primitive::Number(Number::U8(48u8 & 48u8)),
             U8
         );
         eval_and_compare!(
             r##"40u8 | 42u8"##,
-            Primitive::Number(Cell::new(Number::U8(40u8 | 42u8))),
+            Primitive::Number(Number::U8(40u8 | 42u8)),
             U8
         );
         eval_and_compare!(
             r##"40u8 ^ 42u8"##,
-            Primitive::Number(Cell::new(Number::U8(40u8 ^ 42u8))),
+            Primitive::Number(Number::U8(40u8 ^ 42u8)),
             U8
         );
         eval_and_compare_bool!(r##"20u8 > 2u8"##, Primitive::Bool(true));
@@ -1419,52 +1414,48 @@ mod tests {
         eval_and_compare!(r##"400i128 + 20i128"##, v_num!(I128, 420), I128);
         eval_and_compare!(
             r##"400i128 - 800i128"##,
-            Primitive::Number(Cell::new(Number::I128(400 - 800))),
+            Primitive::Number(Number::I128(400 - 800)),
             I128
         );
         eval_and_compare!(
             r##"400i128 * 5i128"##,
-            Primitive::Number(Cell::new(Number::I128(400 * 5))),
+            Primitive::Number(Number::I128(400 * 5)),
             I128
         );
         eval_and_compare!(
             r##"400i128 / 2i128"##,
-            Primitive::Number(Cell::new(Number::I128(400 / 2))),
+            Primitive::Number(Number::I128(400 / 2)),
             I128
         );
         eval_and_compare!(
             r##"400i128 % 2i128"##,
-            Primitive::Number(Cell::new(Number::I128(400 % 2))),
+            Primitive::Number(Number::I128(400 % 2)),
             I128
         );
-        eval_and_compare!(
-            r##"-20i128"##,
-            Primitive::Number(Cell::new(Number::I128(-20))),
-            I128
-        );
+        eval_and_compare!(r##"-20i128"##, Primitive::Number(Number::I128(-20)), I128);
         eval_and_compare!(
             r##"400i128 << 20i128"##,
-            Primitive::Number(Cell::new(Number::I128(400i128 << 20i128))),
+            Primitive::Number(Number::I128(400i128 << 20i128)),
             I128
         );
         eval_and_compare!(
             r##"400i128 >> 20i128"##,
-            Primitive::Number(Cell::new(Number::I128(400i128 >> 20i128))),
+            Primitive::Number(Number::I128(400i128 >> 20i128)),
             I128
         );
         eval_and_compare!(
             r##"428i128 & 428i128"##,
-            Primitive::Number(Cell::new(Number::I128(428i128 & 428i128))),
+            Primitive::Number(Number::I128(428i128 & 428i128)),
             I128
         );
         eval_and_compare!(
             r##"400i128 | 420i128"##,
-            Primitive::Number(Cell::new(Number::I128(400i128 | 420i128))),
+            Primitive::Number(Number::I128(400i128 | 420i128)),
             I128
         );
         eval_and_compare!(
             r##"400i128 ^ 420i128"##,
-            Primitive::Number(Cell::new(Number::I128(400i128 ^ 420i128))),
+            Primitive::Number(Number::I128(400i128 ^ 420i128)),
             I128
         );
         eval_and_compare_bool!(r##"20i128 > 2i128"##, Primitive::Bool(true));
@@ -1486,57 +1477,49 @@ mod tests {
         eval_and_compare!(r##"400i64 + 20i64"##, v_num!(I64, 420), I64);
         eval_and_compare!(
             r##"400i64 - 800i64"##,
-            Primitive::Number(Cell::new(Number::I64(400 - 800))),
+            Primitive::Number(Number::I64(400 - 800)),
             I64
         );
         eval_and_compare!(
             r##"400i64 * 5i64"##,
-            Primitive::Number(Cell::new(Number::I64(400 * 5))),
+            Primitive::Number(Number::I64(400 * 5)),
             I64
         );
         eval_and_compare!(
             r##"400i64 / 2i64"##,
-            Primitive::Number(Cell::new(Number::I64(400 / 2))),
+            Primitive::Number(Number::I64(400 / 2)),
             I64
         );
         eval_and_compare!(
             r##"400i64 % 2i64"##,
-            Primitive::Number(Cell::new(Number::I64(400 % 2))),
+            Primitive::Number(Number::I64(400 % 2)),
             I64
         );
-        eval_and_compare!(
-            r##"-20i64"##,
-            Primitive::Number(Cell::new(Number::I64(-20))),
-            I64
-        );
-        eval_and_compare!(
-            r##"-20"##,
-            Primitive::Number(Cell::new(Number::I64(-20))),
-            I64
-        );
+        eval_and_compare!(r##"-20i64"##, Primitive::Number(Number::I64(-20)), I64);
+        eval_and_compare!(r##"-20"##, Primitive::Number(Number::I64(-20)), I64);
         eval_and_compare!(
             r##"400i64 << 20i64"##,
-            Primitive::Number(Cell::new(Number::I64(400i64 << 20i64))),
+            Primitive::Number(Number::I64(400i64 << 20i64)),
             I64
         );
         eval_and_compare!(
             r##"400i64 >> 20i64"##,
-            Primitive::Number(Cell::new(Number::I64(400i64 >> 20i64))),
+            Primitive::Number(Number::I64(400i64 >> 20i64)),
             I64
         );
         eval_and_compare!(
             r##"428i64 & 428i64"##,
-            Primitive::Number(Cell::new(Number::I64(428i64 & 428i64))),
+            Primitive::Number(Number::I64(428i64 & 428i64)),
             I64
         );
         eval_and_compare!(
             r##"400i64 | 420i64"##,
-            Primitive::Number(Cell::new(Number::I64(400i64 | 420i64))),
+            Primitive::Number(Number::I64(400i64 | 420i64)),
             I64
         );
         eval_and_compare!(
             r##"400i64 ^ 420i64"##,
-            Primitive::Number(Cell::new(Number::I64(400i64 ^ 420i64))),
+            Primitive::Number(Number::I64(400i64 ^ 420i64)),
             I64
         );
         eval_and_compare_bool!(r##"20i64 > 2i64"##, Primitive::Bool(true));
@@ -1557,52 +1540,48 @@ mod tests {
         eval_and_compare!(r##"400i32 + 20i32"##, v_num!(I32, 420), I32);
         eval_and_compare!(
             r##"400i32 - 800i32"##,
-            Primitive::Number(Cell::new(Number::I32(400 - 800))),
+            Primitive::Number(Number::I32(400 - 800)),
             I32
         );
         eval_and_compare!(
             r##"400i32 * 5i32"##,
-            Primitive::Number(Cell::new(Number::I32(400 * 5))),
+            Primitive::Number(Number::I32(400 * 5)),
             I32
         );
         eval_and_compare!(
             r##"400i32 / 2i32"##,
-            Primitive::Number(Cell::new(Number::I32(400 / 2))),
+            Primitive::Number(Number::I32(400 / 2)),
             I32
         );
         eval_and_compare!(
             r##"400i32 % 2i32"##,
-            Primitive::Number(Cell::new(Number::I32(400 % 2))),
+            Primitive::Number(Number::I32(400 % 2)),
             I32
         );
-        eval_and_compare!(
-            r##"-20i32"##,
-            Primitive::Number(Cell::new(Number::I32(-20))),
-            I32
-        );
+        eval_and_compare!(r##"-20i32"##, Primitive::Number(Number::I32(-20)), I32);
         eval_and_compare!(
             r##"400i32 << 20i32"##,
-            Primitive::Number(Cell::new(Number::I32(400i32 << 20i32))),
+            Primitive::Number(Number::I32(400i32 << 20i32)),
             I32
         );
         eval_and_compare!(
             r##"400i32 >> 20i32"##,
-            Primitive::Number(Cell::new(Number::I32(400i32 >> 20i32))),
+            Primitive::Number(Number::I32(400i32 >> 20i32)),
             I32
         );
         eval_and_compare!(
             r##"428i32 & 428i32"##,
-            Primitive::Number(Cell::new(Number::I32(428i32 & 428i32))),
+            Primitive::Number(Number::I32(428i32 & 428i32)),
             I32
         );
         eval_and_compare!(
             r##"400i32 | 420i32"##,
-            Primitive::Number(Cell::new(Number::I32(400i32 | 420i32))),
+            Primitive::Number(Number::I32(400i32 | 420i32)),
             I32
         );
         eval_and_compare!(
             r##"400i32 ^ 420i32"##,
-            Primitive::Number(Cell::new(Number::I32(400i32 ^ 420i32))),
+            Primitive::Number(Number::I32(400i32 ^ 420i32)),
             I32
         );
         eval_and_compare_bool!(r##"20i32 > 2i32"##, Primitive::Bool(true));
@@ -1623,52 +1602,48 @@ mod tests {
         eval_and_compare!(r##"400i16 + 20i16"##, v_num!(I16, 420), I16);
         eval_and_compare!(
             r##"400i16 - 800i16"##,
-            Primitive::Number(Cell::new(Number::I16(400 - 800))),
+            Primitive::Number(Number::I16(400 - 800)),
             I16
         );
         eval_and_compare!(
             r##"400i16 * 5i16"##,
-            Primitive::Number(Cell::new(Number::I16(400 * 5))),
+            Primitive::Number(Number::I16(400 * 5)),
             I16
         );
         eval_and_compare!(
             r##"400i16 / 2i16"##,
-            Primitive::Number(Cell::new(Number::I16(400 / 2))),
+            Primitive::Number(Number::I16(400 / 2)),
             I16
         );
         eval_and_compare!(
             r##"400i16 % 2i16"##,
-            Primitive::Number(Cell::new(Number::I16(400 % 2))),
+            Primitive::Number(Number::I16(400 % 2)),
             I16
         );
-        eval_and_compare!(
-            r##"-20i16"##,
-            Primitive::Number(Cell::new(Number::I16(-20))),
-            I16
-        );
+        eval_and_compare!(r##"-20i16"##, Primitive::Number(Number::I16(-20)), I16);
         eval_and_compare!(
             r##"400i16 << 2i16"##,
-            Primitive::Number(Cell::new(Number::I16(400i16 << 2i16))),
+            Primitive::Number(Number::I16(400i16 << 2i16)),
             I16
         );
         eval_and_compare!(
             r##"400i16 >> 2i16"##,
-            Primitive::Number(Cell::new(Number::I16(400i16 >> 2i16))),
+            Primitive::Number(Number::I16(400i16 >> 2i16)),
             I16
         );
         eval_and_compare!(
             r##"428i16 & 428i16"##,
-            Primitive::Number(Cell::new(Number::I16(428i16 & 428i16))),
+            Primitive::Number(Number::I16(428i16 & 428i16)),
             I16
         );
         eval_and_compare!(
             r##"400i16 | 420i16"##,
-            Primitive::Number(Cell::new(Number::I16(400i16 | 420i16))),
+            Primitive::Number(Number::I16(400i16 | 420i16)),
             I16
         );
         eval_and_compare!(
             r##"400i16 ^ 420i16"##,
-            Primitive::Number(Cell::new(Number::I16(400i16 ^ 420i16))),
+            Primitive::Number(Number::I16(400i16 ^ 420i16)),
             I16
         );
         eval_and_compare_bool!(r##"20i16 > 2i16"##, Primitive::Bool(true));
@@ -1689,52 +1664,36 @@ mod tests {
         eval_and_compare!(r##"100i8 + 20i8"##, v_num!(I8, 120), I8);
         eval_and_compare!(
             r##"20i8 - 10i8"##,
-            Primitive::Number(Cell::new(Number::I8(20 - 10))),
+            Primitive::Number(Number::I8(20 - 10)),
             I8
         );
-        eval_and_compare!(
-            r##"20i8 * 5i8"##,
-            Primitive::Number(Cell::new(Number::I8(20 * 5))),
-            I8
-        );
-        eval_and_compare!(
-            r##"20i8 / 2i8"##,
-            Primitive::Number(Cell::new(Number::I8(20 / 2))),
-            I8
-        );
-        eval_and_compare!(
-            r##"20i8 % 2i8"##,
-            Primitive::Number(Cell::new(Number::I8(20 % 2))),
-            I8
-        );
-        eval_and_compare!(
-            r##"-20i8"##,
-            Primitive::Number(Cell::new(Number::I8(-20))),
-            I8
-        );
+        eval_and_compare!(r##"20i8 * 5i8"##, Primitive::Number(Number::I8(20 * 5)), I8);
+        eval_and_compare!(r##"20i8 / 2i8"##, Primitive::Number(Number::I8(20 / 2)), I8);
+        eval_and_compare!(r##"20i8 % 2i8"##, Primitive::Number(Number::I8(20 % 2)), I8);
+        eval_and_compare!(r##"-20i8"##, Primitive::Number(Number::I8(-20)), I8);
         eval_and_compare!(
             r##"40i8 << 2i8"##,
-            Primitive::Number(Cell::new(Number::I8(40i8 << 2i8))),
+            Primitive::Number(Number::I8(40i8 << 2i8)),
             I8
         );
         eval_and_compare!(
             r##"40i8 >> 2i8"##,
-            Primitive::Number(Cell::new(Number::I8(40i8 >> 2i8))),
+            Primitive::Number(Number::I8(40i8 >> 2i8)),
             I8
         );
         eval_and_compare!(
             r##"48i8 & 48i8"##,
-            Primitive::Number(Cell::new(Number::I8(48i8 & 48i8))),
+            Primitive::Number(Number::I8(48i8 & 48i8)),
             I8
         );
         eval_and_compare!(
             r##"40i8 | 42i8"##,
-            Primitive::Number(Cell::new(Number::I8(40i8 | 42i8))),
+            Primitive::Number(Number::I8(40i8 | 42i8)),
             I8
         );
         eval_and_compare!(
             r##"40i8 ^ 42i8"##,
-            Primitive::Number(Cell::new(Number::I8(40i8 ^ 42i8))),
+            Primitive::Number(Number::I8(40i8 ^ 42i8)),
             I8
         );
         eval_and_compare_bool!(r##"20i8 > 2i8"##, Primitive::Bool(true));
@@ -1754,29 +1713,25 @@ mod tests {
     fn valid_operation_f64() {
         eval_and_compare!(
             r##"10.5 + 20.2"##,
-            Primitive::Number(Cell::new(Number::F64(10.5 + 20.2))),
+            Primitive::Number(Number::F64(10.5 + 20.2)),
             F64
         );
         eval_and_compare!(
             r##"10.5 - 20.2"##,
-            Primitive::Number(Cell::new(Number::F64(10.5 - 20.2))),
+            Primitive::Number(Number::F64(10.5 - 20.2)),
             F64
         );
         eval_and_compare!(
             r##"10.5 * 20.2"##,
-            Primitive::Number(Cell::new(Number::F64(10.5 * 20.2))),
+            Primitive::Number(Number::F64(10.5 * 20.2)),
             F64
         );
         eval_and_compare!(
             r##"10.5 / 20.2"##,
-            Primitive::Number(Cell::new(Number::F64(10.5 / 20.2))),
+            Primitive::Number(Number::F64(10.5 / 20.2)),
             F64
         );
-        eval_and_compare!(
-            r##"-20.0"##,
-            Primitive::Number(Cell::new(Number::F64(-20.0))),
-            F64
-        );
+        eval_and_compare!(r##"-20.0"##, Primitive::Number(Number::F64(-20.0)), F64);
         eval_and_compare_bool!(r##"20f64 > 2f64"##, Primitive::Bool(true));
         eval_and_compare_bool!(r##"2f64 > 20f64"##, Primitive::Bool(false));
         eval_and_compare_bool!(r##"20f64 >= 2f64"##, Primitive::Bool(true));
@@ -1792,7 +1747,7 @@ mod tests {
     }
     #[test]
     fn valid_addition_string() {
-        let expr = Expression::parse(
+        let mut expr = Expression::parse(
             r##"
            "Hello " + "World"
         "##
@@ -1803,27 +1758,29 @@ mod tests {
 
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &None)
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None)
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
-        expr.gencode(&scope, &instructions)
+        let mut instructions = CasmProgram::default();
+        expr.gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -1841,7 +1798,7 @@ mod tests {
 
     #[test]
     fn valid_addition_string_with_padding() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hello : str<10> = "Hello ";

@@ -1,13 +1,10 @@
-use std::borrow::Borrow;
-use std::cell::{Ref, RefCell};
-
 use ulid::Ulid;
 
 use crate::ast::utils::strings::ID;
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{StaticType, StringType};
-use crate::semantic::{Either, TypeOf};
+use crate::semantic::TypeOf;
 
 use crate::vm::allocator::align;
 use crate::vm::allocator::heap::Heap;
@@ -22,18 +19,20 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::{CasmMetadata, Executable, Printer, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, MutRc, Resolve, SemanticError},
+    semantic::{EType, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
     },
 };
 
+use super::{ERROR_VALUE, OK_VALUE};
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum IOFn {
     Scan,
-    Print(RefCell<Option<EType>>),
-    Println(RefCell<Option<EType>>),
+    Print(Option<EType>),
+    Println(Option<EType>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,14 +43,23 @@ pub enum IOCasm {
     RequestScan,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for IOCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IOCasm {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             IOCasm::Print(_) => stdio.push_casm_lib(engine, "print"),
             IOCasm::Flush(true) => stdio.push_casm_lib(engine, "flushln"),
             IOCasm::Flush(false) => stdio.push_casm_lib(engine, "flush"),
             IOCasm::Scan => stdio.push_casm_lib(engine, "scan"),
             IOCasm::RequestScan => stdio.push_casm_lib(engine, "rscan"),
+        }
+    }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            IOCasm::Print(_) => crate::vm::vm::CasmWeight::ZERO,
+            IOCasm::Flush(_) => crate::vm::vm::CasmWeight::EXTREME,
+            IOCasm::Scan => crate::vm::vm::CasmWeight::HIGH,
+            IOCasm::RequestScan => crate::vm::vm::CasmWeight::EXTREME,
         }
     }
 }
@@ -78,6 +86,7 @@ pub enum PrintCasm {
     PrintChar,
     PrintBool,
     PrintString,
+    PrintError,
     PrintList {
         length: Option<usize>,
         continue_label: Ulid,
@@ -96,8 +105,8 @@ impl IOFn {
             None => {}
         }
         match id.as_str() {
-            lexem::PRINT => Some(IOFn::Print(RefCell::default())),
-            lexem::PRINTLN => Some(IOFn::Println(RefCell::default())),
+            lexem::PRINT => Some(IOFn::Print(None)),
+            lexem::PRINTLN => Some(IOFn::Println(None)),
             lexem::SCAN => Some(IOFn::Scan),
             _ => None,
         }
@@ -107,29 +116,33 @@ impl Resolve for IOFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             IOFn::Print(param_type) => {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let param = extra.first().unwrap();
-                let _ = param.resolve(scope, &None, &None)?;
-                *param_type.borrow_mut() = Some(param.type_of(&scope.as_ref().borrow())?);
+                let param = extra.first_mut().unwrap();
+                let _ = param.resolve::<G>(scope, &None, &mut None)?;
+                *param_type = Some(
+                    param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
+                );
                 Ok(())
             }
             IOFn::Println(param_type) => {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let param = extra.first().unwrap();
-                let _ = param.resolve(scope, &None, &None)?;
-                *param_type.borrow_mut() = Some(param.type_of(&scope.as_ref().borrow())?);
+                let param = extra.first_mut().unwrap();
+                let _ = param.resolve::<G>(scope, &None, &mut None)?;
+                *param_type = Some(
+                    param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
+                );
                 Ok(())
             }
             IOFn::Scan => {
@@ -142,7 +155,7 @@ impl Resolve for IOFn {
     }
 }
 impl TypeOf for IOFn {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -157,12 +170,12 @@ impl TypeOf for IOFn {
 impl GenerateCode for IOFn {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             IOFn::Print(inner) => {
-                let binding = inner.borrow();
+                let binding = inner;
 
                 let Some(param_type) = binding.as_ref() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -175,7 +188,7 @@ impl GenerateCode for IOFn {
                 Ok(())
             }
             IOFn::Println(inner) => {
-                let binding = inner.borrow();
+                let binding = inner;
 
                 let Some(param_type) = binding.as_ref() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -200,17 +213,18 @@ impl GenerateCode for IOFn {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IOCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for IOCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
-            IOCasm::Print(print) => print.execute(program, stack, heap, stdio, engine),
+            IOCasm::Print(print) => print.execute(program, stack, heap, stdio, engine, tid),
             IOCasm::Flush(ln) => {
                 if *ln {
                     stdio.stdout.flushln(engine);
@@ -231,22 +245,18 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IOCasm {
                     let len_bytes = len.to_le_bytes().as_slice().to_vec();
                     let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                    let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                    let address = heap.alloc(alloc_size as usize)?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                     let data = content.as_bytes();
                     /* Write len */
-                    let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                    let _ = heap.write(address, &len_bytes)?;
                     /* Write capacity */
-                    let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                    let _ = heap.write(address + 8, &cap_bytes)?;
                     /* Write slice */
-                    let _ = heap
-                        .write(address + 16, &data.to_vec())
-                        .map_err(|e| e.into())?;
+                    let _ = heap.write(address + 16, &data.to_vec())?;
 
-                    let _ = stack
-                        .push_with(&address.to_le_bytes())
-                        .map_err(|e| e.into())?;
+                    let _ = stack.push_with(&address.to_le_bytes())?;
                     program.incr();
                     Ok(())
                 } else {
@@ -264,14 +274,15 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IOCasm {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for PrintCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             PrintCasm::PrintID(id) => {
@@ -341,6 +352,15 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for PrintCasm {
                 let n = n.trim_end_matches(char::from(0));
                 stdio.stdout.push(&format!("\"{}\"", n));
             }
+
+            PrintCasm::PrintError => {
+                let n = OpPrimitive::get_num1::<u8>(stack)?;
+                if n == ERROR_VALUE[0] {
+                    stdio.stdout.push("Error");
+                } else if n == OK_VALUE[0] {
+                    stdio.stdout.push("Ok");
+                }
+            }
             PrintCasm::StdOutBufOpen => {
                 stdio.stdout.spawn_buffer();
             }
@@ -365,29 +385,29 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for PrintCasm {
 
                 program.incr();
                 let start = program.cursor_get();
-                let mut current_instruction = None;
-                let borrowed_main = program.main.as_ref().borrow();
+
                 stdio.stdout.spawn_buffer();
 
                 stdio.stdout.push(crate::ast::utils::lexem::SQ_BRA_C);
                 for idx in 0..length {
                     loop {
                         let cursor = program.cursor_get();
-                        current_instruction = borrowed_main.get(cursor);
-                        if let Some(instruction) = current_instruction {
-                            match instruction {
-                                Casm::Label(Label { id, .. }) => {
-                                    if id == continue_label {
-                                        program.cursor_set(start);
-                                        break;
-                                    } else {
-                                        program.incr();
-                                    }
+                        let instruction = match program.main.get(cursor) {
+                            Some(instruction) => instruction.clone(), // Clone to avoid borrow conflict
+                            None => return Ok(()),
+                        };
+                        match instruction {
+                            Casm::Label(Label { id, .. }) => {
+                                if id == *continue_label {
+                                    program.cursor_set(start);
+                                    break;
+                                } else {
+                                    program.incr();
                                 }
-                                _ => {
-                                    let _ =
-                                        instruction.execute(program, stack, heap, stdio, engine)?;
-                                }
+                            }
+                            _ => {
+                                let _ = instruction
+                                    .execute(program, stack, heap, stdio, engine, tid)?;
                             }
                         }
                     }
@@ -412,7 +432,6 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for PrintCasm {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
 
     use crate::{
         ast::{statements::Statement, TryParse},
@@ -435,7 +454,7 @@ mod tests {
         for text in vec![
             "u128", "u64", "u32", "u16", "u8", "i128", "i64", "i32", "i16", "i8", "f64", "",
         ] {
-            let statement = Statement::parse(format!("print(64{});", text).as_str().into())
+            let mut statement = Statement::parse(format!("print(64{});", text).as_str().into())
                 .expect("Parsing should have succeeded")
                 .1;
 
@@ -446,7 +465,7 @@ mod tests {
 
     #[test]
     fn valid_print_char() {
-        let statement = Statement::parse("print('a');".into())
+        let mut statement = Statement::parse("print('a');".into())
             .expect("Parsing should have succeeded")
             .1;
         let output = compile_statement_for_stdout!(statement);
@@ -455,7 +474,7 @@ mod tests {
     #[test]
     fn valid_print_bool() {
         for text in vec!["true", "false"] {
-            let statement = Statement::parse(format!("print({});", text).as_str().into())
+            let mut statement = Statement::parse(format!("print({});", text).as_str().into())
                 .expect("Parsing should have succeeded")
                 .1;
 
@@ -466,7 +485,7 @@ mod tests {
     #[test]
     fn valid_print_strslice_complex() {
         for text in vec!["\"Hello World\"", "\"你好世界\""] {
-            let statement = Statement::parse(format!("print({});", text).as_str().into())
+            let mut statement = Statement::parse(format!("print({});", text).as_str().into())
                 .expect("Parsing should have succeeded")
                 .1;
 
@@ -477,7 +496,7 @@ mod tests {
 
     #[test]
     fn valid_print_strslice_with_padding() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         {
             let x:str<20> = "Hello World";
@@ -493,7 +512,7 @@ mod tests {
     }
     #[test]
     fn valid_print_strslice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         {
             let x = "Hello World";
@@ -509,7 +528,7 @@ mod tests {
     }
     #[test]
     fn valid_print_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         {
             let x = string("Hello World");
@@ -526,7 +545,7 @@ mod tests {
 
     #[test]
     fn valid_print_tuple() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print((420,true));
         "##
@@ -541,7 +560,7 @@ mod tests {
 
     #[test]
     fn valid_print_rec_tuple() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print((420,(69,27),true));
         "##
@@ -556,7 +575,7 @@ mod tests {
 
     #[test]
     fn valid_print_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print([5,7,8,9,10]);
         "##
@@ -570,7 +589,7 @@ mod tests {
     }
     #[test]
     fn valid_print_rec_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print([[2,4],[1,3]]);
         "##
@@ -584,7 +603,7 @@ mod tests {
     }
     #[test]
     fn valid_print_rec_slice_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print([[[1,2],[3,4]],[[5,6],[7,8]],[[9,10],[11,12]]]);
         "##
@@ -599,7 +618,7 @@ mod tests {
 
     #[test]
     fn valid_print_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print(vec[1,2,3,4]);
         "##
@@ -613,8 +632,26 @@ mod tests {
     }
 
     #[test]
+    fn robustness_print_vec() {
+        let mut statement = Statement::parse(
+            r##"
+            let _ = {
+                println(vec[1,2,3,4]);
+                println("Hello World");
+                return ();
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let output = compile_statement_for_stdout!(statement);
+        assert_eq!(&output, "Hello World\n");
+    }
+
+    #[test]
     fn valid_print_vec_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print(vec[string("Hello"),string(" "),string("world")]);
         "##
@@ -629,7 +666,7 @@ mod tests {
 
     #[test]
     fn valid_print_addr() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             {
                 let x = 420; // 0x20
@@ -649,7 +686,7 @@ mod tests {
 
     #[test]
     fn valid_print_struct() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             {
                 struct Point {
@@ -674,7 +711,7 @@ mod tests {
 
     #[test]
     fn valid_print_enum() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             {
                 enum Color {
@@ -697,7 +734,7 @@ mod tests {
 
     #[test]
     fn valid_print_union() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             {
                 union Geo {
@@ -731,8 +768,10 @@ mod tests {
             out: String::new(),
             in_buf: String::new(),
         };
-        let mut ciphel = Ciphel::<crate::vm::vm::StdinTestGameEngine>::new();
-        let tid = ciphel.start().expect("starting should not fail");
+        let mut ciphel = Ciphel::new();
+        let tid = ciphel
+            .start_arena(&mut engine)
+            .expect("starting should not fail");
 
         let src = r##"
         
@@ -742,7 +781,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(tid, src)
+            .compile::<StdinTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");

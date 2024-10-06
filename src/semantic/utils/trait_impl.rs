@@ -1,5 +1,3 @@
-use std::cell::Ref;
-
 use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::{expressions::data::Data, utils::strings::ID},
@@ -20,7 +18,11 @@ impl<T> CompatibleWith for Option<T>
 where
     T: CompatibleWith,
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -42,7 +44,11 @@ where
 }
 
 impl CompatibleWith for EType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf,
 
@@ -55,7 +61,7 @@ impl CompatibleWith for EType {
     }
 }
 
-impl<S: SizeOf, U: SizeOf> SizeOf for Either<S, U> {
+impl SizeOf for Either {
     fn size_of(&self) -> usize {
         match self {
             Either::Static(value) => value.size_of(),
@@ -65,7 +71,7 @@ impl<S: SizeOf, U: SizeOf> SizeOf for Either<S, U> {
 }
 
 impl TypeOf for EType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -77,7 +83,11 @@ impl TypeOf for EType {
 }
 
 impl MergeType for EType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -262,11 +272,7 @@ impl GetSubTypes for EType {
     }
 }
 
-impl<User, Static> OperandMerging for Either<User, Static>
-where
-    User: CompatibleWith + TypeOf + OperandMerging,
-    Static: CompatibleWith + TypeOf + OperandMerging,
-{
+impl OperandMerging for Either {
     fn can_substract(&self) -> Result<(), SemanticError> {
         match self {
             Either::Static(value) => value.can_substract(),
@@ -277,7 +283,7 @@ where
     fn merge_substraction<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -303,7 +309,7 @@ where
     fn merge_product<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -323,7 +329,7 @@ where
     fn merge_addition<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -340,7 +346,11 @@ where
             Either::User(value) => value.can_shift(),
         }
     }
-    fn merge_shift<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge_shift<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -359,7 +369,7 @@ where
     fn merge_bitwise_and<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -379,7 +389,7 @@ where
     fn merge_bitwise_xor<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -399,7 +409,7 @@ where
     fn merge_bitwise_or<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -409,7 +419,11 @@ where
             Either::User(value) => value.merge_bitwise_or(other, scope),
         }
     }
-    fn cast<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn cast<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -427,7 +441,7 @@ where
     fn merge_comparaison<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -447,7 +461,7 @@ where
     fn merge_equation<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -467,7 +481,7 @@ where
     fn merge_logical_and<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -487,7 +501,7 @@ where
     fn merge_logical_or<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -511,7 +525,7 @@ impl DeserializeFrom for EType {
 }
 
 impl Printer for EType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             Either::Static(value) => value.build_printer(instructions),
             Either::User(value) => value.build_printer(instructions),
@@ -520,13 +534,13 @@ impl Printer for EType {
 }
 
 impl NextItem for EType {
-    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_address(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             Either::Static(value) => value.init_address(instructions),
             Either::User(_value) => Err(CodeGenerationError::UnresolvedError),
         }
     }
-    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_index(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             Either::Static(value) => value.init_index(instructions),
             Either::User(_value) => Err(CodeGenerationError::UnresolvedError),
@@ -535,7 +549,7 @@ impl NextItem for EType {
 
     fn build_item(
         &self,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
         end_label: ulid::Ulid,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -544,7 +558,7 @@ impl NextItem for EType {
         }
     }
 
-    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn next(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             Either::Static(value) => value.next(instructions),
             Either::User(_value) => Err(CodeGenerationError::UnresolvedError),

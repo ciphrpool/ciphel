@@ -1,10 +1,8 @@
-use std::borrow::Borrow;
-
 use num_traits::ToBytes;
 
-use crate::ast::expressions::{Atomic, Expression};
+use crate::arw_read;
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::{scope, AccessLevel};
+use crate::semantic::AccessLevel;
 use crate::vm::allocator::stack::Offset;
 use crate::vm::platform::core::alloc::{AllocCasm, DerefHashing};
 use crate::vm::platform::core::CoreCasm;
@@ -13,12 +11,8 @@ use crate::vm::vm::Locatable;
 use crate::{
     ast::utils::strings::ID,
     semantic::{
-        scope::{
-            static_types::{NumberType, StaticType},
-            type_traits::GetSubTypes,
-            user_type_impl::UserType,
-        },
-        EType, Either, Metadata, MutRc, SizeOf,
+        scope::{type_traits::GetSubTypes, user_type_impl::UserType},
+        Either, SizeOf,
     },
     vm::{
         allocator::{align, MemoryAddress},
@@ -26,9 +20,8 @@ use crate::{
             alloc::{Access, Alloc},
             branch::{Goto, Label},
             data,
-            locate::{Locate, LocateUTF8Char},
+            locate::Locate,
             mem::Mem,
-            operation::{Addition, Mult, OpPrimitive, Operation, OperationKind},
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode},
@@ -43,8 +36,8 @@ use super::{
 impl GenerateCode for Data {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Data::Primitive(value) => value.gencode(scope, instructions),
@@ -68,8 +61,8 @@ impl GenerateCode for Data {
 impl Locatable for Data {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Data::Variable(Variable {
@@ -77,12 +70,14 @@ impl Locatable for Data {
                 from_field,
                 metadata,
             }) => {
-                if from_field.get() {
+                if *from_field {
                     Ok(())
                 } else {
-                    let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
+                    let (var, address, level) =
+                        crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
+                            .access_var(id)?;
 
-                    let var_type = &var.as_ref().type_sig;
+                    let var_type = &arw_read!(var, CodeGenerationError::ConcurrencyError)?.type_sig;
                     let _var_size = var_type.size_of();
 
                     instructions.push(Casm::Locate(Locate {
@@ -144,8 +139,8 @@ impl Locatable for Data {
 impl GenerateCode for Number {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
             super::Number::U8(data) => data::Data::Serialized {
@@ -191,11 +186,11 @@ impl GenerateCode for Number {
 impl GenerateCode for Primitive {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
-            Primitive::Number(data) => match data.get() {
+            Primitive::Number(data) => match data {
                 super::Number::U8(data) => data::Data::Serialized {
                     data: data.to_le_bytes().into(),
                 },
@@ -250,10 +245,10 @@ impl GenerateCode for Primitive {
 impl GenerateCode for Variable {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        if self.from_field.get() {
+        if self.from_field {
             let Some(var_type) = self.metadata.signature() else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
@@ -266,9 +261,11 @@ impl GenerateCode for Variable {
             }));
             Ok(())
         } else {
-            let (var, address, level) = scope.as_ref().borrow().access_var(&self.id)?;
-            // dbg!((&var, &address, &level));
-            let var_type = &var.as_ref().type_sig;
+            let (var, address, level) =
+                crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
+                    .access_var(&self.id)?;
+
+            let var_type = &arw_read!(var, CodeGenerationError::ConcurrencyError)?.type_sig;
             let var_size = var_type.size_of();
             if var_size == 0 {
                 return Ok(());
@@ -289,8 +286,8 @@ impl GenerateCode for Variable {
 impl GenerateCode for Slice {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -318,13 +315,13 @@ impl GenerateCode for Slice {
 impl GenerateCode for StrSlice {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let str_bytes: Box<[u8]> = self.value.as_bytes().into();
         let size = (&str_bytes).len() as u64;
         instructions.push(Casm::Data(data::Data::Serialized { data: str_bytes }));
-        let padding = self.padding.get();
+        let padding = self.padding;
         if padding > 0 {
             instructions.push(Casm::Data(data::Data::Serialized {
                 data: vec![0; padding].into(),
@@ -340,8 +337,8 @@ impl GenerateCode for StrSlice {
 impl GenerateCode for Vector {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -386,8 +383,8 @@ impl GenerateCode for Vector {
 impl GenerateCode for Tuple {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -411,8 +408,8 @@ impl GenerateCode for Tuple {
 impl GenerateCode for ExprScope {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             ExprScope::Scope(value) => value.gencode(scope, instructions),
@@ -424,8 +421,8 @@ impl GenerateCode for ExprScope {
 impl GenerateCode for Closure {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let end_closure = Label::gen();
 
@@ -448,10 +445,15 @@ impl GenerateCode for Closure {
                 .scope
                 .scope()
                 .map_err(|_| CodeGenerationError::UnresolvedError)?;
-            let inner_scope = binding.as_ref().borrow();
+            let inner_scope = binding.as_ref();
 
-            for var in inner_scope.env_vars() {
-                let var_type = &var.as_ref().type_sig;
+            for var in inner_scope
+                .try_read()
+                .map_err(|_| CodeGenerationError::ConcurrencyError)?
+                .env_vars()
+                .map_err(|_| CodeGenerationError::ConcurrencyError)?
+            {
+                let var_type = &var.type_sig;
                 let var_size = var_type.size_of();
                 alloc_size += var_size;
                 env_size += var_size;
@@ -461,11 +463,16 @@ impl GenerateCode for Closure {
             instructions.push(Casm::Data(data::Data::Serialized {
                 data: env_size.to_le_bytes().into(),
             }));
-            let outer_scope = scope.as_ref().borrow();
+            let outer_scope = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
             // Load Env variables
-            for var in inner_scope.env_vars() {
+            for var in inner_scope
+                .try_read()
+                .map_err(|_| CodeGenerationError::ConcurrencyError)?
+                .env_vars()
+                .map_err(|_| CodeGenerationError::ConcurrencyError)?
+            {
                 let (var, address, level) = outer_scope.access_var(&var.id)?;
-                let var_type = &var.as_ref().type_sig;
+                let var_type = &arw_read!(var, CodeGenerationError::ConcurrencyError)?.type_sig;
                 let var_size = var_type.size_of();
                 instructions.push(Casm::Access(Access::Static {
                     address: MemoryAddress::Stack {
@@ -488,8 +495,8 @@ impl GenerateCode for Closure {
 impl GenerateCode for Address {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // let _ = rec_addr_gencode(&self.value, scope, instructions)?;
         let _ = self.value.locate(scope, instructions)?;
@@ -500,8 +507,8 @@ impl GenerateCode for Address {
 impl GenerateCode for PtrAccess {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.value.gencode(scope, instructions)?;
         let mut size = self
@@ -525,8 +532,8 @@ impl GenerateCode for PtrAccess {
 impl GenerateCode for Struct {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -565,8 +572,8 @@ impl GenerateCode for Struct {
 impl GenerateCode for Union {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -635,8 +642,8 @@ impl GenerateCode for Union {
 impl GenerateCode for Enum {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -668,8 +675,8 @@ impl GenerateCode for Enum {
 impl GenerateCode for Map {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let cap = align(self.fields.len());
         let Some(map_type) = self.metadata.signature() else {
@@ -712,7 +719,6 @@ impl GenerateCode for Map {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, mem};
 
     use num_traits::Zero;
 
@@ -724,26 +730,20 @@ mod tests {
                 data::{Data, Number},
                 Atomic, Expression,
             },
-            statements::{self, Statement},
+            statements::Statement,
             TryParse,
         },
         compile_expression_with_type, compile_statement, e_static, p_num,
         semantic::{
             scope::{
                 scope::Scope,
-                static_types::{
-                    PrimitiveType, SliceType, StrSliceType, StringType, TupleType, VecType,
-                },
+                static_types::{PrimitiveType, SliceType, StrSliceType, TupleType, VecType},
                 user_type_impl,
             },
-            Resolve, TypeOf,
+            Resolve,
         },
         v_num,
-        vm::{
-            allocator::Memory,
-            casm::branch::BranchTable,
-            vm::{DeserializeFrom, Executable, Runtime},
-        },
+        vm::vm::{DeserializeFrom, Executable, Runtime},
     };
     use crate::{clear_stack, compile_expression};
 
@@ -798,7 +798,7 @@ mod tests {
 
         let (expr, data) = compile_expression!(Primitive, "420.69");
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::F64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::F64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -809,7 +809,9 @@ mod tests {
     fn valid_tuple() {
         let (expr, data) = compile_expression!(Tuple, "(true,17)");
         let result: Tuple = TupleType(vec![
-            e_static!(StaticType::Primitive(PrimitiveType::Bool)),
+            e_static!(crate::semantic::scope::static_types::StaticType::Primitive(
+                PrimitiveType::Bool
+            )),
             p_num!(I64),
         ])
         .deserialize_from(&data)
@@ -829,9 +831,13 @@ mod tests {
         let (expr, data) = compile_expression!(Tuple, "(420i128,true,17,'a')");
         let result: Tuple = TupleType(vec![
             p_num!(I128),
-            e_static!(StaticType::Primitive(PrimitiveType::Bool)),
+            e_static!(crate::semantic::scope::static_types::StaticType::Primitive(
+                PrimitiveType::Bool
+            )),
             p_num!(I64),
-            e_static!(StaticType::Primitive(PrimitiveType::Char)),
+            e_static!(crate::semantic::scope::static_types::StaticType::Primitive(
+                PrimitiveType::Char
+            )),
         ])
         .deserialize_from(&data)
         .expect("Deserialization should have succeeded");
@@ -1028,8 +1034,8 @@ mod tests {
             .iter()
             .map(|e| match e {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
-                        Number::I64(n) => Some(n),
+                    match x {
+                        Number::I64(n) => Some(*n),
                         _ => None,
                     }
                 }
@@ -1042,35 +1048,37 @@ mod tests {
     #[test]
     fn valid_vector() {
         // Parse the expression.
-        let expr = Vector::parse("vec[1,2,3,4]".into())
+        let mut expr = Vector::parse("vec[1,2,3,4]".into())
             .expect("Parsing should have succeeded")
             .1;
 
         // Create a new block.
         let scope = Scope::new();
         // Perform semantic check.
-        expr.resolve(&scope, &None, &())
+        expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
-        expr.gencode(&scope, &instructions)
+        let mut instructions = CasmProgram::default();
+        expr.gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -1090,8 +1098,8 @@ mod tests {
             .iter()
             .map(|e| match e {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
-                        Number::I64(n) => Some(n),
+                    match x {
+                        Number::I64(n) => Some(*n),
                         _ => None,
                     }
                 }
@@ -1133,7 +1141,7 @@ mod tests {
 
     #[test]
     fn valid_array_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = [1,2,3,4];
@@ -1149,7 +1157,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1158,7 +1166,7 @@ mod tests {
 
     #[test]
     fn valid_vec_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = vec[1,2,3,4];
@@ -1174,7 +1182,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1183,7 +1191,7 @@ mod tests {
 
     #[test]
     fn valid_str_slice_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = "Hello World";
@@ -1206,7 +1214,7 @@ mod tests {
 
     #[test]
     fn valid_string_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = string("Hello World");
@@ -1229,7 +1237,7 @@ mod tests {
 
     #[test]
     fn valid_tuple_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let tuple = (420,69);
@@ -1245,7 +1253,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1254,7 +1262,7 @@ mod tests {
 
     #[test]
     fn valid_field_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             struct Point {
@@ -1277,7 +1285,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1286,7 +1294,7 @@ mod tests {
 
     #[test]
     fn valid_empty_struct() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             struct Phantom {}
@@ -1307,10 +1315,18 @@ mod tests {
     }
     #[test]
     fn valid_closure() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
-            let f = (x:u64) -> x+1;
+            let f = (x:u64) ->{ 
+                let y:u64;
+                let u:u64;
+                let i:u64;
+                let o:u64;
+                let e:u64;
+                
+                return x+1;
+            };
             return f(68); 
         };
 
@@ -1323,7 +1339,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1331,7 +1347,7 @@ mod tests {
     }
     #[test]
     fn valid_closure_with_stack_env() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let env:u64 = 31;
@@ -1352,7 +1368,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1361,7 +1377,7 @@ mod tests {
 
     #[test]
     fn valid_closure_with_heap_env() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let env : Vec<u64> = vec[2,5];
@@ -1381,7 +1397,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1390,7 +1406,7 @@ mod tests {
 
     #[test]
     fn valid_closure_rec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let blob = 5;
@@ -1412,7 +1428,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1421,11 +1437,16 @@ mod tests {
 
     #[test]
     fn valid_closure_rec_with_env() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let env = 1u64;
             let rec f : dyn fn(u64) -> u64 = move (x:u64) -> {
+                let y:u64;
+                let z:u64;
+                let e:u64;
+                let t:u64;
+                let u:u64;
                 if x >= 5 {
                     return 5u64;
                 }
@@ -1443,7 +1464,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1452,7 +1473,7 @@ mod tests {
 
     #[test]
     fn valid_addr_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = vec[1,2,3,4];
@@ -1469,7 +1490,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1478,7 +1499,7 @@ mod tests {
 
     #[test]
     fn valid_ptr_access_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = vec[1,2,3,4];
@@ -1495,7 +1516,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1504,7 +1525,7 @@ mod tests {
 
     #[test]
     fn valid_map_init() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let hmap : Map<u64,u64> = map {
@@ -1523,12 +1544,11 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        dbg!(&statement);
 
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1537,7 +1557,7 @@ mod tests {
 
     #[test]
     fn valid_map_init_no_typedef() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let hmap = map {
@@ -1560,7 +1580,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");

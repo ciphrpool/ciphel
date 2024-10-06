@@ -1,5 +1,3 @@
-use std::cell::{Cell, Ref};
-
 use crate::{
     ast::utils::strings::ID,
     semantic::{CompatibleWith, EType, SemanticError, TypeOf},
@@ -29,8 +27,8 @@ impl Default for VarState {
 pub struct Var {
     pub id: ID,
     pub type_sig: EType,
-    pub state: Cell<VarState>,
-    pub is_declared: Cell<bool>,
+    pub state: VarState,
+    pub is_declared: bool,
 }
 
 impl PartialOrd for Var {
@@ -52,7 +50,11 @@ impl Ord for Var {
 }
 
 impl CompatibleWith for Var {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -61,7 +63,7 @@ impl CompatibleWith for Var {
 }
 
 impl TypeOf for Var {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -74,8 +76,8 @@ impl BuildVar for Var {
         Self {
             id: id.clone(),
             type_sig: type_sig.clone(),
-            state: Cell::new(VarState::Local),
-            is_declared: Cell::new(false),
+            state: VarState::Local,
+            is_declared: false,
         }
     }
 }

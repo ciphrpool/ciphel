@@ -1,16 +1,18 @@
 use nom::{
     branch::alt,
-    combinator::map,
+    combinator::{cut, map},
     sequence::{pair, preceded, tuple},
 };
+use nom_supreme::ParserExt;
 
 use crate::ast::{
     expressions::Expression,
     statements::{block::Block, declaration::PatternVar},
     utils::{
+        error::squash,
         io::{PResult, Span},
         lexem,
-        strings::{parse_id, wst},
+        strings::{parse_id, wst, wst_closed},
     },
     TryParse,
 };
@@ -28,13 +30,16 @@ impl TryParse for Loop {
      *      | loop Scope
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(preceded(wst(lexem::LOOP), Block::parse), |scope| {
-                Loop::Loop(Box::new(scope))
-            }),
-            map(ForLoop::parse, |value| Loop::For(value)),
-            map(WhileLoop::parse, |value| Loop::While(value)),
-        ))(input)
+        squash(
+            alt((
+                map(preceded(wst_closed(lexem::LOOP), Block::parse), |scope| {
+                    Loop::Loop(Box::new(scope))
+                }),
+                map(ForLoop::parse, |value| Loop::For(value)),
+                map(WhileLoop::parse, |value| Loop::While(value)),
+            )),
+            "Expected a loop, while or for loop",
+        )(input)
     }
 }
 
@@ -46,10 +51,13 @@ impl TryParse for ForIterator {
 
 impl TryParse for ForItem {
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(PatternVar::parse, |value| ForItem::Pattern(value)),
-            map(parse_id, |value| ForItem::Id(value)),
-        ))(input)
+        squash(
+            alt((
+                map(PatternVar::parse, |value| ForItem::Pattern(value)),
+                map(parse_id, |value| ForItem::Id(value)),
+            )),
+            "Expected a valid item in for-loop",
+        )(input)
     }
 }
 
@@ -65,9 +73,9 @@ impl TryParse for ForLoop {
     fn parse(input: Span) -> PResult<Self> {
         map(
             tuple((
-                preceded(wst(lexem::FOR), ForItem::parse),
-                preceded(wst(lexem::IN), ForIterator::parse),
-                Block::parse,
+                preceded(wst_closed(lexem::FOR), cut(ForItem::parse)),
+                cut(preceded(wst_closed(lexem::IN), ForIterator::parse)),
+                cut(Block::parse).context("Invalid block in for-loop statement"),
             )),
             |(item, iterator, scope)| ForLoop {
                 item,
@@ -87,7 +95,10 @@ impl TryParse for WhileLoop {
      */
     fn parse(input: Span) -> PResult<Self> {
         map(
-            pair(preceded(wst(lexem::WHILE), Expression::parse), Block::parse),
+            pair(
+                preceded(wst_closed(lexem::WHILE), cut(Expression::parse)),
+                cut(Block::parse).context("Invalid block in while-loop statement"),
+            ),
             |(condition, scope)| WhileLoop {
                 condition: Box::new(condition),
                 scope: Box::new(scope),
@@ -98,15 +109,12 @@ impl TryParse for WhileLoop {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::{Cell, RefCell},
-        rc::Rc,
-    };
+    use std::sync::{Arc, RwLock};
 
     use crate::{
         ast::{
             expressions::{
-                data::{Data, Number, Primitive, Variable},
+                data::{Data, Primitive, Variable},
                 operation::FnCall,
                 Atomic,
             },
@@ -139,7 +147,7 @@ mod tests {
                 iterator: ForIterator {
                     expr: Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                         id: "x".to_string().into(),
-                        from_field: Cell::new(false),
+                        from_field: false,
                         metadata: Metadata::default(),
                     })))
                 },
@@ -151,7 +159,7 @@ mod tests {
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
                                     id: "f".to_string().into(),
-                                    from_field: Cell::new(false),
+                                    from_field: false,
                                     metadata: Metadata::default(),
                                 }
                             )))),
@@ -159,14 +167,15 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
+                            is_dynamic_fn: None,
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None)
+                    inner_scope: None
                 })
             },
             value
@@ -198,7 +207,7 @@ mod tests {
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
                                     id: "f".to_string().into(),
-                                    from_field: Cell::new(false),
+                                    from_field: false,
                                     metadata: Metadata::default(),
                                 }
                             )))),
@@ -206,14 +215,15 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
+                            is_dynamic_fn: None,
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None)
+                    inner_scope: None
                 })
             },
             value
@@ -241,7 +251,7 @@ mod tests {
                         fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
                                 id: "f".to_string().into(),
-                                from_field: Cell::new(false),
+                                from_field: false,
                                 metadata: Metadata::default(),
                             }
                         )))),
@@ -249,14 +259,15 @@ mod tests {
                             Unresolved, 10
                         ))))],
                         metadata: Metadata::default(),
-                        platform: Rc::default(),
+                        platform: Default::default(),
+                        is_dynamic_fn: None,
                     })
                 }))],
-                can_capture: Cell::new(ClosureState::DEFAULT),
-                is_loop: Cell::new(false),
+                can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                is_loop: Default::default(),
 
                 caller: Default::default(),
-                inner_scope: RefCell::new(None)
+                inner_scope: None
             })),
             value
         );

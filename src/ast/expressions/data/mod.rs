@@ -1,15 +1,14 @@
-use std::cell::Cell;
-
 use crate::semantic::scope::scope::Scope;
+use crate::semantic::ArcRwLock;
 use crate::{
     ast::{self, statements::declaration::TypedVar, utils::strings::ID},
     e_static, p_num,
     semantic::{
         scope::{
-            static_types::{NumberType, PrimitiveType, StaticType},
+            static_types::{PrimitiveType, StaticType},
             ClosureState,
         },
-        EType, Either, Metadata, MutRc, SemanticError,
+        EType, Either, Metadata, SemanticError,
     },
 };
 
@@ -41,13 +40,13 @@ pub enum Data {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Variable {
     pub id: ID,
-    pub from_field: Cell<bool>,
+    pub from_field: bool,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Primitive {
-    Number(Cell<Number>),
+    Number(Number),
     Bool(bool),
     Char(char),
 }
@@ -77,7 +76,7 @@ pub struct Slice {
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrSlice {
     pub value: String,
-    pub padding: Cell<usize>,
+    pub padding: usize,
     pub metadata: Metadata,
 }
 
@@ -112,13 +111,13 @@ pub enum ExprScope {
 }
 
 impl ExprScope {
-    pub fn scope(&self) -> Result<MutRc<Scope>, SemanticError> {
+    pub fn scope(&self) -> Result<ArcRwLock<Scope>, SemanticError> {
         match self {
             ExprScope::Scope(scope) => scope.scope(),
             ExprScope::Expr(scope) => scope.scope(),
         }
     }
-    pub fn to_capturing(&self, state: ClosureState) {
+    pub fn to_capturing(&self, state: ClosureState) -> Result<(), SemanticError> {
         match self {
             ExprScope::Scope(value) => value.to_capturing(state),
             ExprScope::Expr(value) => value.to_capturing(state),
@@ -228,10 +227,50 @@ impl Data {
         }
     }
 
+    pub fn metadata_mut(&mut self) -> Option<&mut Metadata> {
+        match self {
+            Data::Primitive(_) => None,
+            Data::Slice(Slice { value: _, metadata }) => Some(metadata),
+            Data::Vec(Vector {
+                value: _,
+                metadata,
+                length: _,
+                capacity: _,
+            }) => Some(metadata),
+            Data::Closure(Closure { metadata, .. }) => Some(metadata),
+            Data::Tuple(Tuple { value: _, metadata }) => Some(metadata),
+            Data::Address(Address { value: _, metadata }) => Some(metadata),
+            Data::PtrAccess(PtrAccess { value: _, metadata }) => Some(metadata),
+            Data::Variable(Variable { metadata, .. }) => Some(metadata),
+            Data::Unit => None,
+            Data::Map(Map {
+                fields: _,
+                metadata,
+            }) => Some(metadata),
+            Data::Struct(Struct {
+                id: _,
+                fields: _,
+                metadata,
+            }) => Some(metadata),
+            Data::Union(Union {
+                typename: _,
+                variant: _,
+                fields: _,
+                metadata,
+            }) => Some(metadata),
+            Data::Enum(Enum {
+                typename: _,
+                value: _,
+                metadata,
+            }) => Some(metadata),
+            Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
+        }
+    }
+
     pub fn signature(&self) -> Option<EType> {
         match self {
             Data::Primitive(value) => match value {
-                Primitive::Number(value) => match value.get() {
+                Primitive::Number(value) => match value {
                     Number::U8(_) => Some(p_num!(U8)),
                     Number::U16(_) => Some(p_num!(U16)),
                     Number::U32(_) => Some(p_num!(U32)),

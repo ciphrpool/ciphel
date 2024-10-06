@@ -1,4 +1,3 @@
-use std::cell::Ref;
 use std::f64::consts::E;
 use std::f64::consts::PI;
 use std::f64::INFINITY;
@@ -22,7 +21,7 @@ use crate::vm::vm::CasmMetadata;
 use crate::vm::vm::{Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, MutRc, Resolve, SemanticError},
+    semantic::{EType, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -98,8 +97,8 @@ pub enum MathCasm {
     IsInf,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for MathCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for MathCasm {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             MathCasm::Ceil => stdio.push_casm_lib(engine, "ceil"),
             MathCasm::Floor => stdio.push_casm_lib(engine, "floor"),
@@ -133,6 +132,9 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for MathCasm {
             MathCasm::IsNaN => stdio.push_casm_lib(engine, "isnan"),
             MathCasm::IsInf => stdio.push_casm_lib(engine, "isinf"),
         }
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::EXTREME
     }
 }
 
@@ -186,11 +188,11 @@ impl Resolve for MathFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             MathFn::Pi | MathFn::E | MathFn::Inf | MathFn::NInf => {
@@ -226,9 +228,10 @@ impl Resolve for MathFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let n = &extra[0];
-                let _ = n.resolve(scope, &Some(p_num!(F64)), &None)?;
-                let n_type = n.type_of(&scope.borrow())?;
+                let n = &mut extra[0];
+                let _ = n.resolve::<G>(scope, &Some(p_num!(F64)), &mut None)?;
+                let n_type =
+                    n.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 match &n_type {
                     Either::Static(value) => match value.as_ref() {
@@ -245,14 +248,17 @@ impl Resolve for MathFn {
                 if extra.len() != 2 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let x = &extra[0];
-                let y = &extra[1];
+                let (first_part, second_part) = extra.split_at_mut(1);
+                let x = &mut first_part[0];
+                let y = &mut second_part[0];
 
-                let _ = x.resolve(scope, &Some(p_num!(F64)), &None)?;
-                let _ = y.resolve(scope, &Some(p_num!(F64)), &None)?;
+                let _ = x.resolve::<G>(scope, &Some(p_num!(F64)), &mut None)?;
+                let _ = y.resolve::<G>(scope, &Some(p_num!(F64)), &mut None)?;
 
-                let x_type = x.type_of(&scope.borrow())?;
-                let y_type = y.type_of(&scope.borrow())?;
+                let x_type =
+                    x.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let y_type =
+                    y.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 match &x_type {
                     Either::Static(value) => match value.as_ref() {
@@ -276,7 +282,7 @@ impl Resolve for MathFn {
     }
 }
 impl TypeOf for MathFn {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -292,8 +298,8 @@ impl TypeOf for MathFn {
 impl GenerateCode for MathFn {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             MathFn::Ceil => Ok(instructions.push(Casm::Platform(LibCasm::Std(
@@ -395,45 +401,42 @@ impl GenerateCode for MathFn {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for MathCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for MathCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             MathCasm::Pi => {
-                let _ = stack.push_with(&PI.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&PI.to_le_bytes())?;
             }
             MathCasm::E => {
-                let _ = stack.push_with(&E.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&E.to_le_bytes())?;
             }
             MathCasm::Inf => {
-                let _ = stack
-                    .push_with(&INFINITY.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&INFINITY.to_le_bytes())?;
             }
             MathCasm::NInf => {
-                let _ = stack
-                    .push_with(&NEG_INFINITY.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&NEG_INFINITY.to_le_bytes())?;
             }
             MathCasm::IsNaN => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::is_nan(n);
 
-                let _ = stack.push_with(&[res as u8]).map_err(|e| e.into())?;
+                let _ = stack.push_with(&[res as u8])?;
             }
             MathCasm::IsInf => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::is_infinite(n);
 
-                let _ = stack.push_with(&[res as u8]).map_err(|e| e.into())?;
+                let _ = stack.push_with(&[res as u8])?;
             }
 
             MathCasm::Ceil => {
@@ -441,147 +444,147 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for MathCasm {
 
                 let res = f64::ceil(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Floor => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::floor(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Abs => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::abs(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Exp => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::exp(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Ln => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::ln(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Log10 => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::log10(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Sqrt => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::sqrt(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Acos => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::acos(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Asin => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::asin(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Atan => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::atan(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Cos => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::cos(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Sin => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::sin(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Tan => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::tan(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Deg => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::to_degrees(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Rad => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::to_radians(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::CosH => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::cosh(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::SinH => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::sinh(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::TanH => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::tanh(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::ACosH => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::acosh(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::ASinH => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::asinh(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::ATanH => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::atanh(n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
 
             MathCasm::Pow => {
@@ -590,7 +593,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for MathCasm {
 
                 let res = f64::powf(x, n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Log => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
@@ -598,7 +601,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for MathCasm {
 
                 let res = f64::log(x, n);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Hypot => {
                 let y = OpPrimitive::get_num8::<f64>(stack)?;
@@ -606,7 +609,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for MathCasm {
 
                 let res = f64::hypot(x, y);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
             MathCasm::Atan2 => {
                 let x = OpPrimitive::get_num8::<f64>(stack)?;
@@ -614,7 +617,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for MathCasm {
 
                 let res = f64::atan2(y, x);
 
-                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes())?;
             }
         }
         program.incr();
@@ -624,31 +627,24 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for MathCasm {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::Cell,
-        f64::{
-            consts::{E, PI},
-            NEG_INFINITY,
-        },
+    use std::f64::{
+        consts::{E, PI},
+        NEG_INFINITY,
     };
 
     use crate::{
-        ast::{
-            expressions::data::{Number, Primitive},
-            statements::Statement,
-            TryParse,
-        },
-        clear_stack, compile_statement,
+        ast::{expressions::data::Primitive, statements::Statement, TryParse},
+        compile_statement,
         semantic::scope::scope::Scope,
         v_num,
-        vm::vm::{DeserializeFrom, Runtime},
+        vm::vm::DeserializeFrom,
     };
 
     use super::*;
 
     #[test]
     fn valid_nan() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = is_nan(acos(2.0));
         "##
@@ -665,7 +661,7 @@ mod tests {
 
     #[test]
     fn robustness_nan() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = is_nan(2.0);
         "##
@@ -681,7 +677,7 @@ mod tests {
     }
     #[test]
     fn valid_ceil() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = ceil(2.0);
         "##
@@ -699,7 +695,7 @@ mod tests {
     }
     #[test]
     fn valid_floor() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = floor(2.0);
         "##
@@ -717,7 +713,7 @@ mod tests {
     }
     #[test]
     fn valid_abs() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = abs(2.0);
         "##
@@ -735,7 +731,7 @@ mod tests {
     }
     #[test]
     fn valid_exp() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = exp(2.0);
         "##
@@ -753,7 +749,7 @@ mod tests {
     }
     #[test]
     fn valid_ln() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = ln(2.0);
         "##
@@ -771,7 +767,7 @@ mod tests {
     }
     #[test]
     fn valid_log() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = log(2.0,5.0);
         "##
@@ -789,7 +785,7 @@ mod tests {
     }
     #[test]
     fn valid_log10() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = log10(2.0);
         "##
@@ -807,7 +803,7 @@ mod tests {
     }
     #[test]
     fn valid_pow() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = pow(2.0,2.0);
         "##
@@ -825,7 +821,7 @@ mod tests {
     }
     #[test]
     fn valid_sqrt() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = sqrt(2.0);
         "##
@@ -843,7 +839,7 @@ mod tests {
     }
     #[test]
     fn valid_acos() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = acos(0.5);
         "##
@@ -861,7 +857,7 @@ mod tests {
     }
     #[test]
     fn valid_asin() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = asin(0.5);
         "##
@@ -879,7 +875,7 @@ mod tests {
     }
     #[test]
     fn valid_atan() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = atan(0.5);
         "##
@@ -897,7 +893,7 @@ mod tests {
     }
     #[test]
     fn valid_atan2() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = atan2(2.0,2.0);
         "##
@@ -915,7 +911,7 @@ mod tests {
     }
     #[test]
     fn valid_cos() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = cos(2.0);
         "##
@@ -933,7 +929,7 @@ mod tests {
     }
     #[test]
     fn valid_sin() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = sin(2.0);
         "##
@@ -951,7 +947,7 @@ mod tests {
     }
     #[test]
     fn valid_tan() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = tan(2.0);
         "##
@@ -969,7 +965,7 @@ mod tests {
     }
     #[test]
     fn valid_hypot() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = hypot(2.0,2.0);
         "##
@@ -987,7 +983,7 @@ mod tests {
     }
     #[test]
     fn valid_deg() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = deg(2.0);
         "##
@@ -1005,7 +1001,7 @@ mod tests {
     }
     #[test]
     fn valid_rad() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = rad(2.0);
         "##
@@ -1023,7 +1019,7 @@ mod tests {
     }
     #[test]
     fn valid_cosh() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = cosh(2.0);
         "##
@@ -1041,7 +1037,7 @@ mod tests {
     }
     #[test]
     fn valid_sinh() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = sinh(2.0);
         "##
@@ -1059,7 +1055,7 @@ mod tests {
     }
     #[test]
     fn valid_tanh() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = tanh(2.0);
         "##
@@ -1077,7 +1073,7 @@ mod tests {
     }
     #[test]
     fn valid_acosh() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = acosh(2.0);
         "##
@@ -1095,7 +1091,7 @@ mod tests {
     }
     #[test]
     fn valid_asinh() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = asinh(2.0);
         "##
@@ -1113,7 +1109,7 @@ mod tests {
     }
     #[test]
     fn valid_atanh() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = atanh(0.5);
         "##
@@ -1131,7 +1127,7 @@ mod tests {
     }
     #[test]
     fn valid_pi() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = pi();
         "##
@@ -1149,7 +1145,7 @@ mod tests {
     }
     #[test]
     fn valid_e() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = e();
         "##
@@ -1168,7 +1164,7 @@ mod tests {
 
     #[test]
     fn valid_inf() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = inf();
         "##
@@ -1188,7 +1184,7 @@ mod tests {
 
     #[test]
     fn valid_ninf() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = neg_inf();
         "##
@@ -1208,7 +1204,7 @@ mod tests {
 
     #[test]
     fn valid_is_inf() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = is_inf(inf());
         "##

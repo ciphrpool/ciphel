@@ -1,28 +1,23 @@
-use std::{cell::Cell, rc::Rc};
-
 use nom::{
     branch::alt,
-    combinator::{map, opt},
-    multi::{separated_list0, separated_list1},
-    sequence::{delimited, pair, preceded, separated_pair, terminated},
+    combinator::{cut, map, opt},
+    multi::separated_list1,
+    sequence::{delimited, pair, preceded, separated_pair},
 };
 
 use crate::{
     ast::{
         expressions::{
             data::{Data, ExprScope, Primitive, StrSlice, Variable},
-            operation::{FieldAccess, FnCall},
+            operation::FnCall,
             Atomic, Expression,
         },
         types::Type,
         utils::{
+            error::squash,
             io::{PResult, Span},
             lexem,
-            strings::{
-                parse_id,
-                string_parser::{parse_fstring, parse_string},
-                wst,
-            },
+            strings::{parse_id, string_parser::parse_fstring, wst, wst_closed},
         },
         TryParse,
     },
@@ -67,10 +62,14 @@ impl TryParse for IfExpr {
         map(
             pair(
                 pair(
-                    delimited(wst(lexem::IF), Expression::parse, wst(lexem::THEN)),
-                    ExprScope::parse,
+                    delimited(
+                        wst_closed(lexem::IF),
+                        Expression::parse,
+                        wst_closed(lexem::THEN),
+                    ),
+                    cut(ExprScope::parse),
                 ),
-                preceded(wst(lexem::ELSE), ExprScope::parse),
+                cut(preceded(wst_closed(lexem::ELSE), ExprScope::parse)),
             ),
             |((condition, then_branch), else_branch)| IfExpr {
                 condition: Box::new(condition),
@@ -98,48 +97,32 @@ impl TryParse for Pattern {
      *      | \(  IDs \)
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(Primitive::parse, |value| Pattern::Primitive(value)),
-            map(StrSlice::parse, |value| Pattern::String(value)),
-            map(
-                pair(
-                    separated_pair(parse_id, wst(lexem::SEP), parse_id),
-                    delimited(
-                        wst(lexem::BRA_O),
-                        separated_list1(wst(lexem::COMA), parse_id),
-                        wst(lexem::BRA_C),
+        squash(
+            alt((
+                map(Primitive::parse, |value| Pattern::Primitive(value)),
+                map(StrSlice::parse, |value| Pattern::String(value)),
+                map(
+                    pair(
+                        separated_pair(parse_id, wst(lexem::SEP), parse_id),
+                        delimited(
+                            wst(lexem::BRA_O),
+                            separated_list1(wst(lexem::COMA), parse_id),
+                            wst(lexem::BRA_C),
+                        ),
                     ),
+                    |((typename, variant), vars)| Pattern::Union {
+                        typename,
+                        variant,
+                        vars,
+                    },
                 ),
-                |((typename, variant), vars)| Pattern::Union {
-                    typename,
-                    variant,
-                    vars,
-                },
-            ),
-            map(
-                separated_pair(parse_id, wst(lexem::SEP), parse_id),
-                |(typename, value)| Pattern::Enum { typename, value },
-            ),
-            // map(
-            //     pair(
-            //         parse_id,
-            //         delimited(
-            //             wst(lexem::BRA_O),
-            //             separated_list1(wst(lexem::COMA), parse_id),
-            //             wst(lexem::BRA_C),
-            //         ),
-            //     ),
-            //     |(typename, vars)| Pattern::Struct { typename, vars },
-            // ),
-            // map(
-            //     delimited(
-            //         wst(lexem::PAR_O),
-            //         separated_list1(wst(lexem::COMA), parse_id),
-            //         wst(lexem::PAR_C),
-            //     ),
-            //     |value| Pattern::Tuple(value),
-            // ),
-        ))(input)
+                map(
+                    separated_pair(parse_id, wst(lexem::SEP), parse_id),
+                    |(typename, value)| Pattern::Enum { typename, value },
+                ),
+            )),
+            "Expected a valid pattern",
+        )(input)
     }
 }
 
@@ -148,7 +131,7 @@ impl TryParse for PatternExpr {
         map(
             separated_pair(
                 preceded(
-                    wst(lexem::CASE),
+                    wst_closed(lexem::CASE),
                     separated_list1(wst(lexem::BAR), Pattern::parse),
                 ),
                 wst(lexem::BIGARROW),
@@ -179,21 +162,21 @@ impl TryParse for MatchExpr {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::MATCH), Expression::parse),
-                delimited(
+                preceded(wst_closed(lexem::MATCH), cut(Expression::parse)),
+                cut(delimited(
                     wst(lexem::BRA_O),
                     pair(
                         separated_list1(wst(lexem::COMA), PatternExpr::parse),
                         opt(preceded(
                             wst(lexem::COMA),
                             preceded(
-                                wst(lexem::ELSE),
+                                wst_closed(lexem::ELSE),
                                 preceded(wst(lexem::BIGARROW), ExprScope::parse),
                             ),
                         )),
                     ),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
-                ),
+                )),
             ),
             |(expr, (patterns, else_branch))| MatchExpr {
                 expr: Box::new(expr),
@@ -215,13 +198,13 @@ impl TryParse for TryExpr {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::TRY), ExprScope::parse),
-                opt(preceded(wst(lexem::ELSE), ExprScope::parse)),
+                preceded(wst_closed(lexem::TRY), ExprScope::parse),
+                opt(preceded(wst_closed(lexem::ELSE), ExprScope::parse)),
             ),
             |(try_branch, else_branch)| TryExpr {
                 try_branch,
                 else_branch,
-                pop_last_err: Cell::new(false),
+                pop_last_err: false,
                 metadata: Metadata::default(),
             },
         )(input)
@@ -251,12 +234,13 @@ impl TryParse for FCall {
                                     Variable {
                                         id: platform::utils::lexem::TOSTR.to_string().into(),
                                         metadata: Metadata::default(),
-                                        from_field: Cell::new(false),
+                                        from_field: false,
                                     },
                                 )))),
                                 params: vec![expr],
                                 metadata: Metadata::default(),
-                                platform: Rc::default(),
+                                platform: Default::default(),
+                                is_dynamic_fn: Default::default(),
                             }))
                         }
                     })
@@ -269,7 +253,7 @@ impl TryParse for FCall {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::{Cell, RefCell};
+    use std::sync::{Arc, RwLock};
 
     use crate::{
         ast::{
@@ -306,11 +290,11 @@ mod tests {
                             metadata: Metadata::default()
                         }))
                     ],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }),
                 else_branch: ExprScope::Expr(Block {
                     metadata: Metadata::default(),
@@ -322,11 +306,11 @@ mod tests {
                             metadata: Metadata::default()
                         }))
                     ],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }),
                 metadata: Metadata::default(),
             },
@@ -356,13 +340,13 @@ mod tests {
                 expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: "x".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: Cell::new(false),
+                    from_field: false,
                 })))),
                 metadata: Metadata::default(),
                 patterns: vec![
                     PatternExpr {
-                        patterns: vec![Pattern::Primitive(Primitive::Number(Cell::new(
-                            Number::Unresolved(10)
+                        patterns: vec![Pattern::Primitive(Primitive::Number(Number::Unresolved(
+                            10
                         )))],
                         expr: ExprScope::Expr(Block {
                             metadata: Metadata::default(),
@@ -374,17 +358,17 @@ mod tests {
                                     metadata: Metadata::default()
                                 }))
                             ],
-                            can_capture: Cell::new(ClosureState::DEFAULT),
-                            is_loop: Cell::new(false),
-                            
+                            can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                            is_loop: Default::default(),
+
                             caller: Default::default(),
-                            inner_scope: RefCell::new(None),
+                            inner_scope: None,
                         })
                     },
                     PatternExpr {
                         patterns: vec![Pattern::String(StrSlice {
                             value: "Hello World".to_string(),
-                            padding: 0.into(),
+                            padding: 0,
                             metadata: Metadata::default()
                         })],
                         expr: ExprScope::Expr(Block {
@@ -397,11 +381,11 @@ mod tests {
                                     metadata: Metadata::default()
                                 }))
                             ],
-                            can_capture: Cell::new(ClosureState::DEFAULT),
-                            is_loop: Cell::new(false),
-                            
+                            can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                            is_loop: Default::default(),
+
                             caller: Default::default(),
-                            inner_scope: RefCell::new(None),
+                            inner_scope: None,
                         })
                     },
                     PatternExpr {
@@ -419,11 +403,11 @@ mod tests {
                                     metadata: Metadata::default()
                                 }))
                             ],
-                            can_capture: Cell::new(ClosureState::DEFAULT),
-                            is_loop: Cell::new(false),
-                            
+                            can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                            is_loop: Default::default(),
+
                             caller: Default::default(),
-                            inner_scope: RefCell::new(None),
+                            inner_scope: None,
                         })
                     },
                     PatternExpr {
@@ -442,11 +426,11 @@ mod tests {
                                     metadata: Metadata::default()
                                 }))
                             ],
-                            can_capture: Cell::new(ClosureState::DEFAULT),
-                            is_loop: Cell::new(false),
-                            
+                            can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                            is_loop: Default::default(),
+
                             caller: Default::default(),
-                            inner_scope: RefCell::new(None),
+                            inner_scope: None,
                         })
                     },
                     // PatternExpr {
@@ -465,7 +449,7 @@ mod tests {
                     //             }))
                     //         ],
 
-                    //         inner_scope: RefCell::new(None),
+                    //         inner_scope: None,
                     //     })
                     // },
                     // PatternExpr {
@@ -481,7 +465,7 @@ mod tests {
                     //             }))
                     //         ],
 
-                    //         inner_scope: RefCell::new(None),
+                    //         inner_scope: None,
                     //     })
                     // }
                 ],
@@ -495,11 +479,11 @@ mod tests {
                             metadata: Metadata::default()
                         }))
                     ],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }))
             },
             value
@@ -523,11 +507,11 @@ mod tests {
                             metadata: Metadata::default()
                         }))
                     ],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }),
                 else_branch: Some(ExprScope::Expr(Block {
                     metadata: Metadata::default(),
@@ -539,13 +523,13 @@ mod tests {
                             metadata: Metadata::default()
                         }))
                     ],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 })),
-                pop_last_err: Cell::new(false),
+                pop_last_err: false,
                 metadata: Metadata::default(),
             },
             value

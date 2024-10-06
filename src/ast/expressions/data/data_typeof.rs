@@ -1,21 +1,20 @@
-use std::cell::Ref;
-
 use super::{
     Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, Number, Primitive, PtrAccess,
     Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
 use crate::ast::types::{NumberType, PrimitiveType, StrSliceType};
 
-use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StaticType;
+use crate::semantic::scope::var_impl::VarState;
+use crate::{arw_read, e_static};
 
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::{scope::type_traits::GetSubTypes, Either, Resolve, SemanticError, TypeOf};
-use crate::semantic::{EType, MergeType, SizeOf};
+use crate::semantic::{EType, SizeOf};
+use crate::semantic::{Either, Resolve, SemanticError, TypeOf};
 
 impl TypeOf for Data {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -41,7 +40,7 @@ impl TypeOf for Data {
 }
 
 impl TypeOf for Variable {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -52,12 +51,12 @@ impl TypeOf for Variable {
 }
 
 impl TypeOf for Primitive {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
-            Primitive::Number(num) => match num.get() {
+            Primitive::Number(num) => match num {
                 Number::U8(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::U8), scope)
                         .map(|value| (e_static!(value)))
@@ -102,7 +101,9 @@ impl TypeOf for Primitive {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::F64), scope)
                         .map(|value| (e_static!(value)))
                 }
-                Number::Unresolved(_) => Err(SemanticError::CantInferType),
+                Number::Unresolved(_) => Err(SemanticError::CantInferType(
+                    "of the given number".to_string(),
+                )),
             },
             Primitive::Bool(_) => StaticType::build_primitive(&PrimitiveType::Bool, scope)
                 .map(|value| (e_static!(value))),
@@ -113,7 +114,7 @@ impl TypeOf for Primitive {
 }
 
 impl TypeOf for Slice {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -124,13 +125,13 @@ impl TypeOf for Slice {
 }
 
 impl TypeOf for StrSlice {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         StaticType::build_str_slice(
             &StrSliceType {
-                size: self.value.len() + self.padding.get(),
+                size: self.value.len() + self.padding,
             },
             scope,
         )
@@ -139,7 +140,7 @@ impl TypeOf for StrSlice {
 }
 
 impl TypeOf for Vector {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -150,7 +151,7 @@ impl TypeOf for Vector {
 }
 
 impl TypeOf for Tuple {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -161,7 +162,7 @@ impl TypeOf for Tuple {
 }
 
 impl TypeOf for Closure {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -172,8 +173,17 @@ impl TypeOf for Closure {
         }
         let ret_type = self.scope.type_of(&scope)?;
         let mut scope_params_size = 0;
-        for (v, _) in self.scope.scope()?.borrow().vars() {
-            scope_params_size += v.type_sig.size_of();
+        for (v, _) in self
+            .scope
+            .scope()?
+            .try_read()
+            .map_err(|_| SemanticError::ConcurrencyError)?
+            .for_closure_vars()?
+        {
+            let var = arw_read!(v, SemanticError::ConcurrencyError)?;
+            if var.state == VarState::Parameter {
+                scope_params_size += var.type_sig.size_of();
+            }
         }
         StaticType::build_closure(
             &params_types,
@@ -187,7 +197,7 @@ impl TypeOf for Closure {
 }
 
 impl TypeOf for ExprScope {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -198,7 +208,7 @@ impl TypeOf for ExprScope {
     }
 }
 impl TypeOf for ClosureParam {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -211,7 +221,7 @@ impl TypeOf for ClosureParam {
     }
 }
 impl TypeOf for Address {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -221,7 +231,7 @@ impl TypeOf for Address {
     }
 }
 impl TypeOf for PtrAccess {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -231,7 +241,7 @@ impl TypeOf for PtrAccess {
     }
 }
 impl TypeOf for Struct {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -240,7 +250,7 @@ impl TypeOf for Struct {
     }
 }
 impl TypeOf for Union {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -250,7 +260,7 @@ impl TypeOf for Union {
 }
 
 impl TypeOf for Enum {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -259,7 +269,7 @@ impl TypeOf for Enum {
     }
 }
 impl TypeOf for Map {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {

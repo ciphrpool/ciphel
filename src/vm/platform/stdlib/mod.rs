@@ -1,5 +1,3 @@
-use std::cell::{Cell, Ref};
-
 use crate::ast::utils::strings::ID;
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
@@ -13,7 +11,7 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::CasmMetadata;
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
+    semantic::{EType, Resolve, SemanticError, TypeOf},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
@@ -39,7 +37,7 @@ pub enum StdFn {
     IO(IOFn),
     Math(MathFn),
     Strings(StringsFn),
-    Assert(Cell<bool>),
+    Assert(bool),
     Iter(IterFn),
     Error,
     Ok,
@@ -57,8 +55,8 @@ pub enum StdCasm {
     Iter(IterCasm),
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for StdCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StdCasm {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             StdCasm::IO(value) => value.name(stdio, program, engine),
             StdCasm::Math(value) => value.name(stdio, program, engine),
@@ -68,6 +66,18 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for StdCasm {
             StdCasm::Iter(value) => value.name(stdio, program, engine),
             StdCasm::Error => stdio.push_casm_lib(engine, "err"),
             StdCasm::Ok => stdio.push_casm_lib(engine, "ok"),
+        }
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            StdCasm::IO(value) => <IOCasm as CasmMetadata<G>>::weight(value),
+            StdCasm::Math(value) => <MathCasm as CasmMetadata<G>>::weight(value),
+            StdCasm::Strings(value) => <StringsCasm as CasmMetadata<G>>::weight(value),
+            StdCasm::AssertBool => crate::vm::vm::CasmWeight::LOW,
+            StdCasm::AssertErr => crate::vm::vm::CasmWeight::LOW,
+            StdCasm::Error => crate::vm::vm::CasmWeight::LOW,
+            StdCasm::Ok => crate::vm::vm::CasmWeight::LOW,
+            StdCasm::Iter(value) => <IterCasm as CasmMetadata<G>>::weight(value),
         }
     }
 }
@@ -107,34 +117,35 @@ impl Resolve for StdFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
-            StdFn::IO(value) => value.resolve(scope, context, extra),
-            StdFn::Math(value) => value.resolve(scope, context, extra),
-            StdFn::Strings(value) => value.resolve(scope, context, extra),
-            StdFn::Iter(value) => value.resolve(scope, context, extra),
+            StdFn::IO(value) => value.resolve::<G>(scope, context, extra),
+            StdFn::Math(value) => value.resolve::<G>(scope, context, extra),
+            StdFn::Strings(value) => value.resolve::<G>(scope, context, extra),
+            StdFn::Iter(value) => value.resolve::<G>(scope, context, extra),
             StdFn::Assert(expect_err) => {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let size = &extra[0];
+                let size = &mut extra[0];
 
-                let _ = size.resolve(
+                let _ = size.resolve::<G>(
                     scope,
                     &Some(e_static!(StaticType::Primitive(PrimitiveType::Bool))),
-                    &None,
+                    &mut None,
                 )?;
-                let size_type = size.type_of(&scope.borrow())?;
+                let size_type =
+                    size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
-                        StaticType::Primitive(PrimitiveType::Bool) => expect_err.set(false),
-                        StaticType::Error => expect_err.set(true),
+                        StaticType::Primitive(PrimitiveType::Bool) => *expect_err = false,
+                        StaticType::Error => *expect_err = true,
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
@@ -158,7 +169,7 @@ impl Resolve for StdFn {
 }
 
 impl TypeOf for StdFn {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -176,8 +187,8 @@ impl TypeOf for StdFn {
 impl GenerateCode for StdFn {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             StdFn::IO(value) => value.gencode(scope, instructions),
@@ -185,7 +196,7 @@ impl GenerateCode for StdFn {
             StdFn::Strings(value) => value.gencode(scope, instructions),
             StdFn::Iter(value) => value.gencode(scope, instructions),
             StdFn::Assert(expect_err) => {
-                if expect_err.get() {
+                if *expect_err {
                     instructions.push(Casm::Platform(super::LibCasm::Std(StdCasm::AssertErr)));
                 } else {
                     instructions.push(Casm::Platform(super::LibCasm::Std(StdCasm::AssertBool)));
@@ -207,30 +218,31 @@ impl GenerateCode for StdFn {
 pub const ERROR_VALUE: [u8; 1] = [1];
 pub const OK_VALUE: [u8; 1] = [0];
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StdCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for StdCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
-            StdCasm::IO(value) => value.execute(program, stack, heap, stdio, engine),
-            StdCasm::Math(value) => value.execute(program, stack, heap, stdio, engine),
-            StdCasm::Strings(value) => value.execute(program, stack, heap, stdio, engine),
-            StdCasm::Iter(value) => value.execute(program, stack, heap, stdio, engine),
+            StdCasm::IO(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            StdCasm::Math(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            StdCasm::Strings(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            StdCasm::Iter(value) => value.execute(program, stack, heap, stdio, engine, tid),
             StdCasm::AssertBool => {
                 let condition = OpPrimitive::get_bool(stack)?;
                 program.incr();
                 if condition {
                     // push NO_ERROR
-                    let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&OK_VALUE)?;
                     Ok(())
                 } else {
                     // push ERROR
-                    let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&ERROR_VALUE)?;
                     Err(RuntimeError::AssertError)
                 }
             }
@@ -239,21 +251,21 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StdCasm {
                 program.incr();
                 if condition {
                     // push NO_ERROR
-                    let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&OK_VALUE)?;
                     Ok(())
                 } else {
                     // push ERROR
-                    let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&ERROR_VALUE)?;
                     Err(RuntimeError::AssertError)
                 }
             }
             StdCasm::Error => {
-                let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+                let _ = stack.push_with(&ERROR_VALUE)?;
                 program.incr();
                 Ok(())
             }
             StdCasm::Ok => {
-                let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+                let _ = stack.push_with(&OK_VALUE)?;
                 program.incr();
                 Ok(())
             }

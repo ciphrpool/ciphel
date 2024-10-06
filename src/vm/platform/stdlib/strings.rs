@@ -1,14 +1,4 @@
-use std::cell::{Cell, Ref, RefCell};
-use std::rc::Rc;
-
-use nom::bytes::complete::{tag, take_till, take_while};
-use nom::combinator::eof;
-use nom::complete::take;
-use nom::multi::{many0, many_till};
-use nom::sequence::delimited;
-
 use crate::ast::utils::strings::ID;
-use crate::ast::{self, TryParse};
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType, StringType};
@@ -25,7 +15,7 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::{CasmMetadata, Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, MutRc, Resolve, SemanticError},
+    semantic::{EType, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -33,7 +23,7 @@ use crate::{
 };
 #[derive(Debug, Clone, PartialEq)]
 pub enum StringsFn {
-    ToStr(Cell<StringsCasm>),
+    ToStr(StringsCasm),
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -61,12 +51,15 @@ pub enum ToStrCasm {
     ToStrString,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for StringsCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StringsCasm {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             StringsCasm::ToStr(_) => stdio.push_casm_lib(engine, "to_str"),
             StringsCasm::Join(_) => stdio.push_casm_lib(engine, "str_join"),
         }
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::HIGH
     }
 }
 
@@ -86,9 +79,7 @@ impl StringsFn {
             None => {}
         }
         match id.as_str() {
-            lexem::TOSTR => Some(StringsFn::ToStr(Cell::new(StringsCasm::ToStr(
-                ToStrCasm::ToStrI64,
-            )))),
+            lexem::TOSTR => Some(StringsFn::ToStr(StringsCasm::ToStr(ToStrCasm::ToStrI64))),
             _ => None,
         }
     }
@@ -98,11 +89,11 @@ impl Resolve for StringsFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             StringsFn::ToStr(casm) => {
@@ -110,57 +101,38 @@ impl Resolve for StringsFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let src = &extra[0];
+                let src = &mut extra[0];
 
-                let _ = src.resolve(scope, &None, &None)?;
-                let src_type = src.type_of(&scope.borrow())?;
+                let _ = src.resolve::<G>(scope, &None, &mut None)?;
+                let src_type =
+                    src.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 match &src_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Primitive(p) => match p {
                             PrimitiveType::Number(n) => match n {
-                                NumberType::U8 => casm.set(StringsCasm::ToStr(ToStrCasm::ToStrU8)),
-                                NumberType::U16 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrU16))
-                                }
-                                NumberType::U32 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrU32))
-                                }
-                                NumberType::U64 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrU64))
-                                }
+                                NumberType::U8 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU8),
+                                NumberType::U16 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU16),
+                                NumberType::U32 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU32),
+                                NumberType::U64 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU64),
                                 NumberType::U128 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrU128))
+                                    *casm = StringsCasm::ToStr(ToStrCasm::ToStrU128)
                                 }
-                                NumberType::I8 => casm.set(StringsCasm::ToStr(ToStrCasm::ToStrI8)),
-                                NumberType::I16 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrI16))
-                                }
-                                NumberType::I32 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrI32))
-                                }
-                                NumberType::I64 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrI64))
-                                }
+                                NumberType::I8 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrI8),
+                                NumberType::I16 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrI16),
+                                NumberType::I32 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrI32),
+                                NumberType::I64 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrI64),
                                 NumberType::I128 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrI128))
+                                    *casm = StringsCasm::ToStr(ToStrCasm::ToStrI128)
                                 }
-                                NumberType::F64 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrF64))
-                                }
+                                NumberType::F64 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrF64),
                             },
-                            PrimitiveType::Char => {
-                                casm.set(StringsCasm::ToStr(ToStrCasm::ToStrChar))
-                            }
-                            PrimitiveType::Bool => {
-                                casm.set(StringsCasm::ToStr(ToStrCasm::ToStrBool))
-                            }
+                            PrimitiveType::Char => *casm = StringsCasm::ToStr(ToStrCasm::ToStrChar),
+                            PrimitiveType::Bool => *casm = StringsCasm::ToStr(ToStrCasm::ToStrBool),
                         },
-                        StaticType::String(_) => {
-                            casm.set(StringsCasm::ToStr(ToStrCasm::ToStrString))
-                        }
+                        StaticType::String(_) => *casm = StringsCasm::ToStr(ToStrCasm::ToStrString),
                         StaticType::StrSlice(_) => {
-                            casm.set(StringsCasm::ToStr(ToStrCasm::ToStrStrSlice))
+                            *casm = StringsCasm::ToStr(ToStrCasm::ToStrStrSlice)
                         }
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -173,7 +145,7 @@ impl Resolve for StringsFn {
     }
 }
 impl TypeOf for StringsFn {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -186,26 +158,49 @@ impl TypeOf for StringsFn {
 impl GenerateCode for StringsFn {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             StringsFn::ToStr(to_str_casm) => instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Strings(to_str_casm.get()),
+                super::StdCasm::Strings(*to_str_casm),
             ))),
         }
         Ok(())
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StringsCasm {
+pub fn push_string(src: String, stack: &mut Stack, heap: &mut Heap) -> Result<(), RuntimeError> {
+    let len = src.len();
+    let cap = align(len as usize) as u64;
+    let alloc_size = cap + 16;
+
+    let len_bytes = len.to_le_bytes().as_slice().to_vec();
+    let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
+    let address = heap.alloc(alloc_size as usize)?;
+    let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+
+    let data = src.into_bytes();
+    /* Write len */
+    let _ = heap.write(address, &len_bytes)?;
+    /* Write capacity */
+    let _ = heap.write(address + 8, &cap_bytes)?;
+    /* Write slice */
+    let _ = heap.write(address + 16, &data)?;
+    /* Push heap address back to stack */
+    let _ = stack.push_with(&address.to_le_bytes())?;
+    Ok(())
+}
+
+impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             StringsCasm::ToStr(value) => {
@@ -267,7 +262,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StringsCasm {
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrString => {
-                        let n = OpPrimitive::get_string(stack, heap)?;
+                        let (n, _) = OpPrimitive::get_string(stack, heap)?;
                         format!("{}", n)
                     }
                 };
@@ -277,20 +272,18 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StringsCasm {
 
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
-                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 let data = res.into_bytes();
                 /* Write len */
-                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes)?;
                 /* Write slice */
-                let _ = heap.write(address + 16, &data).map_err(|e| e.into())?;
+                let _ = heap.write(address + 16, &data)?;
 
-                let _ = stack
-                    .push_with(&address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&address.to_le_bytes())?;
             }
             StringsCasm::Join(value) => match value {
                 JoinCasm::NoSepFromSlice(opt_len) => {
@@ -305,20 +298,15 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StringsCasm {
                     for _ in 0..len {
                         let string_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                        let string_len_bytes = heap
-                            .read(string_heap_address as usize, 8)
-                            .map_err(|e| e.into())?;
+                        let string_len_bytes = heap.read(string_heap_address as usize, 8)?;
                         let string_len_bytes =
                             TryInto::<&[u8; 8]>::try_into(string_len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                         let string_len = u64::from_le_bytes(*string_len_bytes);
-                        let string_data = heap
-                            .read(string_heap_address as usize + 16, string_len as usize)
-                            .map_err(|e| e.into())?;
+                        let string_data =
+                            heap.read(string_heap_address as usize + 16, string_len as usize)?;
 
-                        let _ = heap
-                            .free(string_heap_address as usize - 8)
-                            .map_err(|e| e.into())?;
+                        let _ = heap.free(string_heap_address as usize - 8)?;
 
                         slice_data.push(string_data);
                     }
@@ -330,19 +318,17 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StringsCasm {
 
                     let len_bytes = len.to_le_bytes().as_slice().to_vec();
                     let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
-                    let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                    let address = heap.alloc(alloc_size as usize)?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                     /* Write len */
-                    let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                    let _ = heap.write(address, &len_bytes)?;
                     /* Write capacity */
-                    let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                    let _ = heap.write(address + 8, &cap_bytes)?;
                     /* Write slice */
-                    let _ = heap.write(address + 16, &data).map_err(|e| e.into())?;
+                    let _ = heap.write(address + 16, &data)?;
 
-                    let _ = stack
-                        .push_with(&address.to_le_bytes())
-                        .map_err(|e| e.into())?;
+                    let _ = stack.push_with(&address.to_le_bytes())?;
                 }
             },
         }
@@ -354,15 +340,15 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StringsCasm {
 
 #[cfg(test)]
 mod tests {
-    use std::result;
 
     use super::*;
+    use crate::ast::TryParse;
     use crate::vm::vm::Runtime;
-    use crate::{ast::statements::Statement, compile_statement, vm::vm::DeserializeFrom};
+    use crate::{ast::statements::Statement, vm::vm::DeserializeFrom};
     use crate::{clear_stack, compile_statement_for_string};
     #[test]
     fn valid_format_i64() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {10}";
         "##
@@ -377,7 +363,7 @@ mod tests {
 
     #[test]
     fn valid_format_u64() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {10u64}";
         "##
@@ -392,7 +378,7 @@ mod tests {
 
     #[test]
     fn valid_format_float() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {20.5}";
         "##
@@ -407,7 +393,7 @@ mod tests {
 
     #[test]
     fn valid_format_bool() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {true}";
         "##
@@ -419,7 +405,7 @@ mod tests {
         let result = compile_statement_for_string!(statement);
         assert_eq!(result, "Hello true");
 
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {false}";
         "##
@@ -431,7 +417,7 @@ mod tests {
         let result = compile_statement_for_string!(statement);
         assert_eq!(result, "Hello false");
 
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {false} {true}";
         "##
@@ -446,7 +432,7 @@ mod tests {
 
     #[test]
     fn valid_format_char() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {'a'}";
         "##

@@ -1,22 +1,25 @@
-use std::cell::Ref;
-
 use nom::{
     branch::alt,
     combinator::{eof, map},
-    multi::many0,
+    multi::{many0, many1},
     sequence::terminated,
-    Parser,
+    Finish, Parser,
 };
+use nom_supreme::error::{BaseErrorKind, ErrorTree, Expectation, GenericErrorTree, StackContext};
 
 use self::return_stat::Return;
 use crate::{semantic::scope::scope::Scope, CompilationError};
 
-use super::{utils::strings::eater, TryParse};
+use super::{
+    utils::{
+        error::{generate_error_report, squash},
+        strings::eater,
+    },
+    TryParse,
+};
 use crate::{
     ast::utils::io::{PResult, Span},
-    semantic::{
-        scope::static_types::StaticType, EType, Either, MutRc, Resolve, SemanticError, TypeOf,
-    },
+    semantic::{scope::static_types::StaticType, EType, Either, Resolve, SemanticError, TypeOf},
     vm::{
         casm::{
             branch::{Call, Goto, Label},
@@ -36,6 +39,40 @@ pub mod loops;
 pub mod return_stat;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct WithLine<T> {
+    pub inner: T,
+    pub line: usize,
+}
+
+impl<T: Resolve> Resolve for WithLine<T> {
+    type Output = T::Output;
+    type Context = T::Context;
+    type Extra = T::Extra;
+
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        context: &Self::Context,
+        extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        self.inner.resolve::<G>(scope, context, extra)
+    }
+}
+
+impl<T: GenerateCode> GenerateCode for WithLine<T> {
+    fn gencode(
+        &self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        self.inner.gencode(scope, instructions)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Scope(block::Block),
     Flow(flows::Flow),
@@ -46,67 +83,87 @@ pub enum Statement {
     Return(Return),
 }
 
-pub fn parse_statements(input: Span) -> Result<Vec<Statement>, CompilationError> {
-    let mut parser = terminated(many0(Statement::parse), eater::ws(eof));
+pub fn parse_statements(
+    input: Span,
+    line_offset: usize,
+) -> Result<Vec<WithLine<Statement>>, CompilationError> {
+    let mut parser = many1(|input| {
+        let (input, statement) = Statement::parse(input)?;
+        let line = input.location_line();
+        Ok((
+            input,
+            WithLine {
+                inner: statement,
+                line: line as usize + line_offset,
+            },
+        ))
+    });
 
-    match parser.parse(input) {
-        Ok((_, statements)) => Ok(statements),
+    match parser(input).finish() {
+        Ok((remaining, statements)) => {
+            if !remaining.fragment().is_empty() {
+                let error_report = format!(
+                    "Parsing completed, but input remains: {:?}",
+                    remaining.fragment()
+                );
+                Err(CompilationError::ParsingError(error_report))
+            } else {
+                Ok(statements)
+            }
+        }
         Err(e) => {
-            // dbg!(e);
-            Err(CompilationError::ParsingError())
+            let error_report = generate_error_report(&input, &e, line_offset);
+            Err(CompilationError::ParsingError(error_report))
         }
     }
 }
 
 impl TryParse for Statement {
     fn parse(input: Span) -> PResult<Self> {
-        eater::ws(alt((
-            map(Return::parse, |value| Statement::Return(value)),
-            map(block::Block::parse, |value| Statement::Scope(value)),
-            map(flows::Flow::parse, |value| Statement::Flow(value)),
-            map(assignation::Assignation::parse, |value| {
-                Statement::Assignation(value)
-            }),
-            map(declaration::Declaration::parse, |value| {
-                Statement::Declaration(value)
-            }),
-            map(definition::Definition::parse, |value| {
-                Statement::Definition(value)
-            }),
-            map(loops::Loop::parse, |value| Statement::Loops(value)),
-        )))(input)
+        eater::ws(squash(
+            alt((
+                map(Return::parse, Statement::Return),
+                map(block::Block::parse, Statement::Scope),
+                map(declaration::Declaration::parse, Statement::Declaration),
+                map(flows::Flow::parse, Statement::Flow),
+                map(definition::Definition::parse, Statement::Definition),
+                map(loops::Loop::parse, Statement::Loops),
+                map(assignation::Assignation::parse, Statement::Assignation),
+            )),
+            "expected a valid statements",
+        ))(input)
     }
 }
 impl Resolve for Statement {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
             Statement::Scope(value) => {
-                let _ = value.resolve(scope, context, &Vec::default())?;
+                let _ = value.resolve::<G>(scope, context, &mut Vec::default())?;
                 Ok(())
             }
-            Statement::Flow(value) => value.resolve(scope, context, extra),
-            Statement::Assignation(value) => value.resolve(scope, context, extra),
-            Statement::Declaration(value) => value.resolve(scope, context, extra),
-            Statement::Definition(value) => value.resolve(scope, context, extra),
-            Statement::Loops(value) => value.resolve(scope, context, extra),
-            Statement::Return(value) => value.resolve(scope, context, extra),
+            Statement::Flow(value) => value.resolve::<G>(scope, context, extra),
+            Statement::Assignation(value) => value.resolve::<G>(scope, context, extra),
+            Statement::Declaration(value) => value.resolve::<G>(scope, context, extra),
+            Statement::Definition(value) => value.resolve::<G>(scope, context, extra),
+            Statement::Loops(value) => value.resolve::<G>(scope, context, extra),
+            Statement::Return(value) => value.resolve::<G>(scope, context, extra),
         }
     }
 }
 
 impl TypeOf for Statement {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -127,25 +184,11 @@ impl TypeOf for Statement {
 impl GenerateCode for Statement {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Statement::Scope(value) => {
-                // let scope_casm = Rc::new(RefCell::new(CasmProgram::default()));
-                // let _ = value.gencode(block, &scope_casm)?;
-
-                // let scope_casm = scope_casm.take();
-                // let next_instruction_idx =
-                //     instructions.as_ref().borrow().len() + 1 + scope_casm.len();
-                // let mut borrowed = instructions
-                //     .as_ref()
-                //     .try_borrow_mut()
-                //     .map_err(|_| CodeGenerationError::Default)?;
-                // instructions.push(Casm::Data(Data::Serialized {
-                //     data: (next_instruction_idx as u64).to_le_bytes().to_vec(),
-                // }));
-                // borrowed.extend(scope_casm.main);
                 let scope_label = Label::gen();
                 let end_scope_label = Label::gen();
 
@@ -154,7 +197,7 @@ impl GenerateCode for Statement {
                 }));
                 instructions.push_label_id(scope_label, "block".to_string().into());
 
-                let _ = value.gencode(scope, &instructions)?;
+                let _ = value.gencode(scope, instructions)?;
 
                 instructions.push_label_id(end_scope_label, "end_scope".to_string().into());
                 instructions.push(Casm::Call(Call::From {

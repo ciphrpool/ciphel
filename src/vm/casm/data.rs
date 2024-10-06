@@ -8,7 +8,7 @@ use crate::vm::{
     vm::{CasmMetadata, Executable, RuntimeError},
 };
 
-use super::CasmProgram;
+use super::{alloc::ALLOC_SIZE_THRESHOLD, CasmProgram};
 struct HexSlice<'a>(&'a [u8]);
 
 impl<'a> fmt::Display for HexSlice<'a> {
@@ -28,8 +28,8 @@ pub enum Data {
     // Get { label: Ulid, idx: Option<usize> },
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Data {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Data {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             Data::Serialized { data } => {
                 stdio.push_casm(engine, &format!("dmp 0x{}", HexSlice(data.as_ref())))
@@ -43,7 +43,10 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Data {
                 let arr: Vec<String> = data
                     .iter()
                     .map(|e| {
-                        let label = program.get_label_name(e).unwrap_or("".to_string().into()).to_string();
+                        let label = program
+                            .get_label_name(e)
+                            .unwrap_or("".to_string().into())
+                            .to_string();
                         label.to_string()
                     })
                     .collect();
@@ -52,19 +55,33 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Data {
             }
         }
     }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            Data::Serialized { data } => {
+                if data.len() > ALLOC_SIZE_THRESHOLD {
+                    crate::vm::vm::CasmWeight::EXTREME
+                } else {
+                    crate::vm::vm::CasmWeight::LOW
+                }
+            }
+            Data::Dump { data } => crate::vm::vm::CasmWeight::ZERO,
+            Data::Table { data } => crate::vm::vm::CasmWeight::ZERO,
+        }
+    }
 }
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Data {
+impl<G: crate::GameEngineStaticFn> Executable<G> for Data {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             Data::Serialized { data } => {
-                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                let _ = stack.push_with(&data)?;
                 program.incr();
             }
             Data::Dump { data } => program.incr(),

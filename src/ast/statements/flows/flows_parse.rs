@@ -1,14 +1,16 @@
 use crate::ast::{
     expressions::operation::{operation_parse::TryParseOperation, FnCall},
     statements::block::Block,
+    utils::{error::squash, strings::wst_closed},
     TryParse,
 };
 use nom::{
     branch::alt,
-    combinator::{map, opt},
+    combinator::{cut, map, opt},
     multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
+use nom_supreme::ParserExt;
 
 use crate::ast::{
     expressions::{flows::Pattern, Expression},
@@ -23,12 +25,15 @@ use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 
 impl TryParse for Flow {
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(IfStat::parse, |value| Flow::If(value)),
-            map(MatchStat::parse, |value| Flow::Match(value)),
-            map(TryStat::parse, |value| Flow::Try(value)),
-            map(CallStat::parse, |value| Flow::Call(value)),
-        ))(input)
+        squash(
+            alt((
+                map(IfStat::parse, |value| Flow::If(value)),
+                map(MatchStat::parse, |value| Flow::Match(value)),
+                map(TryStat::parse, |value| Flow::Try(value)),
+                map(CallStat::parse, |value| Flow::Call(value)),
+            )),
+            "Expected an if, match, try statement or a function call",
+        )(input)
     }
 }
 
@@ -42,13 +47,25 @@ impl TryParse for IfStat {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                pair(preceded(wst(lexem::IF), Expression::parse), Block::parse),
+                pair(
+                    preceded(
+                        wst_closed(lexem::IF),
+                        cut(Expression::parse).context("Invalid condition"),
+                    ),
+                    cut(Block::parse).context("Invalid block in if statement"),
+                ),
                 pair(
                     many0(pair(
-                        preceded(pair(wst(lexem::ELSE), wst(lexem::IF)), Expression::parse),
-                        Block::parse,
+                        preceded(
+                            pair(wst_closed(lexem::ELSE), wst_closed(lexem::IF)),
+                            cut(Expression::parse).context("Invalid condition"),
+                        ),
+                        cut(Block::parse).context("Invalid block in else if statement"),
                     )),
-                    opt(preceded(wst(lexem::ELSE), Block::parse)),
+                    opt(preceded(
+                        wst_closed(lexem::ELSE),
+                        cut(Block::parse).context("Invalid block in else statement"),
+                    )),
                 ),
             ),
             |((condition, then_branch), (else_if_branches, else_branch))| IfStat {
@@ -72,17 +89,20 @@ impl TryParse for MatchStat {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::MATCH), Expression::parse),
+                preceded(wst_closed(lexem::MATCH), cut(Expression::parse)),
                 delimited(
-                    wst(lexem::BRA_O),
-                    pair(
+                    cut(wst(lexem::BRA_O)),
+                    cut(pair(
                         many1(PatternStat::parse),
                         opt(preceded(
-                            wst(lexem::ELSE),
-                            preceded(wst(lexem::BIGARROW), Block::parse),
+                            wst_closed(lexem::ELSE),
+                            preceded(
+                                wst(lexem::BIGARROW),
+                                cut(Block::parse).context("Invalid block in else statement"),
+                            ),
                         )),
-                    ),
-                    preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
+                    )),
+                    cut(preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C))),
                 ),
             ),
             |(expr, (patterns, else_branch))| MatchStat {
@@ -105,11 +125,14 @@ impl TryParse for PatternStat {
         map(
             separated_pair(
                 preceded(
-                    wst(lexem::CASE),
-                    separated_list1(wst(lexem::BAR), Pattern::parse),
+                    wst_closed(lexem::CASE),
+                    separated_list1(
+                        wst_closed(lexem::BAR),
+                        Pattern::parse.context("Invalid pattern in match statement"),
+                    ),
                 ),
                 wst(lexem::BIGARROW),
-                Block::parse,
+                cut(Block::parse).context("Invalid block in pattern"),
             ),
             |(patterns, scope)| PatternStat {
                 patterns,
@@ -129,8 +152,14 @@ impl TryParse for TryStat {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::TRY), Block::parse),
-                opt(preceded(wst(lexem::ELSE), Block::parse)),
+                preceded(
+                    wst_closed(lexem::TRY),
+                    cut(Block::parse).context("Invalid block in try statement"),
+                ),
+                opt(preceded(
+                    wst_closed(lexem::ELSE),
+                    cut(Block::parse).context("Invalid block in else statement"),
+                )),
             ),
             |(try_branch, else_branch)| TryStat {
                 try_branch: Box::new(try_branch),
@@ -157,15 +186,12 @@ impl TryParse for CallStat {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::{Cell, RefCell},
-        rc::Rc,
-    };
+    use std::sync::{Arc, RwLock};
 
     use crate::{
         ast::{
             expressions::{
-                data::{Data, Number, Primitive, Variable},
+                data::{Data, Primitive, Variable},
                 Atomic, Expression,
             },
             statements::{
@@ -207,7 +233,7 @@ mod tests {
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
                                     id: "f".to_string().into(),
-                                    from_field: Cell::new(false),
+                                    from_field: false,
                                     metadata: Metadata::default(),
                                 }
                             )))),
@@ -215,14 +241,15 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
+                            is_dynamic_fn: None,
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }),
                 else_if_branches: Vec::default(),
                 else_branch: Some(Box::new(Block {
@@ -233,7 +260,7 @@ mod tests {
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
                                     id: "f".to_string().into(),
-                                    from_field: Cell::new(false),
+                                    from_field: false,
                                     metadata: Metadata::default(),
                                 }
                             )))),
@@ -241,14 +268,15 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
+                            is_dynamic_fn: None,
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }))
             },
             value
@@ -285,7 +313,7 @@ mod tests {
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
                                     id: "f".to_string().into(),
-                                    from_field: Cell::new(false),
+                                    from_field: false,
                                     metadata: Metadata::default(),
                                 }
                             )))),
@@ -293,14 +321,15 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
+                            is_dynamic_fn: None,
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }),
                 else_if_branches: vec![(
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Bool(true)))),
@@ -312,7 +341,7 @@ mod tests {
                                 fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                     Variable {
                                         id: "f".to_string().into(),
-                                        from_field: Cell::new(false),
+                                        from_field: false,
                                         metadata: Metadata::default(),
                                     }
                                 )))),
@@ -320,14 +349,15 @@ mod tests {
                                     v_num!(Unresolved, 10)
                                 )))],
                                 metadata: Metadata::default(),
-                                platform: Rc::default(),
+                                platform: Default::default(),
+                                is_dynamic_fn: None,
                             })
                         }))],
-                        can_capture: Cell::new(ClosureState::DEFAULT),
-                        is_loop: Cell::new(false),
-                        
+                        can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                        is_loop: Default::default(),
+
                         caller: Default::default(),
-                        inner_scope: RefCell::new(None),
+                        inner_scope: None,
                     }
                 )],
                 else_branch: Some(Box::new(Block {
@@ -338,7 +368,7 @@ mod tests {
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
                                     id: "f".to_string().into(),
-                                    from_field: Cell::new(false),
+                                    from_field: false,
                                     metadata: Metadata::default(),
                                 }
                             )))),
@@ -346,14 +376,15 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
+                            is_dynamic_fn: None,
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }))
             },
             value
@@ -384,7 +415,7 @@ mod tests {
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
                                     id: "f".to_string().into(),
-                                    from_field: Cell::new(false),
+                                    from_field: false,
                                     metadata: Metadata::default(),
                                 }
                             )))),
@@ -392,14 +423,15 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
+                            is_dynamic_fn: None,
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }),
                 else_branch: Some(Box::new(Block {
                     metadata: Metadata::default(),
@@ -409,7 +441,7 @@ mod tests {
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
                                     id: "f".to_string().into(),
-                                    from_field: Cell::new(false),
+                                    from_field: false,
                                     metadata: Metadata::default(),
                                 }
                             )))),
@@ -417,14 +449,15 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
+                            is_dynamic_fn: None,
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }))
             },
             value

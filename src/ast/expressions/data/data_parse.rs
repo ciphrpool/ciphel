@@ -1,4 +1,4 @@
-use std::cell::{Cell, RefCell};
+use std::sync::{Arc, RwLock};
 
 use crate::{
     ast::{
@@ -7,13 +7,14 @@ use crate::{
         statements::{declaration::TypedVar, return_stat::Return, Statement},
         types::NumberType,
         utils::{
+            error::squash,
             io::{PResult, Span},
             lexem,
             numbers::{parse_float, parse_number},
             strings::{
                 parse_id,
                 string_parser::{parse_char, parse_string},
-                wst,
+                wst, wst_closed,
             },
         },
         TryParse,
@@ -23,14 +24,12 @@ use crate::{
 };
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, take_while_m_n},
-    character::complete::digit1,
-    combinator::{map, opt, peek, value},
+    combinator::{cut, map, opt, value},
     multi::{separated_list0, separated_list1},
-    sequence::{delimited, pair, preceded, separated_pair, tuple},
+    sequence::{delimited, pair, preceded, separated_pair},
     Parser,
 };
-use nom_supreme::error::ErrorTree;
+use nom_supreme::{final_parser::ExtractContext, ParserExt};
 
 use super::{
     Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, MultiData, Number, Primitive,
@@ -38,22 +37,25 @@ use super::{
 };
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(Primitive::parse, |value| Data::Primitive(value)),
-            map(StrSlice::parse, |value| Data::StrSlice(value)),
-            map(Slice::parse, |value| Data::Slice(value)),
-            map(Vector::parse, |value| Data::Vec(value)),
-            map(Closure::parse, |value| Data::Closure(value)),
-            map(Tuple::parse, |value| Data::Tuple(value)),
-            map(Address::parse, |value| Data::Address(value)),
-            map(PtrAccess::parse, |value| Data::PtrAccess(value)),
-            value(Data::Unit, wst(lexem::UNIT)),
-            map(Map::parse, |value| Data::Map(value)),
-            map(Struct::parse, |value| Data::Struct(value)),
-            map(Union::parse, |value| Data::Union(value)),
-            map(Enum::parse, |value| Data::Enum(value)),
-            map(Variable::parse, |value| Data::Variable(value)),
-        ))(input)
+        squash(
+            alt((
+                map(Primitive::parse, |value| Data::Primitive(value)),
+                map(StrSlice::parse, |value| Data::StrSlice(value)),
+                map(Slice::parse, |value| Data::Slice(value)),
+                map(Vector::parse, |value| Data::Vec(value)),
+                map(Closure::parse, |value| Data::Closure(value)),
+                map(Tuple::parse, |value| Data::Tuple(value)),
+                map(Address::parse, |value| Data::Address(value)),
+                map(PtrAccess::parse, |value| Data::PtrAccess(value)),
+                value(Data::Unit, wst_closed(lexem::UNIT)),
+                map(Map::parse, |value| Data::Map(value)),
+                map(Struct::parse, |value| Data::Struct(value)),
+                map(Union::parse, |value| Data::Union(value)),
+                map(Enum::parse, |value| Data::Enum(value)),
+                map(Variable::parse, |value| Data::Variable(value)),
+            )),
+            "Expected a valid expression",
+        )(input)
     }
 }
 
@@ -70,7 +72,7 @@ impl TryParse for Variable {
             remainder,
             Variable {
                 id,
-                from_field: Cell::new(false),
+                from_field: false,
                 metadata: Metadata::default(),
             },
         ))
@@ -113,14 +115,15 @@ impl TryParse for Primitive {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            map(pair(parse_float, opt(wst(lexem::FLOAT))), |(value, _)| {
-                Primitive::Number(super::Number::F64(value as f64).into())
-            }),
+            map(
+                pair(parse_float, opt(wst_closed(lexem::FLOAT))),
+                |(value, _)| Primitive::Number(super::Number::F64(value as f64).into()),
+            ),
             map(Number::parse, |value| Primitive::Number(value.into())),
             map(
                 alt((
-                    value(true, wst(lexem::TRUE)),
-                    value(false, wst(lexem::FALSE)),
+                    value(true, wst_closed(lexem::TRUE)),
+                    value(false, wst_closed(lexem::FALSE)),
                 )),
                 |value| Primitive::Bool(value),
             ),
@@ -140,8 +143,8 @@ impl TryParse for Slice {
         map(
             delimited(
                 wst(lexem::SQ_BRA_O),
-                MultiData::parse,
-                preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
+                cut(MultiData::parse).context("Invalid slice"),
+                cut(preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C))),
             ),
             |value| Slice {
                 value,
@@ -161,7 +164,7 @@ impl TryParse for StrSlice {
     fn parse(input: Span) -> PResult<Self> {
         map(parse_string, |value| StrSlice {
             value,
-            padding: 0.into(),
+            padding: 0,
             metadata: Metadata::default(),
         })(input)
     }
@@ -181,7 +184,7 @@ impl TryParse for Vector {
                 wst(platform::utils::lexem::VEC),
                 delimited(
                     wst(lexem::SQ_BRA_O),
-                    MultiData::parse,
+                    cut(MultiData::parse).context("Invalid vector"),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
                 ),
             ),
@@ -200,8 +203,8 @@ impl TryParse for Tuple {
         map(
             delimited(
                 wst(lexem::PAR_O),
-                MultiData::parse,
-                preceded(opt(wst(lexem::COMA)), wst(lexem::PAR_C)),
+                cut(MultiData::parse).context("Invalid tuple"),
+                cut(preceded(opt(wst(lexem::COMA)), wst(lexem::PAR_C))),
             ),
             |value| Tuple {
                 value,
@@ -229,14 +232,14 @@ impl TryParse for Closure {
         map(
             pair(
                 pair(
-                    opt(wst(lexem::MOVE)),
+                    opt(wst_closed(lexem::MOVE)),
                     delimited(
                         wst(lexem::PAR_O),
                         separated_list0(wst(lexem::COMA), ClosureParam::parse),
                         wst(lexem::PAR_C),
                     ),
                 ),
-                preceded(wst(lexem::ARROW), ExprScope::parse),
+                preceded(wst(lexem::ARROW), cut(ExprScope::parse)).context("Invalid closure"),
             ),
             |((state, params), scope)| Closure {
                 params,
@@ -261,11 +264,11 @@ impl TryParse for ExprScope {
                         expr: Box::new(value),
                         metadata: Metadata::default(),
                     })],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 })
             }),
         ))(input)
@@ -295,10 +298,16 @@ impl TryParse for Address {
      * Addr := &DATA
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(preceded(wst(lexem::ADDR), Atomic::parse), |value| Address {
-            value: value.into(),
-            metadata: Metadata::default(),
-        })(input)
+        map(
+            preceded(
+                wst(lexem::ADDR),
+                cut(Atomic::parse).context("Invalid address"),
+            ),
+            |value| Address {
+                value: value.into(),
+                metadata: Metadata::default(),
+            },
+        )(input)
     }
 }
 
@@ -310,12 +319,16 @@ impl TryParse for PtrAccess {
      * Addr := -DATA
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(preceded(wst(lexem::ACCESS), Atomic::parse), |value| {
-            PtrAccess {
+        map(
+            preceded(
+                wst(lexem::ACCESS),
+                cut(Atomic::parse).context("Invalid pointer access"),
+            ),
+            |value| PtrAccess {
                 value: value.into(),
                 metadata: Metadata::default(),
-            }
-        })(input)
+            },
+        )(input)
     }
 }
 
@@ -365,11 +378,11 @@ impl TryParse for Union {
                 separated_pair(parse_id, wst(lexem::SEP), parse_id),
                 delimited(
                     wst(lexem::BRA_O),
-                    separated_list0(
+                    cut(separated_list0(
                         wst(lexem::COMA),
                         separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
-                    ),
-                    preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
+                    )),
+                    cut(preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C))),
                 ),
             ),
             |((typename, name), value)| Union {
@@ -417,10 +430,10 @@ impl TryParse for Map {
                 wst(platform::utils::lexem::MAP),
                 delimited(
                     wst(lexem::BRA_O),
-                    separated_list1(
+                    cut(separated_list1(
                         wst(lexem::COMA),
                         separated_pair(Expression::parse, wst(lexem::COLON), Expression::parse),
-                    ),
+                    )),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 ),
             ),
@@ -434,16 +447,13 @@ impl TryParse for Map {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, rc::Rc};
+    use std::sync::{Arc, RwLock};
 
     use crate::{
-        ast::{
-            expressions::{
-                data::Number,
-                operation::{FieldAccess, FnCall, ListAccess, Range, TupleAccess},
-                Atomic,
-            },
-            statements::block::Block,
+        ast::expressions::{
+            data::Number,
+            operation::{FieldAccess, FnCall, ListAccess, TupleAccess},
+            Atomic,
         },
         semantic::scope::ClosureState,
         v_num,
@@ -476,7 +486,7 @@ mod tests {
         let res = Primitive::parse("42.5".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(Primitive::Number(Cell::new(Number::F64(42.5))), value);
+        assert_eq!(Primitive::Number(Number::F64(42.5)), value);
 
         let res = Primitive::parse("'a'".into());
         assert!(res.is_ok(), "{:?}", res);
@@ -522,7 +532,7 @@ mod tests {
             StrSlice {
                 value: "Hello World".to_string(),
                 metadata: Metadata::default(),
-                padding: 0.into(),
+                padding: 0,
             },
             value
         );
@@ -573,17 +583,17 @@ mod tests {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
                                 id: "x".to_string().into(),
-                                from_field: Cell::new(false),
+                                from_field: false,
                                 metadata: Metadata::default()
                             }
                         )))),
                         metadata: Metadata::default()
                     })],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None)
+                    inner_scope: None
                 }),
                 metadata: Metadata::default()
             },
@@ -610,17 +620,17 @@ mod tests {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
                                 id: "x".to_string().into(),
-                                from_field: Cell::new(false),
+                                from_field: false,
                                 metadata: Metadata::default()
                             }
                         )))),
                         metadata: Metadata::default()
                     })],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None)
+                    inner_scope: None
                 }),
                 metadata: Metadata::default()
             },
@@ -650,17 +660,17 @@ mod tests {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
                                 id: "x".to_string().into(),
-                                from_field: Cell::new(false),
+                                from_field: false,
                                 metadata: Metadata::default()
                             }
                         )))),
                         metadata: Metadata::default()
                     })],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None)
+                    inner_scope: None
                 }),
                 metadata: Metadata::default()
             },
@@ -695,7 +705,7 @@ mod tests {
             Address {
                 value: Atomic::Data(Data::Variable(Variable {
                     id: "x".to_string().into(),
-                    from_field: Cell::new(false),
+                    from_field: false,
                     metadata: Metadata::default()
                 }))
                 .into(),
@@ -714,7 +724,7 @@ mod tests {
             PtrAccess {
                 value: Atomic::Data(Data::Variable(Variable {
                     id: "x".to_string().into(),
-                    from_field: Cell::new(false),
+                    from_field: false,
                     metadata: Metadata::default()
                 }))
                 .into(),
@@ -735,7 +745,7 @@ mod tests {
                     (
                         Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
                             value: "x".to_string().into(),
-                            padding: 0.into(),
+                            padding: 0,
                             metadata: Metadata::default(),
                         }))),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
@@ -745,7 +755,7 @@ mod tests {
                     (
                         Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
                             value: "y".to_string().into(),
-                            padding: 0.into(),
+                            padding: 0,
                             metadata: Metadata::default(),
                         }))),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
@@ -970,13 +980,14 @@ mod tests {
                     fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                         id: "f".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: Cell::new(false),
+                        from_field: false,
                     })))),
                     params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                         Primitive::Number(Number::Unresolved(10).into())
                     )))],
                     metadata: Metadata::default(),
-                    platform: Rc::default(),
+                    platform: Default::default(),
+                    is_dynamic_fn: None,
                 })
                 .into(),
                 index: 1,

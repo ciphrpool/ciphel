@@ -1,8 +1,5 @@
-use std::cell::Ref;
-
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::type_traits::TypeChecking;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::EType;
 use crate::semantic::{
@@ -10,7 +7,7 @@ use crate::semantic::{
 };
 
 impl TypeOf for Flow {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -23,7 +20,7 @@ impl TypeOf for Flow {
     }
 }
 impl TypeOf for IfStat {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -45,7 +42,7 @@ impl TypeOf for IfStat {
     }
 }
 impl TypeOf for MatchStat {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -64,7 +61,7 @@ impl TypeOf for MatchStat {
             }
         };
         let Some(pattern_type) = pattern_type else {
-            return Err(SemanticError::CantInferType);
+            return Err(SemanticError::CantInferType(format!("of this pattern")));
         };
         match &self.else_branch {
             Some(else_branch) => {
@@ -79,7 +76,7 @@ impl TypeOf for MatchStat {
 }
 
 impl TypeOf for TryStat {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -98,7 +95,10 @@ impl TypeOf for TryStat {
 }
 
 impl TypeOf for CallStat {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<crate::semantic::EType, SemanticError>
+    fn type_of(
+        &self,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<crate::semantic::EType, SemanticError>
     where
         Self: Sized + Resolve,
     {

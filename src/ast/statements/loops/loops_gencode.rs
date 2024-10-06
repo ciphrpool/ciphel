@@ -5,18 +5,15 @@ use crate::semantic::SizeOf;
 use crate::vm::casm::branch::BranchIf;
 
 use crate::vm::vm::NextItem;
-use crate::{
-    semantic::MutRc,
-    vm::{
-        allocator::stack::UReg,
-        casm::{
-            alloc::StackFrame,
-            branch::{Goto, Label},
-            mem::Mem,
-            Casm, CasmProgram,
-        },
-        vm::{CodeGenerationError, GenerateCode},
+use crate::vm::{
+    allocator::stack::UReg,
+    casm::{
+        alloc::StackFrame,
+        branch::{Goto, Label},
+        mem::Mem,
+        Casm, CasmProgram,
     },
+    vm::{CodeGenerationError, GenerateCode},
 };
 
 use super::{ForLoop, Loop, WhileLoop};
@@ -24,8 +21,8 @@ use super::{ForLoop, Loop, WhileLoop};
 impl GenerateCode for Loop {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Loop::For(value) => value.gencode(scope, instructions),
@@ -56,8 +53,8 @@ impl GenerateCode for Loop {
 impl GenerateCode for ForLoop {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(iterator_type) = self.iterator.expr.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -116,8 +113,8 @@ impl GenerateCode for ForLoop {
 impl GenerateCode for WhileLoop {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let start_label = Label::gen();
         let end_label = Label::gen();
@@ -145,28 +142,23 @@ impl GenerateCode for WhileLoop {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
 
     use super::*;
     use crate::ast::TryParse;
     use crate::semantic::Resolve;
     use crate::{
-        ast::{
-            expressions::data::{Number, Primitive},
-            statements::Statement,
-        },
-        clear_stack,
+        ast::{expressions::data::Primitive, statements::Statement},
         semantic::scope::{
             scope::Scope,
             static_types::{NumberType, PrimitiveType},
         },
-        vm::vm::{DeserializeFrom, Runtime},
+        vm::vm::DeserializeFrom,
     };
     use crate::{compile_statement, v_num};
 
     #[test]
     fn valid_loop() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let i:u64 = 0;
@@ -196,7 +188,7 @@ mod tests {
 
     #[test]
     fn valid_while() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let i:u64 = 0;
@@ -223,7 +215,7 @@ mod tests {
 
     #[test]
     fn valid_for_range_inclusive() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -250,7 +242,7 @@ mod tests {
 
     #[test]
     fn valid_for_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res = 0;
@@ -277,7 +269,7 @@ mod tests {
 
     #[test]
     fn valid_for_slice_assigned() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res = 0;
@@ -305,7 +297,7 @@ mod tests {
 
     #[test]
     fn valid_for_str_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res = 'a';
@@ -330,7 +322,7 @@ mod tests {
 
     #[test]
     fn valid_for_str_slice_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res = 'a';
@@ -355,7 +347,7 @@ mod tests {
 
     #[test]
     fn valid_for_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res = 0;
@@ -382,7 +374,7 @@ mod tests {
 
     #[test]
     fn valid_for_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res = 'a';
@@ -407,7 +399,7 @@ mod tests {
 
     #[test]
     fn valid_for_double() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -436,7 +428,7 @@ mod tests {
 
     #[test]
     fn valid_for_early_returns() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -463,7 +455,7 @@ mod tests {
 
     #[test]
     fn valid_for_early_returns_conditional() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -492,7 +484,7 @@ mod tests {
 
     #[test]
     fn valid_for_break() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -520,7 +512,7 @@ mod tests {
 
     #[test]
     fn valid_for_break_conditional() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -550,7 +542,7 @@ mod tests {
 
     #[test]
     fn valid_for_continue() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -577,7 +569,7 @@ mod tests {
 
     #[test]
     fn valid_for_continue_conditional() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -607,7 +599,7 @@ mod tests {
 
     #[test]
     fn valid_for_double_continue() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -638,7 +630,7 @@ mod tests {
     }
     #[test]
     fn valid_for_str_slice_with_padding() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let arr:str<10> = "abc";
@@ -663,7 +655,7 @@ mod tests {
     }
     #[test]
     fn valid_for_addr_str_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let arr = "abc";
@@ -689,7 +681,7 @@ mod tests {
 
     #[test]
     fn valid_for_addr_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let arr = string("abc");
@@ -715,7 +707,7 @@ mod tests {
 
     #[test]
     fn valid_for_addr_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let arr = vec[1,2,3,4];
@@ -743,7 +735,7 @@ mod tests {
 
     #[test]
     fn valid_for_addr_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let arr = [1,2,3,4];
@@ -771,7 +763,7 @@ mod tests {
 
     // #[test]
     // fn valid_for_double_addr_slice() {
-    //     let statement = Statement::parse(
+    //     let mut statement = Statement::parse(
     //         r##"
     //         let x = {
     //             let arr = &[1,2,3,4];

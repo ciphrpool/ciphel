@@ -1,9 +1,6 @@
 use crate::{
-    ast::{
-        expressions::{data::PtrAccess, operation::ListAccess},
-        statements::assignation::AssignValue,
-    },
-    semantic::{MutRc, SizeOf},
+    ast::{expressions::operation::ListAccess, statements::assignation::AssignValue},
+    semantic::SizeOf,
     vm::{
         casm::{
             branch::{Call, Goto, Label},
@@ -20,8 +17,8 @@ use crate::semantic::scope::scope::Scope;
 impl GenerateCode for Assignation {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = &self.right.gencode(scope, instructions)?;
         // self.left.gencode(scope, instructions)
@@ -66,8 +63,8 @@ impl GenerateCode for Assignation {
 impl GenerateCode for AssignValue {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             AssignValue::Scope(value) => {
@@ -93,7 +90,7 @@ impl GenerateCode for AssignValue {
 }
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, rc::Rc};
+    use std::sync::Arc;
 
     use num_traits::Zero;
 
@@ -103,10 +100,10 @@ mod tests {
                 data::{Data, Number, Primitive, Slice, Struct, Tuple},
                 Atomic, Expression,
             },
-            statements::{declaration, Statement},
+            statements::Statement,
             TryParse,
         },
-        clear_stack, compile_statement, e_static, p_num,
+        clear_stack, compile_statement, p_num,
         semantic::{
             scope::{
                 scope::Scope,
@@ -116,17 +113,14 @@ mod tests {
             Either, Resolve,
         },
         v_num,
-        vm::{
-            allocator::Memory,
-            vm::{DeserializeFrom, Executable, Runtime},
-        },
+        vm::vm::{DeserializeFrom, Executable, Runtime},
     };
 
     use super::*;
 
     #[test]
     fn valid_assignation_in_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let y:u64;
@@ -150,7 +144,7 @@ mod tests {
 
     #[test]
     fn valid_assignation_general_scope() {
-        let declaration = Statement::parse(
+        let mut declaration = Statement::parse(
             r##"
             let x:u64;
         "##
@@ -158,7 +152,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         x = 420;
     "##
@@ -167,35 +161,39 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let scope = Scope::new();
+
         let _ = declaration
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
+
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         declaration
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::vm::DbgGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -219,7 +217,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let point:Point;
@@ -235,37 +233,39 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point".to_string().into(),
                 UserType::Struct(user_type.clone()),
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -276,12 +276,12 @@ mod tests {
         for (r_id, res) in &result.fields {
             match res {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
+                    match x {
                         Number::I64(res) => {
                             if **r_id == "x" {
-                                assert_eq!(420, res);
+                                assert_eq!(420, *res);
                             } else if **r_id == "y" {
-                                assert_eq!(69, res);
+                                assert_eq!(69, *res);
                             }
                         }
                         _ => assert!(false, "Expected i64"),
@@ -294,7 +294,7 @@ mod tests {
 
     #[test]
     fn valid_assignation_tuple_access_in_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let x:(u64,u64);
@@ -308,29 +308,31 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -343,7 +345,7 @@ mod tests {
             .into_iter()
             .map(|e| match e {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
+                    match x {
                         Number::U64(n) => Some(n),
                         _ => None,
                     }
@@ -356,7 +358,7 @@ mod tests {
 
     #[test]
     fn valid_assignation_slice_access_in_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let x:[4]u64;
@@ -381,7 +383,7 @@ mod tests {
             .into_iter()
             .map(|e| match e {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
+                    match x {
                         Number::U64(n) => Some(n),
                         _ => None,
                     }
@@ -403,7 +405,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let point:Point;
@@ -417,36 +419,38 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point".to_string().into(),
                 UserType::Struct(user_type.clone()),
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -458,12 +462,12 @@ mod tests {
         for (r_id, res) in &result.fields {
             match res {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
+                    match x {
                         Number::I64(res) => {
                             if **r_id == "x" {
-                                assert_eq!(420, res);
+                                assert_eq!(420, *res);
                             } else if **r_id == "y" {
-                                assert_eq!(69, res);
+                                assert_eq!(69, *res);
                             }
                         }
                         _ => assert!(false, "Expected i64"),
@@ -496,7 +500,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let point:Point;
@@ -510,37 +514,39 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point".to_string().into(),
                 UserType::Struct(user_type.clone()),
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -561,15 +567,15 @@ mod tests {
                         }))) => match &value[1] {
                             Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(x),
-                            ))) => match x.get() {
-                                Number::U64(n) => Some(n),
+                            ))) => match x {
+                                Number::U64(n) => Some(*n),
                                 _ => None,
                             },
                             _ => None,
                         },
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                            match x.get() {
-                                Number::U64(n) => Some(n),
+                            match x {
+                                Number::U64(n) => Some(*n),
                                 _ => None,
                             }
                         }
@@ -600,12 +606,12 @@ mod tests {
                 res.push(("x".to_string().into(), p_num!(I64)));
                 res.push((
                     "y".to_string().into(),
-                    Either::User(Rc::new(UserType::Struct(user_type_point3d.clone()))),
+                    Either::User(Arc::new(UserType::Struct(user_type_point3d.clone()))),
                 ));
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let point:Point;
@@ -619,44 +625,46 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point".to_string().into(),
                 UserType::Struct(user_type_point.clone()),
             )
             .expect("Registering of user type should have succeeded");
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point3D".to_string().into(),
                 UserType::Struct(user_type_point3d.clone()),
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -677,8 +685,8 @@ mod tests {
                                 match res {
                                     Expression::Atomic(Atomic::Data(Data::Primitive(
                                         Primitive::Number(x),
-                                    ))) => match x.get() {
-                                        Number::I64(n) => assert_eq!(n, 69),
+                                    ))) => match x {
+                                        Number::I64(n) => assert_eq!(*n, 69),
                                         _ => assert!(false, "Expected i64"),
                                     },
                                     _ => assert!(false, "Expected i64"),
@@ -694,7 +702,7 @@ mod tests {
 
     #[test]
     fn valid_assignation_ptr_access_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = vec[1,2,3,4];

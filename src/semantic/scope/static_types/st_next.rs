@@ -12,7 +12,7 @@ use crate::{
             locate::{Locate, LocateUTF8Char},
             mem::Mem,
             operation::{
-                Addition, Equal, Greater, Less, LessEqual, Mult, NotEqual, OpPrimitive, Operation,
+                Addition, Greater, Less, LessEqual, Mult, NotEqual, OpPrimitive, Operation,
                 OperationKind, Substraction,
             },
             Casm, CasmProgram,
@@ -24,7 +24,7 @@ use crate::{
 use super::{AddrType, RangeType, SliceType, StaticType, StrSliceType, StringType, VecType};
 
 impl NextItem for StaticType {
-    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_address(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             StaticType::Slice(value) => value.init_address(instructions),
             StaticType::String(value) => value.init_address(instructions),
@@ -35,7 +35,7 @@ impl NextItem for StaticType {
             _ => Err(CodeGenerationError::UnresolvedError),
         }
     }
-    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_index(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             StaticType::Slice(value) => value.init_index(instructions),
             StaticType::String(value) => value.init_index(instructions),
@@ -48,7 +48,7 @@ impl NextItem for StaticType {
     }
     fn build_item(
         &self,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -61,7 +61,7 @@ impl NextItem for StaticType {
             _ => Err(CodeGenerationError::UnresolvedError),
         }
     }
-    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn next(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             StaticType::Slice(value) => value.next(instructions),
             StaticType::String(value) => value.next(instructions),
@@ -75,7 +75,7 @@ impl NextItem for StaticType {
 }
 
 impl NextItem for AddrType {
-    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_address(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self.0.as_ref() {
             Either::Static(value) => match value.as_ref() {
                 StaticType::Slice(_) => {}
@@ -101,25 +101,25 @@ impl NextItem for AddrType {
         }
         Ok(())
     }
-    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_index(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         self.0.init_index(instructions)
     }
 
     fn build_item(
         &self,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError> {
         self.0.build_item(instructions, end_label)
     }
 
-    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn next(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         self.0.next(instructions)
     }
 }
 
 impl NextItem for SliceType {
-    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_address(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         instructions.push(Casm::Locate(Locate {
             address: MemoryAddress::Stack {
                 offset: Offset::ST(-(self.size_of() as isize)),
@@ -129,7 +129,7 @@ impl NextItem for SliceType {
         Ok(())
     }
 
-    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_index(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         instructions.push(Casm::Data(Data::Serialized {
             data: (self.size_of() as u64).to_le_bytes().into(),
         }));
@@ -154,7 +154,7 @@ impl NextItem for SliceType {
     }
     fn build_item(
         &self,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError> {
         /* Dup loop index and end offset*/
@@ -178,7 +178,7 @@ impl NextItem for SliceType {
         /* STACK : UPPER | INDEX (8) | ITEM (item_size) */
         Ok(())
     }
-    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn next(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : UPPER | INDEX (8) */
         instructions.push(Casm::Data(Data::Serialized {
             data: self.item_type.size_of().to_le_bytes().into(),
@@ -196,10 +196,10 @@ impl NextItem for SliceType {
 }
 
 impl NextItem for StringType {
-    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_address(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         Ok(())
     }
-    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_index(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : POINTER TO STRING */
         instructions.push(Casm::Mem(Mem::Dup(8)));
         instructions.push(Casm::Mem(Mem::Dup(8)));
@@ -249,7 +249,7 @@ impl NextItem for StringType {
     }
     fn build_item(
         &self,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError> {
         /* Dup loop index and end offset*/
@@ -280,7 +280,7 @@ impl NextItem for StringType {
         /* STACK : UPPER | INDEX (8) | CHAR (4) */
         Ok(())
     }
-    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn next(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : UPPER | INDEX */
         instructions.push(Casm::LocateUTF8Char(LocateUTF8Char::RuntimeNext));
 
@@ -289,7 +289,7 @@ impl NextItem for StringType {
 }
 
 impl NextItem for StrSliceType {
-    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_address(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         instructions.push(Casm::Locate(Locate {
             address: MemoryAddress::Stack {
                 offset: Offset::ST(-(self.size_of() as isize)),
@@ -298,7 +298,7 @@ impl NextItem for StrSliceType {
         }));
         Ok(())
     }
-    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_index(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         instructions.push(Casm::Data(Data::Serialized {
             data: (self.size_of() as u64 - 8).to_le_bytes().into(),
         }));
@@ -323,7 +323,7 @@ impl NextItem for StrSliceType {
     }
     fn build_item(
         &self,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError> {
         /* Dup loop index and end offset*/
@@ -354,7 +354,7 @@ impl NextItem for StrSliceType {
         /* STACK : UPPER | INDEX (8) | CHAR (4) */
         Ok(())
     }
-    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn next(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : UPPER | INDEX */
         instructions.push(Casm::LocateUTF8Char(LocateUTF8Char::RuntimeNext));
 
@@ -363,10 +363,10 @@ impl NextItem for StrSliceType {
 }
 
 impl NextItem for VecType {
-    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_address(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         Ok(())
     }
-    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_index(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : POINTER TO VEC */
         instructions.push(Casm::Mem(Mem::Dup(8)));
         instructions.push(Casm::Mem(Mem::Dup(8)));
@@ -427,7 +427,7 @@ impl NextItem for VecType {
 
     fn build_item(
         &self,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError> {
         /* Dup loop index and end offset*/
@@ -451,7 +451,7 @@ impl NextItem for VecType {
         Ok(())
     }
 
-    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn next(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : UPPER | INDEX (8) */
         instructions.push(Casm::Data(Data::Serialized {
             data: self.0.size_of().to_le_bytes().into(),
@@ -468,11 +468,11 @@ impl NextItem for VecType {
     }
 }
 impl NextItem for RangeType {
-    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_address(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         Ok(())
     }
 
-    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_index(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : LOWER | UPPER | INCR */
         instructions.push(Casm::Access(Access::Static {
             address: MemoryAddress::Stack {
@@ -489,7 +489,7 @@ impl NextItem for RangeType {
 
     fn build_item(
         &self,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError> {
         /* STACK : (LOWER | UPPER | INCR ) (original) | INDEX */
@@ -536,7 +536,7 @@ impl NextItem for RangeType {
         Ok(())
     }
 
-    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn next(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : LOWER | UPPER | INCR | INDEX */
 
         /* Get increment value */

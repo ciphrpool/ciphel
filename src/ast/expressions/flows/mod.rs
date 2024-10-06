@@ -3,19 +3,13 @@ pub mod flows_parse;
 pub mod flows_resolve;
 pub mod flows_typeof;
 
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
-};
-
 use crate::{
     ast::{types::Type, utils::strings::ID},
     semantic::{EType, Metadata},
-    vm::platform::{stdlib::strings::StringsFn, Lib},
 };
 
 use super::{
-    data::{ExprScope, Primitive, StrSlice, Variable},
+    data::{ExprScope, Primitive, StrSlice},
     Expression,
 };
 
@@ -74,7 +68,7 @@ pub struct PatternExpr {
 pub struct TryExpr {
     try_branch: ExprScope,
     else_branch: Option<ExprScope>,
-    pop_last_err: Cell<bool>,
+    pop_last_err: bool,
     metadata: Metadata,
 }
 
@@ -92,6 +86,15 @@ pub struct FCall {
 
 impl ExprFlow {
     pub fn metadata(&self) -> Option<&Metadata> {
+        match self {
+            ExprFlow::If(IfExpr { metadata, .. }) => Some(metadata),
+            ExprFlow::Match(MatchExpr { metadata, .. }) => Some(metadata),
+            ExprFlow::Try(TryExpr { metadata, .. }) => Some(metadata),
+            ExprFlow::SizeOf(_, metadata) => Some(metadata),
+            ExprFlow::FCall(FCall { metadata, .. }) => Some(metadata),
+        }
+    }
+    pub fn metadata_mut(&mut self) -> Option<&mut Metadata> {
         match self {
             ExprFlow::If(IfExpr { metadata, .. }) => Some(metadata),
             ExprFlow::Match(MatchExpr { metadata, .. }) => Some(metadata),

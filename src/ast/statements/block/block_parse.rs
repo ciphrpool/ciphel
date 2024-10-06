@@ -1,6 +1,10 @@
-use std::cell::{Cell, RefCell};
+use std::sync::{Arc, RwLock};
 
-use nom::{combinator::map, multi::many0, sequence::delimited};
+use nom::{
+    combinator::{cut, map},
+    multi::many0,
+    sequence::delimited,
+};
 
 use crate::{
     ast::{
@@ -22,14 +26,14 @@ impl TryParse for Block {
         map(
             delimited(
                 wst(lexem::BRA_O),
-                many0(Statement::parse),
-                wst(lexem::BRA_C),
+                cut(many0(Statement::parse)),
+                cut(wst(lexem::BRA_C)),
             ),
             |value| Block {
                 instructions: value,
-                inner_scope: RefCell::new(None),
-                can_capture: Cell::new(ClosureState::DEFAULT),
-                is_loop: Cell::new(false),
+                inner_scope: None,
+                can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                is_loop: Default::default(),
 
                 caller: Default::default(),
                 metadata: Metadata::default(),

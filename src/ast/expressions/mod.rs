@@ -1,6 +1,8 @@
-use std::cell::Ref;
-
-use nom::{branch::alt, combinator::map, sequence::delimited};
+use nom::{
+    branch::alt,
+    combinator::{cut, map},
+    sequence::delimited,
+};
 
 use crate::{
     ast::{
@@ -11,7 +13,7 @@ use crate::{
             strings::{eater, wst},
         },
     },
-    semantic::{AccessLevel, EType, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf},
+    semantic::{AccessLevel, EType, Metadata, Resolve, SemanticError, SizeOf, TypeOf},
     vm::{
         allocator::{stack::Offset, MemoryAddress},
         casm::{locate::Locate, Casm, CasmProgram},
@@ -26,7 +28,7 @@ use self::operation::{
     Substraction, TupleAccess, UnaryOperation,
 };
 
-use super::TryParse;
+use super::{utils::error::squash, TryParse};
 
 pub mod data;
 pub mod flows;
@@ -75,17 +77,18 @@ impl TryParse for Atomic {
      * | Error
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
-                delimited(wst(lexem::PAR_O), Expression::parse, wst(lexem::PAR_C)),
-                |value| Atomic::Paren(Box::new(value)),
-            ),
-            map(flows::ExprFlow::parse, |value| Atomic::ExprFlow(value)),
-            map(data::Data::parse, |value| Atomic::Data(value)),
-            map(operation::UnaryOperation::parse, |value| {
-                Atomic::UnaryOperation(value)
-            }),
-        ))(input)
+        squash(
+            alt((
+                map(
+                    delimited(wst(lexem::PAR_O), Expression::parse, wst(lexem::PAR_C)),
+                    |value| Atomic::Paren(Box::new(value)),
+                ),
+                map(flows::ExprFlow::parse, Atomic::ExprFlow),
+                map(data::Data::parse, Atomic::Data),
+                map(operation::UnaryOperation::parse, Atomic::UnaryOperation),
+            )),
+            "Expected a valid expression",
+        )(input)
     }
 }
 
@@ -93,26 +96,26 @@ impl Resolve for Atomic {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
-            Atomic::Data(value) => value.resolve(scope, context, extra),
-            Atomic::UnaryOperation(value) => value.resolve(scope, context, &()),
-            Atomic::Paren(value) => value.resolve(scope, context, extra),
-            Atomic::ExprFlow(value) => value.resolve(scope, context, &()),
+            Atomic::Data(value) => value.resolve::<G>(scope, context, extra),
+            Atomic::UnaryOperation(value) => value.resolve::<G>(scope, context, &mut ()),
+            Atomic::Paren(value) => value.resolve::<G>(scope, context, extra),
+            Atomic::ExprFlow(value) => value.resolve::<G>(scope, context, &mut ()),
         }
     }
 }
 
 impl TypeOf for Atomic {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -149,40 +152,40 @@ impl Resolve for Expression {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
-            Expression::Product(value) => value.resolve(scope, context, &()),
-            Expression::Addition(value) => value.resolve(scope, context, &()),
-            Expression::Substraction(value) => value.resolve(scope, context, &()),
-            Expression::Shift(value) => value.resolve(scope, context, &()),
-            Expression::BitwiseAnd(value) => value.resolve(scope, context, &()),
-            Expression::BitwiseXOR(value) => value.resolve(scope, context, &()),
-            Expression::BitwiseOR(value) => value.resolve(scope, context, &()),
-            Expression::Comparaison(value) => value.resolve(scope, context, &()),
-            Expression::LogicalAnd(value) => value.resolve(scope, context, &()),
-            Expression::Equation(value) => value.resolve(scope, context, &()),
-            Expression::LogicalOr(value) => value.resolve(scope, context, &()),
-            Expression::Atomic(value) => value.resolve(scope, context, extra),
-            Expression::Cast(value) => value.resolve(scope, context, &()),
-            Expression::Range(value) => value.resolve(scope, context, &()),
-            Expression::FieldAccess(value) => value.resolve(scope, context, extra),
-            Expression::ListAccess(value) => value.resolve(scope, context, extra),
-            Expression::TupleAccess(value) => value.resolve(scope, context, extra),
-            Expression::FnCall(value) => value.resolve(scope, context, extra),
+            Expression::Product(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Addition(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Substraction(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Shift(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::BitwiseAnd(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::BitwiseXOR(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::BitwiseOR(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Comparaison(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::LogicalAnd(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Equation(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::LogicalOr(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Atomic(value) => value.resolve::<G>(scope, context, extra),
+            Expression::Cast(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Range(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::FieldAccess(value) => value.resolve::<G>(scope, context, extra),
+            Expression::ListAccess(value) => value.resolve::<G>(scope, context, extra),
+            Expression::TupleAccess(value) => value.resolve::<G>(scope, context, extra),
+            Expression::FnCall(value) => value.resolve::<G>(scope, context, extra),
         }
     }
 }
 
 impl TypeOf for Expression {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -212,8 +215,8 @@ impl TypeOf for Expression {
 impl GenerateCode for Expression {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Expression::Product(value) => value.gencode(scope, instructions),
@@ -241,8 +244,8 @@ impl GenerateCode for Expression {
 impl Locatable for Expression {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Expression::Atomic(value) => value.locate(scope, instructions),
@@ -302,8 +305,8 @@ impl Locatable for Expression {
 impl GenerateCode for Atomic {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Atomic::Data(value) => value.gencode(scope, instructions),
@@ -317,8 +320,8 @@ impl GenerateCode for Atomic {
 impl Locatable for Atomic {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Atomic::Data(value) => value.locate(scope, instructions),
@@ -389,6 +392,36 @@ impl Expression {
         }
     }
 
+    pub fn metadata_mut(&mut self) -> Option<&mut Metadata> {
+        match self {
+            Expression::Product(Product::Div { metadata, .. }) => Some(metadata),
+            Expression::Product(Product::Mod { metadata, .. }) => Some(metadata),
+            Expression::Product(Product::Mult { metadata, .. }) => Some(metadata),
+            Expression::Addition(Addition { metadata, .. }) => Some(metadata),
+            Expression::Substraction(Substraction { metadata, .. }) => Some(metadata),
+            Expression::Shift(Shift::Left { metadata, .. }) => Some(metadata),
+            Expression::Shift(Shift::Right { metadata, .. }) => Some(metadata),
+            Expression::BitwiseAnd(BitwiseAnd { metadata, .. }) => Some(metadata),
+            Expression::BitwiseXOR(BitwiseXOR { metadata, .. }) => Some(metadata),
+            Expression::BitwiseOR(BitwiseOR { metadata, .. }) => Some(metadata),
+            Expression::Cast(Cast { metadata, .. }) => Some(metadata),
+            Expression::Comparaison(Comparaison::Greater { metadata, .. }) => Some(metadata),
+            Expression::Comparaison(Comparaison::GreaterEqual { metadata, .. }) => Some(metadata),
+            Expression::Comparaison(Comparaison::Less { metadata, .. }) => Some(metadata),
+            Expression::Comparaison(Comparaison::LessEqual { metadata, .. }) => Some(metadata),
+            Expression::Equation(Equation::Equal { metadata, .. }) => Some(metadata),
+            Expression::Equation(Equation::NotEqual { metadata, .. }) => Some(metadata),
+            Expression::LogicalAnd(LogicalAnd { metadata, .. }) => Some(metadata),
+            Expression::LogicalOr(LogicalOr { metadata, .. }) => Some(metadata),
+            Expression::Range(Range { metadata, .. }) => Some(metadata),
+            Expression::Atomic(value) => value.metadata_mut(),
+            Expression::FieldAccess(FieldAccess { metadata, .. }) => Some(metadata),
+            Expression::ListAccess(ListAccess { metadata, .. }) => Some(metadata),
+            Expression::TupleAccess(TupleAccess { metadata, .. }) => Some(metadata),
+            Expression::FnCall(FnCall { metadata, .. }) => Some(metadata),
+        }
+    }
+
     pub fn signature(&self) -> Option<EType> {
         match self {
             Expression::Product(Product::Div { metadata, .. }) => metadata.signature(),
@@ -432,6 +465,15 @@ impl Atomic {
             Atomic::UnaryOperation(UnaryOperation::Not { value: _, metadata }) => Some(metadata),
             Atomic::Paren(value) => value.metadata(),
             Atomic::ExprFlow(value) => value.metadata(),
+        }
+    }
+    pub fn metadata_mut(&mut self) -> Option<&mut Metadata> {
+        match self {
+            Atomic::Data(value) => value.metadata_mut(),
+            Atomic::UnaryOperation(UnaryOperation::Minus { value: _, metadata }) => Some(metadata),
+            Atomic::UnaryOperation(UnaryOperation::Not { value: _, metadata }) => Some(metadata),
+            Atomic::Paren(value) => value.metadata_mut(),
+            Atomic::ExprFlow(value) => value.metadata_mut(),
         }
     }
 

@@ -1,24 +1,15 @@
-use std::cell::Ref;
-
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StringType;
 use crate::{
-    ast::expressions::data::Variable,
     p_num,
-    semantic::{
-        scope::{
-            static_types::{NumberType, PrimitiveType, StaticType},
-            type_traits::GetSubTypes,
-        },
-        EType, Either, MergeType, Resolve, SemanticError, TypeOf,
-    },
+    semantic::{scope::static_types::StaticType, EType, MergeType, Resolve, SemanticError, TypeOf},
 };
 
 use super::{ExprFlow, FCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
 
 impl TypeOf for ExprFlow {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -32,7 +23,7 @@ impl TypeOf for ExprFlow {
     }
 }
 impl TypeOf for IfExpr {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -42,7 +33,7 @@ impl TypeOf for IfExpr {
 }
 
 impl TypeOf for PatternExpr {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -50,7 +41,7 @@ impl TypeOf for PatternExpr {
     }
 }
 impl TypeOf for MatchExpr {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -69,7 +60,7 @@ impl TypeOf for MatchExpr {
             }
         };
         let Some(pattern_type) = pattern_type else {
-            return Err(SemanticError::CantInferType);
+            return Err(SemanticError::CantInferType(format!("of this pattern")));
         };
         match &self.else_branch {
             Some(else_branch) => {
@@ -81,7 +72,7 @@ impl TypeOf for MatchExpr {
     }
 }
 impl TypeOf for TryExpr {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -92,7 +83,7 @@ impl TypeOf for TryExpr {
 }
 
 impl TypeOf for FCall {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {

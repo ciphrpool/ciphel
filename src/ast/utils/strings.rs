@@ -1,21 +1,15 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use nom::{
     branch::alt,
-    character::complete::{alpha1, alphanumeric1},
-    combinator::{map, map_res, recognize, value},
+    character::complete::{alpha1, alphanumeric1, anychar},
+    combinator::{map_res, not, peek, recognize, value, verify},
     multi::many0_count,
-    sequence::pair,
+    sequence::{pair, terminated},
     Parser,
 };
 
-use nom_supreme::{
-    error::{ErrorTree, GenericErrorTree},
-    tag::complete::tag,
-    ParserExt,
-};
-
-use crate::vm::platform;
+use nom_supreme::{tag::complete::tag, ParserExt};
 
 use super::{
     io::{PResult, Span},
@@ -44,14 +38,14 @@ pub mod eater {
         io::{PError, PResult, Span},
         lexem,
     };
-
+    #[inline]
     pub fn cmt<'input, F, O>(inner: F) -> impl FnMut(Span<'input>) -> PResult<O>
     where
         F: Parser<Span<'input>, O, PError<'input>>,
     {
         delimited(ml_comment, inner, ml_comment)
     }
-
+    #[inline]
     fn sl_comment(input: Span) -> PResult<()> {
         value(
             (), // Output is thrown away.
@@ -61,24 +55,7 @@ pub mod eater {
             ),
         )(input)
     }
-
-    // pub fn ml_comment(input: Span) -> PResult<()> {
-    //     value(
-    //         (),
-    //         many0(alt((
-    //             value(
-    //                 (),
-    //                 tuple((
-    //                     delimited(multispace0, tag(lexem::ML_OP_COMMENT), multispace0),
-    //                     take_until(lexem::ML_CL_COMMENT),
-    //                     delimited(multispace0, tag(lexem::ML_CL_COMMENT), multispace0),
-    //                 )),
-    //             ),
-    //             sl_comment,
-    //         ))),
-    //     )(input)
-    // }
-
+    #[inline]
     pub fn ml_comment(input: Span) -> PResult<()> {
         value(
             (),
@@ -100,6 +77,7 @@ pub mod eater {
         )(input)
     }
 
+    #[inline]
     pub fn ws<'input, F, O>(inner: F) -> impl FnMut(Span<'input>) -> PResult<O>
     where
         F: Parser<Span<'input>, O, PError<'input>>,
@@ -112,7 +90,7 @@ pub mod eater {
     }
 }
 
-pub type ID = Rc<String>;
+pub type ID = Arc<String>;
 
 /*
  * @desc Parse Identifier
@@ -182,11 +160,11 @@ pub fn parse_id(input: Span) -> PResult<ID> {
             };
             if is_in_lexem {
                 Err(nom::Err::Error(nom::error::Error::new(
-                    "id",
+                    id.as_str().to_string(),
                     nom::error::ErrorKind::AlphaNumeric,
                 )))
             } else {
-                Ok(Rc::new(id))
+                Ok(Arc::new(id))
             }
         },
     ))
@@ -197,7 +175,22 @@ pub fn parse_id(input: Span) -> PResult<ID> {
 pub fn wst<'input>(lexem: &'static str) -> impl FnMut(Span<'input>) -> PResult<()> {
     move |input: Span| value((), eater::ws(tag(lexem)))(input)
 }
-
+pub fn keyword<'input>(kw: &'static str) -> impl FnMut(Span<'input>) -> PResult<()> {
+    move |input: Span| {
+        value(
+            (),
+            terminated(
+                tag(kw),
+                peek(not(verify(anychar, |c: &char| {
+                    c.is_ascii_alphanumeric() || *c == '_'
+                }))),
+            ),
+        )(input)
+    }
+}
+pub fn wst_closed<'input>(lexem: &'static str) -> impl FnMut(Span<'input>) -> PResult<()> {
+    move |input: Span| value((), eater::ws(keyword(lexem)))(input)
+}
 /*
  * @desc Parse Escaped String and Character
  *
@@ -222,6 +215,7 @@ pub mod string_parser {
         Parser,
     };
     use nom_supreme::tag::complete::tag;
+    use nom_supreme::ParserExt;
 
     use super::eater::ml_comment;
     fn unicode(input: Span) -> PResult<char> {
@@ -297,7 +291,9 @@ pub mod string_parser {
             nom::character::complete::char('"'),
             build_string,
             nom::character::complete::char('"'),
-        )(input)
+        )
+        .context("Invalid string")
+        .parse(input)
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]

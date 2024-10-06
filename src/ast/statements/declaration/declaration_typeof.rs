@@ -1,16 +1,14 @@
-use std::cell::Ref;
-
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::{
-    scope::{static_types::StaticType},
-    Resolve, SemanticError, TypeOf,
-};
+use crate::semantic::{scope::static_types::StaticType, Resolve, SemanticError, TypeOf};
 use crate::semantic::{EType, Either};
 
 impl TypeOf for Declaration {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<crate::semantic::EType, SemanticError>
+    fn type_of(
+        &self,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<crate::semantic::EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -20,7 +18,7 @@ impl TypeOf for Declaration {
     }
 }
 impl TypeOf for TypedVar {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -28,7 +26,7 @@ impl TypeOf for TypedVar {
     }
 }
 impl TypeOf for DeclaredVar {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -42,7 +40,10 @@ impl TypeOf for DeclaredVar {
     }
 }
 impl TypeOf for PatternVar {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<crate::semantic::EType, SemanticError>
+    fn type_of(
+        &self,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<crate::semantic::EType, SemanticError>
     where
         Self: Sized + Resolve,
     {

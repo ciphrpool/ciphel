@@ -1,4 +1,5 @@
 use crate::{
+    arw_read,
     semantic::scope::scope::Scope,
     vm::casm::{alloc::StackFrame, branch::BranchTry, data::Data},
 };
@@ -19,7 +20,7 @@ use crate::{
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
         },
-        Either, MutRc, SizeOf,
+        Either, SizeOf,
     },
     vm::{
         casm::{
@@ -35,8 +36,8 @@ use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 impl GenerateCode for Flow {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Flow::If(value) => value.gencode(scope, instructions),
@@ -50,8 +51,8 @@ impl GenerateCode for Flow {
 impl GenerateCode for CallStat {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.call.gencode(scope, instructions)?;
         let Some(return_type) = self.call.signature() else {
@@ -69,8 +70,8 @@ impl GenerateCode for CallStat {
 impl GenerateCode for IfStat {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let mut else_if_labels: Vec<Ulid> = Vec::default();
         let else_label = match &self.else_branch {
@@ -83,7 +84,7 @@ impl GenerateCode for IfStat {
             else_if_labels.push(Label::gen());
         }
 
-        let _ = self.condition.gencode(scope, &instructions)?;
+        let _ = self.condition.gencode(scope, instructions)?;
 
         match &self.else_if_branches.first() {
             Some(_) => {
@@ -99,7 +100,9 @@ impl GenerateCode for IfStat {
         }
         // let _ = self.then_branch.gencode(block, &instructions)?;
         let _ = inner_block_gencode(scope, &self.then_branch, None, false, false, instructions)?;
-
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_if_label),
+        }));
         for pair in self
             .else_if_branches
             .iter()
@@ -110,29 +113,38 @@ impl GenerateCode for IfStat {
             let ((cond_1, scope_1), label_1) = &pair[0];
             let ((_, _), label_2) = &pair[1];
             instructions.push_label_id(**label_1, "else_if".to_string().into());
-            let _ = cond_1.gencode(scope, &instructions)?;
+            let _ = cond_1.gencode(scope, instructions)?;
             instructions.push(Casm::If(BranchIf {
                 else_label: **label_2,
             }));
             // let _ = scope_1.gencode(block, instructions)?;
             let _ = inner_block_gencode(scope, &scope_1, None, false, false, instructions)?;
+            instructions.push(Casm::Goto(Goto {
+                label: Some(end_if_label),
+            }));
         }
         if let Some((cond, s)) = &self.else_if_branches.last() {
             instructions.push_label_id(
                 *else_if_labels.last().unwrap(),
                 "else_if".to_string().into(),
             );
-            let _ = cond.gencode(scope, &instructions)?;
+            let _ = cond.gencode(scope, instructions)?;
             instructions.push(Casm::If(BranchIf {
                 else_label: else_label.unwrap_or(end_if_label),
             }));
             // let _ = s.gencode(block, instructions)?;
             let _ = inner_block_gencode(scope, &s, None, false, false, instructions)?;
+            instructions.push(Casm::Goto(Goto {
+                label: Some(end_if_label),
+            }));
         }
 
         if let Some(s) = &self.else_branch {
             instructions.push_label_id(else_label.unwrap(), "else".to_string().into());
             let _ = inner_block_gencode(scope, &s, None, false, false, instructions)?;
+            instructions.push(Casm::Goto(Goto {
+                label: Some(end_if_label),
+            }));
         }
 
         instructions.push_label_id(end_if_label, "end_if".to_string().into());
@@ -143,8 +155,8 @@ impl GenerateCode for IfStat {
 impl GenerateCode for MatchStat {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(expr_type) = self.expr.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -212,7 +224,7 @@ impl GenerateCode for MatchStat {
                     }
                     Pattern::Primitive(value) => {
                         let data = match value {
-                            Primitive::Number(data) => match data.get() {
+                            Primitive::Number(data) => match data {
                                 Number::U8(data) => data.to_le_bytes().into(),
                                 Number::U16(data) => data.to_le_bytes().into(),
                                 Number::U32(data) => data.to_le_bytes().into(),
@@ -273,27 +285,31 @@ impl GenerateCode for MatchStat {
             (
                 PatternStat {
                     patterns: _,
-                    scope: s,
+                    scope: block,
                 },
                 label,
             ),
         ) in self.patterns.iter().zip(cases).enumerate()
         {
             instructions.push_label_id(label, format!("match_case_{}", idx).into());
-            let param_size = s
-                .scope()
-                .map(|s| {
-                    s.as_ref()
-                        .borrow()
-                        .vars()
-                        .filter_map(|(v, _)| {
-                            (v.state.get() == VarState::Parameter).then(|| v.type_sig.size_of())
-                        })
-                        .sum()
-                })
-                .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
-            let _ = inner_block_gencode(scope, &s, Some(param_size), false, false, instructions)?;
+            let scope = block
+                .scope()
+                .map_err(|_| CodeGenerationError::UnresolvedError)?;
+            let borrowed_scope = arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
+            let param_size = borrowed_scope
+                .vars()
+                .filter_map(|(v, _)| {
+                    if let Ok(borrowed) = arw_read!(v, CodeGenerationError::ConcurrencyError) {
+                        (borrowed.state == VarState::Parameter).then(|| borrowed.type_sig.size_of())
+                    } else {
+                        None
+                    }
+                })
+                .sum::<usize>();
+
+            let _ =
+                inner_block_gencode(&scope, &block, Some(param_size), false, false, instructions)?;
             instructions.push(Casm::Goto(Goto {
                 label: Some(end_match_label),
             }));
@@ -318,8 +334,8 @@ impl GenerateCode for MatchStat {
 impl GenerateCode for TryStat {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let else_label = Label::gen();
         let end_try_label = Label::gen();
@@ -347,21 +363,19 @@ impl GenerateCode for TryStat {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
 
     use super::*;
 
-    use crate::ast::expressions::data::{Number, Primitive};
     use crate::ast::TryParse;
     use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
     use crate::semantic::Resolve;
-    use crate::vm::vm::{DeserializeFrom, Runtime};
+    use crate::vm::vm::DeserializeFrom;
     use crate::{ast::statements::Statement, semantic::scope::scope::Scope};
-    use crate::{clear_stack, compile_statement, v_num};
+    use crate::{compile_statement, v_num};
 
     #[test]
     fn valid_if() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = 0;
@@ -390,7 +404,7 @@ mod tests {
 
     #[test]
     fn valid_if_else_if() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = 1;
@@ -421,7 +435,7 @@ mod tests {
 
     #[test]
     fn valid_if_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = 1;
@@ -451,8 +465,38 @@ mod tests {
     }
 
     #[test]
+    fn robustness_if_else() {
+        let mut statement = Statement::parse(
+            r##"
+        let x = {
+            let var = 1;
+            if var == 1 {
+                var = 420;
+            } else {
+                var = 69;
+            }
+
+            return var;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 420));
+    }
+    #[test]
     fn valid_match_primitive() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = 1;
@@ -488,7 +532,7 @@ mod tests {
     }
     #[test]
     fn valid_match_primitive_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = 3;
@@ -523,7 +567,7 @@ mod tests {
 
     #[test]
     fn valid_match_strslice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = "Hello";
@@ -557,7 +601,7 @@ mod tests {
 
     #[test]
     fn valid_match_strslice_other() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = "Hello";
@@ -594,7 +638,7 @@ mod tests {
 
     #[test]
     fn valid_match_strslice_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = "World";
@@ -628,7 +672,7 @@ mod tests {
 
     #[test]
     fn valid_match_enum() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             enum Sport {
@@ -670,7 +714,7 @@ mod tests {
 
     #[test]
     fn valid_match_enum_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             enum Sport {
@@ -709,7 +753,7 @@ mod tests {
 
     #[test]
     fn valid_match_union() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             union Sport {
@@ -747,7 +791,7 @@ mod tests {
 
     #[test]
     fn valid_match_union_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             union Sport {
@@ -785,7 +829,7 @@ mod tests {
 
     #[test]
     fn valid_match_union_mult() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             union Sport {
@@ -824,7 +868,7 @@ mod tests {
 
     #[test]
     fn valid_try_catch_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -855,7 +899,7 @@ mod tests {
 
     #[test]
     fn valid_try_catch_err_with_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -890,7 +934,7 @@ mod tests {
 
     #[test]
     fn valid_try_catch_no_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -924,7 +968,7 @@ mod tests {
 
     #[test]
     fn valid_try_catch_no_err_with_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -960,7 +1004,7 @@ mod tests {
 
     #[test]
     fn valid_try_with_inner_try_catch_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -996,7 +1040,7 @@ mod tests {
 
     #[test]
     fn valid_try_with_inner_try_catch_no_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -1032,7 +1076,7 @@ mod tests {
 
     #[test]
     fn valid_try_catch_err_with_inner_try_catch_no_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -1068,7 +1112,7 @@ mod tests {
 
     #[test]
     fn valid_try_early_return() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -1103,7 +1147,7 @@ mod tests {
 
     #[test]
     fn valid_try_early_return_with_inner_try_catch_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -1143,7 +1187,7 @@ mod tests {
     }
     #[test]
     fn valid_try_early_return_with_inner_try_catch_no_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 

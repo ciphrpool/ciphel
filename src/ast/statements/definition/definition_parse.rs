@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    combinator::{map, opt},
+    combinator::{cut, map, opt},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
@@ -9,9 +9,10 @@ use crate::ast::{
     statements::{block::Block, declaration::TypedVar},
     types::Type,
     utils::{
+        error::squash,
         io::{PResult, Span},
         lexem,
-        strings::{parse_id, wst},
+        strings::{parse_id, wst, wst_closed},
     },
     TryParse,
 };
@@ -20,10 +21,13 @@ use super::{Definition, EnumDef, FnDef, StructDef, TypeDef, UnionDef};
 
 impl TryParse for Definition {
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(TypeDef::parse, |value| Definition::Type(value)),
-            map(FnDef::parse, |value| Definition::Fn(value)),
-        ))(input)
+        squash(
+            alt((
+                map(TypeDef::parse, |value| Definition::Type(value)),
+                map(FnDef::parse, |value| Definition::Fn(value)),
+            )),
+            "Expected a type definition (a struct, enum or union) or a static function definition",
+        )(input)
     }
 }
 
@@ -49,15 +53,15 @@ impl TryParse for StructDef {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::STRUCT), parse_id),
-                delimited(
+                preceded(wst_closed(lexem::STRUCT), parse_id),
+                cut(delimited(
                     wst(lexem::BRA_O),
                     separated_list0(
                         wst(lexem::COMA),
                         separated_pair(parse_id, wst(lexem::COLON), Type::parse),
                     ),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
-                ),
+                )),
             ),
             |(id, fields)| StructDef { id, fields },
         )(input)
@@ -76,8 +80,8 @@ impl TryParse for UnionDef {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::UNION), parse_id),
-                delimited(
+                preceded(wst_closed(lexem::UNION), parse_id),
+                cut(delimited(
                     wst(lexem::BRA_O),
                     separated_list1(
                         wst(lexem::COMA),
@@ -94,7 +98,7 @@ impl TryParse for UnionDef {
                         ),
                     ),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
-                ),
+                )),
             ),
             |(id, variants)| UnionDef { id, variants },
         )(input)
@@ -113,12 +117,12 @@ impl TryParse for EnumDef {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::ENUM), parse_id),
-                delimited(
+                preceded(wst_closed(lexem::ENUM), parse_id),
+                cut(delimited(
                     wst(lexem::BRA_O),
                     separated_list1(wst(lexem::COMA), parse_id),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
-                ),
+                )),
             ),
             |(id, values)| EnumDef { id, values },
         )(input)
@@ -135,13 +139,13 @@ impl TryParse for FnDef {
     fn parse(input: Span) -> PResult<Self> {
         map(
             tuple((
-                preceded(wst(lexem::FN), parse_id),
-                delimited(
+                preceded(wst_closed(lexem::FN), parse_id),
+                cut(delimited(
                     wst(lexem::PAR_O),
                     separated_list0(wst(lexem::COMA), TypedVar::parse),
                     wst(lexem::PAR_C),
-                ),
-                preceded(wst(lexem::ARROW), Type::parse),
+                )),
+                cut(preceded(wst(lexem::ARROW), Type::parse)),
                 Block::parse,
             )),
             |(id, params, ret, scope)| FnDef {
@@ -157,17 +161,11 @@ impl TryParse for FnDef {
 #[cfg(test)]
 mod tests {
 
-    use std::{
-        cell::{Cell, RefCell},
-        collections::HashMap,
-    };
+    use std::sync::{Arc, RwLock};
 
     use crate::{
         ast::{
-            expressions::{
-                data::{Data, Number, Primitive},
-                Atomic, Expression,
-            },
+            expressions::{data::Data, Atomic, Expression},
             statements::{Return, Statement},
             types::{NumberType, PrimitiveType},
         },
@@ -260,7 +258,10 @@ mod tests {
         assert_eq!(
             EnumDef {
                 id: "Sport".to_string().into(),
-                values: vec!["Football".to_string().into(), "Basketball".to_string().into()]
+                values: vec![
+                    "Football".to_string().into(),
+                    "Basketball".to_string().into()
+                ]
             },
             value
         );
@@ -295,11 +296,11 @@ mod tests {
                         ))))),
                         metadata: Metadata::default()
                     })],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
-                    
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }
             },
             value

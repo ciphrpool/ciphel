@@ -1,9 +1,4 @@
-use crate::ast::{
-    expressions::{
-        Expression,
-    },
-    utils::strings::ID,
-};
+use crate::ast::{expressions::Expression, utils::strings::ID};
 
 use super::{block::Block, declaration::PatternVar};
 

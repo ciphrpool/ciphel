@@ -1,17 +1,13 @@
-use std::marker::PhantomData;
-
-use crate::semantic::MutRc;
-
 use super::vm::GameEngineStaticFn;
 
 #[derive(Debug, Clone)]
-pub struct StdIO<G: GameEngineStaticFn + Clone> {
-    pub stdout: StdOut<G>,
+pub struct StdIO {
+    pub stdout: StdOut,
     // pub casm_out: String,
-    pub stdin: StdIn<G>,
+    pub stdin: StdIn,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Default for StdIO<G> {
+impl Default for StdIO {
     fn default() -> Self {
         Self {
             stdin: StdIn::default(),
@@ -21,26 +17,30 @@ impl<G: crate::GameEngineStaticFn + Clone> Default for StdIO<G> {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> StdIO<G> {
-    pub fn push_casm_info(&mut self, engine: &mut G, content: &str) {
+impl StdIO {
+    pub fn push_casm_info<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
         engine.stdcasm_print(format!("INFO :: {content}\n"));
     }
-    pub fn push_casm(&mut self, engine: &mut G, content: &str) {
+    pub fn push_casm<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
         // self.casm_out.push('\t');
         // self.casm_out.push_str(content);
         // self.casm_out.push('\n');
         engine.stdcasm_print(format!("\t{content}"));
     }
-    pub fn push_casm_lib(&mut self, engine: &mut G, content: &str) {
+    pub fn push_casm_lib<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
         // self.casm_out.push_str("\tsyscall ");
         // self.casm_out.push_str(content);
         // self.casm_out.push('\n');
         engine.stdcasm_print(format!("\tsyscall {content}"));
     }
-    pub fn push_casm_label(&mut self, engine: &mut G, content: &str) {
+    pub fn push_casm_label<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
         // self.casm_out.push_str(content);
         // self.casm_out.push_str(" :\n");
         engine.stdcasm_print(format!("{content} :"));
+    }
+
+    pub fn print_stderr<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
+        engine.stderr_print(format!("Error : {content}"));
     }
 }
 
@@ -61,7 +61,7 @@ impl OutBuffer {
         match self {
             OutBuffer::Stack(stack) => match stack.last_mut() {
                 Some(head) => head.push(word.to_owned()),
-                None => {}
+                None => or.push_str(word),
             },
             OutBuffer::Empty => or.push_str(word),
         }
@@ -85,9 +85,15 @@ impl OutBuffer {
                             stack.push(head.into_iter().rev().collect::<Vec<String>>().join(""));
                             None
                         }
-                        None => Some(head.into_iter().rev().collect::<Vec<String>>().join("")),
+                        None => {
+                            *self = OutBuffer::Empty;
+                            Some(head.into_iter().rev().collect::<Vec<String>>().join(""))
+                        }
                     },
-                    None => None,
+                    None => {
+                        *self = OutBuffer::Empty;
+                        None
+                    }
                 }
             }
             OutBuffer::Empty => None,
@@ -103,9 +109,15 @@ impl OutBuffer {
                             stack.push(head.join(""));
                             None
                         }
-                        None => Some(head.join("")),
+                        None => {
+                            *self = OutBuffer::Empty;
+                            Some(head.join(""))
+                        }
                     },
-                    None => None,
+                    None => {
+                        *self = OutBuffer::Empty;
+                        None
+                    }
                 }
             }
             OutBuffer::Empty => None,
@@ -114,22 +126,20 @@ impl OutBuffer {
 }
 
 #[derive(Debug, Clone)]
-pub struct StdOut<G: GameEngineStaticFn + Clone> {
+pub struct StdOut {
     data: String,
     buffer: OutBuffer,
-    _phantom: PhantomData<G>,
 }
-impl<G: GameEngineStaticFn + Clone> Default for StdOut<G> {
+impl Default for StdOut {
     fn default() -> Self {
         Self {
             buffer: Default::default(),
             data: Default::default(),
-            _phantom: PhantomData::default(),
         }
     }
 }
 
-impl<G: GameEngineStaticFn + Clone> StdOut<G> {
+impl StdOut {
     pub fn push(&mut self, content: &str) {
         self.buffer.push(content, &mut self.data);
     }
@@ -154,13 +164,13 @@ impl<G: GameEngineStaticFn + Clone> StdOut<G> {
         std::mem::replace(&mut self.data, String::new())
     }
 
-    pub fn flush(&mut self, engine: &mut G) {
+    pub fn flush<G: GameEngineStaticFn>(&mut self, engine: &mut G) {
         let binding = self.take();
         let content = binding.trim_matches('\"');
         engine.stdout_print(content.into());
     }
 
-    pub fn flushln(&mut self, engine: &mut G) {
+    pub fn flushln<G: GameEngineStaticFn>(&mut self, engine: &mut G) {
         let binding = self.take();
         let content = binding.trim_matches('\"');
         engine.stdout_println(content.into());
@@ -168,33 +178,31 @@ impl<G: GameEngineStaticFn + Clone> StdOut<G> {
 }
 
 #[derive(Debug, Clone)]
-pub struct StdIn<G: GameEngineStaticFn + Clone> {
+pub struct StdIn {
     data: String,
     valid: bool,
-    _phantom: PhantomData<G>,
 }
-impl<G: GameEngineStaticFn + Clone> Default for StdIn<G> {
+impl Default for StdIn {
     fn default() -> Self {
         Self {
             data: String::new(),
             valid: false,
-            _phantom: PhantomData::default(),
         }
     }
 }
 
-impl<G: GameEngineStaticFn + Clone> StdIn<G> {
+impl StdIn {
     pub fn write(&mut self, content: String) {
         self.data.clear();
         self.valid = true;
         self.data.push_str(&content);
     }
-    pub fn request(&mut self, engine: &mut G) {
+    pub fn request<G: GameEngineStaticFn>(&mut self, engine: &mut G) {
         self.data.clear();
         self.valid = false;
         engine.stdin_request();
     }
-    pub fn read(&mut self, engine: &mut G) -> Option<String> {
+    pub fn read<G: GameEngineStaticFn>(&mut self, engine: &mut G) -> Option<String> {
         if !self.valid {
             None
         } else {
