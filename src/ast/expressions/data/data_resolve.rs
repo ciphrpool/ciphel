@@ -41,7 +41,7 @@ impl Resolve for Data {
     {
         match self {
             Data::Primitive(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
-            Data::Slice(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
+            Data::Slice(value) => value.resolve::<E>(scope_manager, scope_id, context, extra),
             Data::Vec(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
             Data::Closure(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
             Data::Lambda(value) => value.resolve::<E>(scope_manager, scope_id, context, &mut ()),
@@ -337,13 +337,13 @@ impl Resolve for Primitive {
 impl Resolve for Slice {
     type Output = ();
     type Context = Option<EType>;
-    type Extra = ();
+    type Extra = Option<EType>;
     fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
         context: &Self::Context,
-        _extra: &mut Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -387,7 +387,8 @@ impl Resolve for Slice {
                         "of an empty array".to_string(),
                     ));
                 }
-                let _ = self.value[0].resolve::<E>(scope_manager, scope_id, &None, &mut None)?;
+
+                let _ = self.value[0].resolve::<E>(scope_manager, scope_id, &None, extra)?;
                 let item_type = self.value[0].type_of(scope_manager, scope_id)?;
 
                 for value in &mut self.value[1..] {
@@ -1617,7 +1618,7 @@ mod tests {
             &mut scope_manager,
             None,
             &None,
-            &mut (),
+            &mut None,
         );
         assert!(res.is_ok(), "{:?}", res);
 
@@ -1631,7 +1632,7 @@ mod tests {
                 })
                 .into(),
             )),
-            &mut (),
+            &mut None,
         );
         assert!(res.is_ok(), "{:?}", res);
     }
@@ -1672,7 +1673,7 @@ mod tests {
                 })
                 .into(),
             )),
-            &mut (),
+            &mut None,
         );
         assert!(res.is_err());
     }

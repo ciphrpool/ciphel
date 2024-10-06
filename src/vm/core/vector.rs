@@ -192,10 +192,9 @@ impl ResolveCore for VectorFn {
                 let _ = array.resolve::<E>(
                     scope_manager,
                     scope_id,
-                    &Some(vector_type.0.as_ref().clone()),
-                    &mut None,
+                    &None,
+                    &mut Some(vector_type.0.as_ref().clone()),
                 )?;
-
                 let EType::Static(StaticType::Slice(SliceType { size, item_type })) =
                     array.type_of(scope_manager, scope_id)?
                 else {
@@ -373,6 +372,8 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
                     len += 1;
                     cap = (len + 1) * 2;
                     address = heap.realloc(address, size)?;
+                } else {
+                    len += 1;
                 }
 
                 /* Write capacity */
@@ -404,7 +405,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
                 }
                 /* read popped item */
                 let item_data =
-                    heap.read(address.add(VEC_HEADER + ((len + 1) * item_size)), item_size)?;
+                    heap.read(address.add(VEC_HEADER + (len * item_size)), item_size)?;
 
                 /* Write capacity */
                 let _ = heap.write(address, &(cap as u64).to_le_bytes())?;
@@ -449,6 +450,8 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
                     len += array_len;
                     cap = (len + array_len) * 2;
                     vector_address = heap.realloc(vector_address, size)?;
+                } else {
+                    len += array_len;
                 }
 
                 /* Write capacity */
@@ -494,8 +497,9 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
                 if (len - 1) - index > 0 {
                     let upper_data = heap.read(
                         address.add(VEC_HEADER + ((index + 1) * item_size)),
-                        item_size * ((len - 1) - index),
+                        item_size * (len - index),
                     )?;
+
                     let _ =
                         heap.write(address.add(VEC_HEADER + ((index) * item_size)), &upper_data)?;
                 }
@@ -526,5 +530,235 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
         }
         scheduler.next();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{test_extract_variable, test_statements};
+
+    use super::*;
+
+    #[test]
+    fn valid_push() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u32>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10);
+            let res = test_extract_variable::<u64>("length", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6);
+            let res = test_extract_variable::<u32>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 12);
+
+            let res = test_extract_variable::<i64>("len2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6);
+
+            let res = test_extract_variable::<i64>("cap2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10);
+            true
+        }
+
+        test_statements(
+            r##"
+            let arr : Vec[u32] = vec(5);
+            arr[2] = 10;
+            let res1 = arr[2];
+
+            arr = push(arr, 12);
+
+            let length = len(arr);
+            let res2 = arr[5];
+
+            
+            let arr2 : Vec[i64] = vec(2,4);
+            arr2 = push(arr2, 12);
+            arr2 = push(arr2, 12);
+            arr2 = push(arr2, 12);
+            arr2 = push(arr2, 12);
+
+            let len2 = len(arr2);
+            let cap2 = cap(arr2);
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_pop() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("len1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+
+            let res = test_extract_variable::<i64>("cap1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10);
+
+            let res = test_extract_variable::<i64>("popped", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 12);
+
+            let res = test_extract_variable::<i64>("last", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6);
+            true
+        }
+
+        test_statements(
+            r##"
+            let arr : Vec[i64] = vec(2,4);
+            arr = push(arr, 9);
+            arr = push(arr, 2);
+            arr = push(arr, 6);
+            arr = push(arr, 12);
+
+            let popped = pop(arr);
+
+            let last = arr[4];
+            let len1 = len(arr);
+            let cap1 = cap(arr);
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_extend() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("len1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+
+            let res = test_extract_variable::<i64>("cap1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 24);
+
+            let res = test_extract_variable::<i64>("res", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            true
+        }
+
+        test_statements(
+            r##"
+            let arr : Vec[i64] = vec(2,4);
+            arr = extend(arr, [1,2,3,4,5]);
+
+            let len1 = len(arr);
+            let cap1 = cap(arr);
+
+            let res = arr[6];
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_deleted() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("len1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+
+            let res = test_extract_variable::<i64>("cap1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10);
+
+            let res = test_extract_variable::<i64>("deleted", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+
+            let res = test_extract_variable::<i64>("last", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 12);
+            true
+        }
+
+        test_statements(
+            r##"
+            let arr : Vec[i64] = vec(2,4);
+            arr = push(arr, 9);
+            arr = push(arr, 2);
+            arr = push(arr, 6);
+            arr = push(arr, 12);
+
+            let deleted = delete(arr,3);
+
+            let last = arr[4];
+
+            let len1 = len(arr);
+            let cap1 = cap(arr);
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_clear() {
+        let mut engine = crate::vm::external::test::NoopEngine {};
+
+        fn assert_fn(
+            scope_manager: &crate::semantic::scope::scope::ScopeManager,
+            stack: &crate::vm::allocator::stack::Stack,
+            heap: &crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("len1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 0);
+
+            let res = test_extract_variable::<i64>("cap1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10);
+            true
+        }
+
+        test_statements(
+            r##"
+            let arr : Vec[i64] = vec(2,4);
+            arr = push(arr, 9);
+            arr = push(arr, 2);
+            arr = push(arr, 6);
+            arr = push(arr, 12);
+
+            clear_vec(arr);
+
+            let len1 = len(arr);
+            let cap1 = cap(arr);
+        "##,
+            &mut engine,
+            assert_fn,
+        );
     }
 }
