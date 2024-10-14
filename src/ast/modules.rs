@@ -15,7 +15,10 @@ use crate::{
         scope::scope::{Type, Variable},
         Desugar, EType, Resolve,
     },
-    vm::{external::ExternThreadIdentifier, GenerateCode},
+    vm::{
+        external::{ExternProcessIdentifier, ExternThreadIdentifier},
+        GenerateCode,
+    },
     CompilationError,
 };
 
@@ -170,10 +173,10 @@ impl GenerateCode for Module {
     }
 }
 
-pub fn parse_module<TID: ExternThreadIdentifier>(
+pub fn parse_module<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
     module: Span,
     line_offset: usize,
-) -> Result<Module, CompilationError<TID>> {
+) -> Result<Module, CompilationError<PID, TID>> {
     match Module::parse(module).finish() {
         Ok((remaining, module)) => {
             if !remaining.fragment().is_empty() {
@@ -197,7 +200,10 @@ pub fn parse_module<TID: ExternThreadIdentifier>(
 mod tests {
     use crate::{
         test_extract_variable, test_extract_variable_with,
-        vm::asm::operation::{GetNumFrom, OpPrimitive},
+        vm::{
+            asm::operation::{GetNumFrom, OpPrimitive},
+            external::test::DefaultProcessID,
+        },
         Ciphel,
     };
 
@@ -208,15 +214,13 @@ mod tests {
             crate::vm::external::test::NoopEngine,
             crate::vm::scheduler::ToCompletion,
         >::default();
-
-        let tid = ciphel
+        ciphel
             .runtime
-            .spawn(&mut engine)
-            .expect("Spawning should have succeeded");
-
+            .modules
+            .insert(DefaultProcessID::default(), Vec::default());
         ciphel
             .import(
-                &[tid.clone()],
+                DefaultProcessID::default(),
                 r##"
         
         module Test {
@@ -235,6 +239,11 @@ mod tests {
                 0,
             )
             .expect("Module parsing should have succeeded");
+
+        let tid = ciphel
+            .runtime
+            .spawn(&mut engine)
+            .expect("Spawning should have succeeded");
 
         ciphel
             .compile(

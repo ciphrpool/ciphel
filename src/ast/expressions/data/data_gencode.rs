@@ -665,12 +665,7 @@ impl GenerateCode for Enum {
             return Err(CodeGenerationError::UnresolvedError);
         };
 
-        let Some(index) = values
-            .iter()
-            .enumerate()
-            .find(|(_, id)| id == &&self.value)
-            .map(|(idx, _)| idx)
-        else {
+        let Some(index) = self.value else {
             return Err(CodeGenerationError::UnresolvedError);
         };
 

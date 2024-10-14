@@ -4,23 +4,31 @@ use ulid::Ulid;
 
 use super::{
     error_handler::ErrorHandler,
-    external::{ExternExecutionContext, ExternThreadIdentifier},
+    external::{ExternExecutionContext, ExternProcessIdentifier, ExternThreadIdentifier},
     program::{Instruction, Program},
     runtime::{RuntimeError, ThreadState},
     AsmName, AsmWeight, Weight,
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ExecutionContext<C: ExternExecutionContext, TID: ExternThreadIdentifier> {
+pub struct ExecutionContext<
+    C: ExternExecutionContext,
+    PID: ExternProcessIdentifier,
+    TID: ExternThreadIdentifier<PID>,
+> {
     pub external: C,
     pub tid: TID,
+    pub pid: PID,
 }
 
-impl<C: ExternExecutionContext, TID: ExternThreadIdentifier> Default for ExecutionContext<C, TID> {
+impl<C: ExternExecutionContext, PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>
+    Default for ExecutionContext<C, PID, TID>
+{
     fn default() -> Self {
         Self {
             external: C::default(),
             tid: TID::default(),
+            pid: PID::default(),
         }
     }
 }
@@ -35,7 +43,7 @@ pub trait Executable<E: crate::vm::external::Engine> {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), super::runtime::RuntimeError>;
 }
 
@@ -43,12 +51,12 @@ pub trait SchedulingPolicy: Default {
     fn weight_to_energy(&self, weight: Weight) -> usize;
 
     fn accept<E: crate::vm::external::Engine>(&self, energy: usize, engine: &E) -> bool;
-    fn defer<E: crate::vm::external::Engine>(&mut self, energy: usize, engine: &mut E);
+    fn defer<E: crate::vm::external::Engine>(&mut self, energy: usize, pid: E::PID, engine: &mut E);
 
     fn init_maf<E: crate::vm::external::Engine>(
         &mut self,
         tid: &E::TID,
-        state: &super::runtime::ThreadState<E::TID>,
+        state: &super::runtime::ThreadState<E::PID, E::TID>,
     );
 
     fn init_watchdog(&mut self);
@@ -84,7 +92,7 @@ impl ProgramCursor {
     pub fn update<E: crate::vm::external::Engine>(
         &mut self,
         program: &Program<E>,
-        state: &mut ThreadState<E::TID>,
+        state: &mut ThreadState<E::PID, E::TID>,
     ) {
         let cursor = self.get();
         if program.instructions.get(cursor).is_none() {
@@ -95,6 +103,8 @@ impl ProgramCursor {
             if ThreadState::IDLE == *state {
                 *state = ThreadState::RUNNING;
             }
+        } else if ThreadState::IDLE == *state {
+            *state = ThreadState::RUNNING;
         }
     }
 }
@@ -154,15 +164,16 @@ impl<P: SchedulingPolicy> Scheduler<P> {
     pub fn run<E: crate::vm::external::Engine>(
         &mut self,
         tid: E::TID,
-        state: &mut ThreadState<E::TID>,
+        state: &mut ThreadState<E::PID, E::TID>,
         program: &Program<E>,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
         signal_handler: &mut super::signal::SignalHandler<E>,
-        // context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        // context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<ControlFlow<(), ()>, RuntimeError> {
+        let pid = tid.pid();
         let Some(instruction) = self.select(program)? else {
             return Ok(ControlFlow::Break(()));
         };
@@ -170,7 +181,7 @@ impl<P: SchedulingPolicy> Scheduler<P> {
         let weight = instruction.weight();
         let energy = self.policy.weight_to_energy(weight);
         if self.policy.accept::<E>(energy, engine) {
-            self.policy.defer(energy, engine);
+            self.policy.defer(energy, pid.clone(), engine);
 
             instruction.name(stdio, program, engine);
             match instruction.execute(
@@ -184,6 +195,7 @@ impl<P: SchedulingPolicy> Scheduler<P> {
                 &crate::vm::scheduler::ExecutionContext {
                     external: E::FunctionContext::default(),
                     tid,
+                    pid,
                 },
             ) {
                 Ok(_) => {}
@@ -215,7 +227,13 @@ impl SchedulingPolicy for ToCompletion {
         true
     }
 
-    fn defer<E: crate::vm::external::Engine>(&mut self, energy: usize, engine: &mut E) {}
+    fn defer<E: crate::vm::external::Engine>(
+        &mut self,
+        energy: usize,
+        pid: E::PID,
+        engine: &mut E,
+    ) {
+    }
 
     fn init_watchdog(&mut self) {}
 
@@ -236,7 +254,7 @@ impl SchedulingPolicy for ToCompletion {
     fn init_maf<E: crate::vm::external::Engine>(
         &mut self,
         tid: &E::TID,
-        state: &super::runtime::ThreadState<E::TID>,
+        state: &super::runtime::ThreadState<E::PID, E::TID>,
     ) {
     }
 }
@@ -280,7 +298,12 @@ impl SchedulingPolicy for QueuePolicy {
         self.balance.checked_sub(energy).is_some()
     }
 
-    fn defer<E: crate::vm::external::Engine>(&mut self, energy: usize, engine: &mut E) {
+    fn defer<E: crate::vm::external::Engine>(
+        &mut self,
+        energy: usize,
+        pid: E::PID,
+        engine: &mut E,
+    ) {
         self.balance = self.balance.checked_sub(energy).unwrap_or(0);
     }
 
@@ -303,7 +326,7 @@ impl SchedulingPolicy for QueuePolicy {
     fn init_maf<E: crate::vm::external::Engine>(
         &mut self,
         tid: &E::TID,
-        state: &super::runtime::ThreadState<E::TID>,
+        state: &super::runtime::ThreadState<E::PID, E::TID>,
     ) {
         self.balance = Self::MAX_BALANCE;
     }

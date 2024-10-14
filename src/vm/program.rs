@@ -50,7 +50,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Instruction<E> {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), super::runtime::RuntimeError> {
         match self {
             Instruction::Extern(value) => value.execute(

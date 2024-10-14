@@ -1,9 +1,6 @@
 #![allow(unused_variables)]
 
-use ast::{
-    modules::{parse_module},
-    statements::parse_statements,
-};
+use ast::{modules::parse_module, statements::parse_statements};
 use semantic::{Resolve, SemanticError};
 
 pub mod ast;
@@ -15,7 +12,7 @@ pub type CiphelResult<T> = Option<T>;
 use thiserror::Error;
 use vm::{
     allocator::heap::Heap,
-    external::ExternThreadIdentifier,
+    external::{ExternProcessIdentifier, ExternThreadIdentifier},
     runtime::{Runtime, RuntimeError},
     scheduler::SchedulingPolicy,
     stdio::StdIO,
@@ -23,7 +20,7 @@ use vm::{
 };
 
 #[derive(Debug, Clone, Error)]
-pub enum CompilationError<TID: ExternThreadIdentifier> {
+pub enum CompilationError<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> {
     #[error("Parsing Error :\n{0}")]
     ParsingError(String),
 
@@ -35,6 +32,9 @@ pub enum CompilationError<TID: ExternThreadIdentifier> {
 
     #[error("Invalid thread id : {0}")]
     InvalidTID(TID),
+
+    #[error("Invalid process id : {0}")]
+    InvalidPID(PID),
     #[error("Transaction Error : {0}")]
     TransactionError(&'static str),
 }
@@ -58,35 +58,15 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Default for Ciphel<E, 
 impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Ciphel<E, P> {
     pub fn import(
         &mut self,
-        tids: &[E::TID],
+        pid: E::PID,
         module: &str,
         line_offset: usize,
-    ) -> Result<(), CompilationError<E::TID>> {
-        let mut module = parse_module(module.into(), 0)?;
-        for tid in tids {
-            let tid = tid.clone();
-            let vm::runtime::ThreadContext {
-                scope_manager,
-                program,
-                ..
-            } = self
-                .runtime
-                .context_of(&tid)
-                .map_err(|_| CompilationError::InvalidTID::<E::TID>(tid.clone()))?;
-
-            module
-                .resolve::<E>(scope_manager, None, &(), &mut ())
-                .map_err(|err| CompilationError::SemanticError::<E::TID>(0, err))?;
-            module
-                .gencode::<E>(
-                    scope_manager,
-                    None,
-                    program,
-                    &crate::vm::CodeGenerationContext::default(),
-                )
-                .map_err(|err| CompilationError::CodeGen::<E::TID>(0, err))?;
-            scope_manager.modules.push(module.clone());
-        }
+    ) -> Result<(), CompilationError<E::PID, E::TID>> {
+        let module = parse_module(module.into(), 0)?;
+        let Some(modules) = self.runtime.modules.get_mut(&pid) else {
+            return Err(CompilationError::InvalidPID(pid));
+        };
+        modules.push(module);
         Ok(())
     }
 
@@ -95,7 +75,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Ciphel<E, P> {
         tid: E::TID,
         src_code: &str,
         line_offset: usize,
-    ) -> Result<(), CompilationError<E::TID>> {
+    ) -> Result<(), CompilationError<E::PID, E::TID>> {
         let mut statements = parse_statements(src_code.into(), line_offset)?;
         let vm::runtime::ThreadContext {
             scope_manager,
@@ -104,12 +84,12 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Ciphel<E, P> {
         } = self
             .runtime
             .context_of(&tid)
-            .map_err(|_| CompilationError::InvalidTID::<E::TID>(tid))?;
+            .map_err(|_| CompilationError::InvalidTID(tid))?;
 
         for statement in statements.iter_mut() {
             statement
                 .resolve::<E>(scope_manager, None, &None, &mut ())
-                .map_err(|err| CompilationError::SemanticError::<E::TID>(statement.line, err))?;
+                .map_err(|err| CompilationError::SemanticError(statement.line, err))?;
         }
 
         for statement in statements {
@@ -120,7 +100,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Ciphel<E, P> {
                     program,
                     &crate::vm::CodeGenerationContext::default(),
                 )
-                .map_err(|err| CompilationError::CodeGen::<E::TID>(statement.line, err))?;
+                .map_err(|err| CompilationError::CodeGen(statement.line, err))?;
         }
         Ok(())
     }
@@ -154,6 +134,33 @@ pub fn test_extract_variable_with(
         .expect("the address should have been known");
 
     callback(address, stack, heap);
+}
+
+pub fn test_extract_variable_with_engine<E: crate::vm::external::Engine>(
+    variable_name: &str,
+    callback: impl Fn(
+        vm::allocator::MemoryAddress,
+        &crate::vm::allocator::stack::Stack,
+        &crate::vm::allocator::heap::Heap,
+        &mut E,
+    ),
+    scope_manager: &crate::semantic::scope::scope::ScopeManager,
+    stack: &crate::vm::allocator::stack::Stack,
+    heap: &crate::vm::allocator::heap::Heap,
+    engine: &mut E,
+) {
+    let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
+        .find_var_by_name(variable_name, None, None)
+        .expect("The variable should have been found");
+    let crate::semantic::scope::scope::VariableInfo { address, .. } = scope_manager
+        .find_var_by_id(id)
+        .expect("The variable should have been found");
+
+    let address: vm::allocator::MemoryAddress = (*address)
+        .try_into()
+        .expect("the address should have been known");
+
+    callback(address, stack, heap, engine);
 }
 
 pub fn test_extract_variable<N: num_traits::PrimInt>(
@@ -192,7 +199,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
     ) -> bool,
 ) {
     let mut statements =
-        parse_statements::<E::TID>(input.into(), 0).expect("Parsing should have succeeded");
+        parse_statements::<E::PID, E::TID>(input.into(), 0).expect("Parsing should have succeeded");
 
     let mut heap = Heap::new();
     let mut stdio = StdIO::default();

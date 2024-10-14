@@ -184,7 +184,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self {
             IOAsm::PrintStr => {
@@ -609,8 +609,8 @@ mod tests {
         tid: &E::TID,
         runtime: &mut Runtime<E, QueuePolicy>,
     ) {
-        let mut statements =
-            parse_statements::<E::TID>(input.into(), 0).expect("Parsing should have succeeded");
+        let mut statements = parse_statements::<E::PID, E::TID>(input.into(), 0)
+            .expect("Parsing should have succeeded");
 
         let ThreadContext {
             scope_manager,

@@ -1191,9 +1191,10 @@ impl Resolve for Enum {
         else {
             return Err(SemanticError::ExpectedStruct);
         };
-        let Some(_) = values.iter().find(|n| **n == *self.value) else {
+        let Some((value, _)) = values.iter().enumerate().find(|(_, n)| **n == *self.name) else {
             return Err(SemanticError::UnknownField);
         };
+        let _ = self.value.insert(value as u64);
 
         self.metadata.info = crate::semantic::Info::Resolved {
             context: context.clone(),
@@ -1458,7 +1459,27 @@ impl Desugar<Atomic> for Call {
                 *arg = output;
             }
         }
-
+        match &self.path {
+            LeftCall::VarCall(VarCall {
+                path: CompletePath { path, name },
+                id,
+                is_closure,
+            }) => match path {
+                Path::Segment(vec) => {
+                    let res = scope_manager.find_var_by_name(name, Some(vec.as_slice()), scope_id);
+                    if res.is_ok() {
+                        return Ok(None);
+                    }
+                }
+                Path::Empty => {
+                    let res = scope_manager.find_var_by_name(name, None, scope_id);
+                    if res.is_ok() {
+                        return Ok(None);
+                    }
+                }
+            },
+            _ => {}
+        }
         let path = match &self.path {
             crate::ast::expressions::data::LeftCall::VarCall(VarCall { path, .. }) => path,
             crate::ast::expressions::data::LeftCall::ExternCall(ExternCall { path }) => path,

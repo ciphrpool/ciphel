@@ -429,10 +429,7 @@ impl TryParse for Enum {
     fn parse(input: Span) -> PResult<Self> {
         map(
             CompletePath::parse_segment,
-            |CompletePath {
-                 mut path,
-                 name: value,
-             }| {
+            |CompletePath { mut path, name }| {
                 let typename = match &mut path {
                     crate::ast::expressions::Path::Segment(vec) => match vec.pop() {
                         Some(typename) => {
@@ -450,7 +447,8 @@ impl TryParse for Enum {
                 Enum {
                     path,
                     typename,
-                    value,
+                    name,
+                    value: None,
                     metadata: Metadata::default(),
                 }
             },
@@ -892,7 +890,8 @@ mod tests {
             Enum {
                 path: Path::default(),
                 typename: "Geo".to_string().into(),
-                value: "Point".to_string().into(),
+                name: "Point".to_string().into(),
+                value: None,
                 metadata: Metadata::default()
             },
             value

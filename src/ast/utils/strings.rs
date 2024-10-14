@@ -194,6 +194,8 @@ pub fn wst_closed<'input>(lexem: &'static str) -> impl FnMut(Span<'input>) -> PR
  * Character := '.*'
  */
 pub mod string_parser {
+    use std::fmt::Debug;
+
     use crate::ast::utils::io::{PResult, Span};
     use crate::ast::utils::lexem;
     use crate::ast::TryParse;
@@ -336,7 +338,7 @@ pub mod string_parser {
         Str(String),
         Expr(E),
     }
-    pub fn parse_fstring<E: TryParse + Clone>(input: Span) -> PResult<Vec<FItem<E>>> {
+    pub fn parse_fstring<E: TryParse + Clone + Debug>(input: Span) -> PResult<Vec<FItem<E>>> {
         let build_string = fold_many0(formatted_fragment::<E>, Vec::new, |mut items, frag| {
             match frag {
                 FormattedStringFragment::Literal(s) => match items.last_mut() {
@@ -353,7 +355,7 @@ pub mod string_parser {
                 FormattedStringFragment::Expr(e) => match items.last_mut() {
                     Some(FItem::Str(_)) => items.push(FItem::Expr(e)),
                     Some(FItem::Expr(_)) => items.push(FItem::Expr(e)),
-                    None => items.push(FItem::Str('{'.to_string())),
+                    None => items.push(FItem::Expr(e)),
                 },
                 FormattedStringFragment::BraO => match items.last_mut() {
                     Some(FItem::Str(string)) => string.push('{'),

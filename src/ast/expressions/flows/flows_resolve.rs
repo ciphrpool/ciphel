@@ -178,7 +178,14 @@ impl Resolve for UnionPattern {
         Self: Sized,
     {
         let UserType::Union(union_type @ Union { .. }) = scope_manager
-            .find_type_by_name(None, &self.typename, scope_id)?
+            .find_type_by_name(
+                match &self.path {
+                    crate::ast::expressions::Path::Segment(vec) => Some(vec.as_slice()),
+                    crate::ast::expressions::Path::Empty => None,
+                },
+                &self.typename,
+                scope_id,
+            )?
             .def
         else {
             return Err(SemanticError::IncompatibleTypes);
@@ -338,18 +345,13 @@ impl<
     {
         let inner_scope = self.block.init_from_parent(scope_manager, scope_id)?;
 
-        for (ref typename, ref name, value) in self.patterns.iter_mut() {
-            let UserType::Enum(Enum { id, values }) = scope_manager
-                .find_type_by_name(None, typename, scope_id)?
-                .def
-            else {
-                return Err(SemanticError::IncompatibleTypes);
-            };
+        for (enum_variant, value) in self.patterns.iter_mut() {
+            let _ = enum_variant.resolve::<E>(scope_manager, scope_id, &None, &mut ())?;
 
-            let Some((idx, _)) = values.iter().enumerate().find(|(idx, v)| *v == name) else {
-                return Err(SemanticError::IncorrectVariant(typename.to_string()));
+            let Some(index) = enum_variant.value else {
+                return Err(SemanticError::InvalidPattern);
             };
-            value.insert(idx as u64);
+            value.insert(index as u64);
         }
 
         let _ = self
@@ -507,8 +509,8 @@ impl Resolve for MatchExpr {
                 if should_be_exhaustive {
                     let mut found_names = HashSet::new();
                     for case in cases {
-                        for (_, name, _) in &case.patterns {
-                            found_names.insert(name.clone());
+                        for (enum_variant, _) in &case.patterns {
+                            found_names.insert(enum_variant.name.clone());
                         }
                     }
                     if found_names.len() != values.len() {

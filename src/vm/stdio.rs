@@ -31,6 +31,16 @@ impl StdIO {
         // self.asm_out.push('\n');
         engine.stdasm_print(format!("\tsyscall {content}"));
     }
+    pub fn push_extern_lib<E: crate::vm::external::Engine>(
+        &mut self,
+        engine: &mut E,
+        content: &str,
+    ) {
+        // self.asm_out.push_str("\tsyscall ");
+        // self.asm_out.push_str(content);
+        // self.asm_out.push('\n');
+        engine.stdasm_print(format!("\textern {content}"));
+    }
     pub fn push_asm_label<E: crate::vm::external::Engine>(
         &mut self,
         engine: &mut E,

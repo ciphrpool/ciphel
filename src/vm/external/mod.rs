@@ -19,6 +19,12 @@ pub trait ExternPathFinder {
         Self: Engine;
 }
 
+pub trait ExternPathFinderFunctions {
+    fn find(path: &[String], name: &str) -> Option<Self>
+    where
+        Self: Sized;
+}
+
 pub trait ExternFunction<E: Engine>:
     super::AsmName<E> + super::AsmWeight + super::scheduler::Executable<E> + Sized + ExternResolve
 {
@@ -28,24 +34,39 @@ pub trait ExternIO {
     fn stdout_print(&mut self, content: String);
     fn stdout_println(&mut self, content: String);
     fn stderr_print(&mut self, content: String);
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String>;
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID);
+    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) -> Option<String>;
+    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    );
     fn stdasm_print(&mut self, content: String);
 }
 
-pub trait ExternEnergyDispenser {
-    fn get_energy(&self) -> usize;
-    fn consume_energy(&mut self, energy: usize) -> Result<(), super::runtime::RuntimeError>;
+pub trait ExternEnergyDispenser<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> {
+    fn get_energy(&self, pid: PID) -> usize;
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), super::runtime::RuntimeError>;
 }
 
 pub trait ExternThreadHandler {
-    type TID: ExternThreadIdentifier;
+    type PID: ExternProcessIdentifier;
+    type TID: ExternThreadIdentifier<Self::PID>;
     fn spawn(&mut self) -> Result<Self::TID, RuntimeError>;
     fn close(&mut self, tid: &Self::TID) -> Result<(), RuntimeError>;
 }
 
 pub trait Engine:
-    ExternIO + ExternPathFinder + ExternEnergyDispenser + ExternThreadHandler + Sized
+    ExternIO
+    + ExternPathFinder
+    + ExternEnergyDispenser<Self::PID, Self::TID>
+    + ExternThreadHandler
+    + Sized
 {
     type Function: ExternFunction<Self>;
     type FunctionContext: ExternExecutionContext;
@@ -53,10 +74,15 @@ pub trait Engine:
 
 pub trait ExternExecutionContext: Default {}
 
-pub trait ExternThreadIdentifier:
+pub trait ExternThreadIdentifier<PID: ExternProcessIdentifier>:
     Hash + PartialEq + std::cmp::Eq + Clone + Sized + Debug + Default
 {
     fn to_u64(&self) -> u64;
-    fn from_u64(tid: u64) -> Self;
-    // fn gen<E: ExternThreadHandler>(engine: &mut E) -> Self;
+    fn from_u64(tid: u64) -> Option<Self>;
+    fn pid(&self) -> PID;
+}
+
+pub trait ExternProcessIdentifier:
+    Hash + PartialEq + std::cmp::Eq + Clone + Sized + Debug + Default
+{
 }

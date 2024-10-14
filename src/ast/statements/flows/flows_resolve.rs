@@ -197,8 +197,8 @@ impl Resolve for MatchStat {
                 if should_be_exhaustive {
                     let mut found_names = HashSet::new();
                     for case in cases {
-                        for (_, name, _) in &case.patterns {
-                            found_names.insert(name.clone());
+                        for (enum_variant, _) in &case.patterns {
+                            found_names.insert(enum_variant.name.clone());
                         }
                     }
                     if found_names.len() != values.len() {

@@ -1,15 +1,20 @@
+use std::marker::PhantomData;
+
 use super::{
-    external::ExternThreadIdentifier,
+    external::{ExternProcessIdentifier, ExternThreadIdentifier},
     runtime::{Runtime, RuntimeError, RuntimeSnapshot},
     scheduler::SchedulingPolicy,
 };
 
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub enum Signal<TID: ExternThreadIdentifier> {
+pub enum Signal<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> {
     Spawn,
     Exit,
     Close(TID),
-    Sleep { time: usize },
+    Sleep {
+        time: usize,
+        _phantom: PhantomData<PID>,
+    },
     Join(TID),
     Wait,
     Wake(TID),
@@ -17,25 +22,37 @@ pub enum Signal<TID: ExternThreadIdentifier> {
 }
 
 #[derive(Clone)]
-pub enum SignalAction<TID: ExternThreadIdentifier> {
+pub enum SignalAction<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> {
     Spawn(TID),
     Exit(TID),
     Close(TID),
-    Sleep { tid: TID, time: usize },
-    Join { caller: TID, target: TID },
-    Wait { caller: TID },
-    Wake { caller: TID, target: TID },
+    Sleep {
+        tid: TID,
+        time: usize,
+        _phantom: PhantomData<PID>,
+    },
+    Join {
+        caller: TID,
+        target: TID,
+    },
+    Wait {
+        caller: TID,
+    },
+    Wake {
+        caller: TID,
+        target: TID,
+    },
     WaitSTDIN(TID),
 }
 
 pub enum SignalResult<E: crate::vm::external::Engine> {
-    Ok(SignalAction<E::TID>),
+    Ok(SignalAction<E::PID, E::TID>),
     Error,
 }
 
 pub struct SignalHandler<E: crate::vm::external::Engine> {
-    snapshot: RuntimeSnapshot<E::TID>,
-    action_buffer: Vec<SignalAction<E::TID>>,
+    snapshot: RuntimeSnapshot<E::PID, E::TID>,
+    action_buffer: Vec<SignalAction<E::PID, E::TID>>,
 }
 
 impl<E: crate::vm::external::Engine> Default for SignalHandler<E> {
@@ -48,7 +65,7 @@ impl<E: crate::vm::external::Engine> Default for SignalHandler<E> {
 }
 
 impl<E: crate::vm::external::Engine> SignalHandler<E> {
-    pub fn init(&mut self, snapshot: RuntimeSnapshot<E::TID>) {
+    pub fn init(&mut self, snapshot: RuntimeSnapshot<E::PID, E::TID>) {
         self.snapshot = snapshot;
         self.action_buffer.clear();
     }
@@ -56,7 +73,7 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
     fn handle(
         &mut self,
         caller: E::TID,
-        signal: Signal<E::TID>,
+        signal: Signal<E::PID, E::TID>,
         engine: &mut E,
     ) -> SignalResult<E> {
         match signal {
@@ -88,10 +105,11 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
                 self.action_buffer.push(action.clone());
                 SignalResult::Ok(action)
             }
-            Signal::Sleep { time } => {
+            Signal::Sleep { time, .. } => {
                 let action = SignalAction::Sleep {
                     tid: caller.clone(),
                     time,
+                    _phantom: PhantomData::default(),
                 };
                 self.action_buffer.push(action.clone());
                 SignalResult::Ok(action)
@@ -151,7 +169,7 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
                 SignalAction::Close(tid) => {
                     let _ = runtime.close(tid.clone())?;
                 }
-                SignalAction::Sleep { tid, time } => {
+                SignalAction::Sleep { tid, time, .. } => {
                     let _ = runtime.put_to_sleep_for(tid.clone(), *time)?;
                 }
                 SignalAction::Join { caller, target } => {
@@ -173,7 +191,7 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
 
     pub fn notify(
         &mut self,
-        signal: Signal<E::TID>,
+        signal: Signal<E::PID, E::TID>,
         stack: &mut crate::vm::allocator::stack::Stack,
         engine: &mut E,
         tid: E::TID,

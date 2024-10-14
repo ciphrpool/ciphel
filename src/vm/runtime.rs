@@ -1,17 +1,22 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 
 use thiserror::Error;
 
-use crate::{semantic::scope::scope::ScopeManager, vm::signal::SignalHandler};
+use crate::{
+    ast::modules::Module,
+    semantic::{scope::scope::ScopeManager, Resolve},
+    vm::signal::SignalHandler,
+};
 
 use super::{
     allocator::{
         heap::HeapError,
         stack::{Stack, StackError},
     },
-    external::ExternThreadIdentifier,
+    external::{ExternProcessIdentifier, ExternThreadIdentifier},
     program::Program,
     scheduler::{Scheduler, SchedulingPolicy},
+    GenerateCode,
 };
 
 #[derive(Debug, Clone, Error)]
@@ -52,7 +57,7 @@ pub enum RuntimeError {
 pub struct ThreadContext<E: crate::vm::external::Engine> {
     pub scope_manager: ScopeManager,
     pub program: Program<E>,
-    pub state: ThreadState<E::TID>,
+    pub state: ThreadState<E::PID, E::TID>,
 }
 
 pub struct Thread<P: SchedulingPolicy> {
@@ -61,26 +66,31 @@ pub struct Thread<P: SchedulingPolicy> {
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub enum ThreadState<TID: ExternThreadIdentifier> {
+pub enum ThreadState<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> {
     IDLE,
     RUNNING,
     SLEEPING(usize),
-    JOINING { target: TID },
+    JOINING {
+        target: TID,
+        _phantom: PhantomData<PID>,
+    },
     WAITING,
     WAITING_STDIN,
 }
 
-impl<TID: ExternThreadIdentifier> Default for ThreadState<TID> {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> Default
+    for ThreadState<PID, TID>
+{
     fn default() -> Self {
         Self::RUNNING
     }
 }
 
-impl<TID: ExternThreadIdentifier> ThreadState<TID> {
-    pub fn init_maf<E: crate::vm::external::Engine<TID = TID>>(
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ThreadState<PID, TID> {
+    pub fn init_maf<E: crate::vm::external::Engine<TID = TID, PID = PID>>(
         &mut self,
         tid: E::TID,
-        snapshot: &RuntimeSnapshot<E::TID>,
+        snapshot: &RuntimeSnapshot<E::PID, E::TID>,
         stdio: &mut super::stdio::StdIO,
         engine: &mut E,
     ) {
@@ -92,7 +102,7 @@ impl<TID: ExternThreadIdentifier> ThreadState<TID> {
                 Some(time) => *self = ThreadState::SLEEPING(time),
                 None => *self = ThreadState::IDLE, // should never happens
             },
-            ThreadState::JOINING { ref target } => {
+            ThreadState::JOINING { ref target, .. } => {
                 //if let Some(ThreadState::)
                 match snapshot.states.get(target) {
                     Some(ThreadState::IDLE) | None => {
@@ -113,11 +123,13 @@ impl<TID: ExternThreadIdentifier> ThreadState<TID> {
 }
 
 #[derive(Debug)]
-pub struct RuntimeSnapshot<TID: ExternThreadIdentifier> {
-    pub states: HashMap<TID, ThreadState<TID>>,
+pub struct RuntimeSnapshot<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> {
+    pub states: HashMap<TID, ThreadState<PID, TID>>,
 }
 
-impl<TID: ExternThreadIdentifier> Default for RuntimeSnapshot<TID> {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> Default
+    for RuntimeSnapshot<PID, TID>
+{
     fn default() -> Self {
         Self {
             states: HashMap::default(),
@@ -126,6 +138,7 @@ impl<TID: ExternThreadIdentifier> Default for RuntimeSnapshot<TID> {
 }
 
 pub struct Runtime<E: crate::vm::external::Engine, P: SchedulingPolicy> {
+    pub modules: HashMap<E::PID, Vec<Module>>,
     contexts: HashMap<E::TID, ThreadContext<E>>,
     threads: HashMap<E::TID, Thread<P>>,
 }
@@ -133,6 +146,7 @@ pub struct Runtime<E: crate::vm::external::Engine, P: SchedulingPolicy> {
 impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Default for Runtime<E, P> {
     fn default() -> Self {
         Self {
+            modules: HashMap::default(),
             contexts: HashMap::default(),
             threads: HashMap::default(),
         }
@@ -140,7 +154,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Default for Runtime<E,
 }
 
 impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
-    pub fn snapshot(&self) -> RuntimeSnapshot<E::TID> {
+    pub fn snapshot(&self) -> RuntimeSnapshot<E::PID, E::TID> {
         let mut states = HashMap::with_capacity(self.contexts.len());
         for (tid, ThreadContext { state, .. }) in self.contexts.iter() {
             states.insert(tid.clone(), state.clone());
@@ -155,12 +169,33 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
     }
 
     pub fn spawn(&mut self, engine: &mut E) -> Result<E::TID, RuntimeError> {
-        let scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let program = crate::vm::program::Program::default();
+        let tid = engine.spawn()?;
+        let pid = tid.pid();
+
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let mut program = crate::vm::program::Program::default();
+
+        // re-import all modules
+        if let Some(modules) = self.modules.get_mut(&pid) {
+            for module in modules.iter_mut() {
+                module
+                    .resolve::<E>(&mut scope_manager, None, &(), &mut ())
+                    .map_err(|err| RuntimeError::Default)?;
+                module
+                    .gencode::<E>(
+                        &mut scope_manager,
+                        None,
+                        &mut program,
+                        &crate::vm::CodeGenerationContext::default(),
+                    )
+                    .map_err(|err| RuntimeError::Default)?;
+                scope_manager.modules.push(module.clone());
+            }
+        }
+
         let scheduler = Scheduler::default();
         let stack = Stack::default();
 
-        let tid = engine.spawn()?;
         self.contexts.insert(
             tid.clone(),
             ThreadContext {
@@ -212,7 +247,10 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         let Some(ThreadContext { state, .. }) = self.contexts.get_mut(&caller) else {
             return Err(RuntimeError::Default);
         };
-        *state = ThreadState::JOINING { target };
+        *state = ThreadState::JOINING {
+            target,
+            _phantom: PhantomData::default(),
+        };
         Ok(())
     }
 

@@ -1,16 +1,16 @@
-use crate::{
-    vm::{
-        asm::operation::PopNum, scheduler::Executable, AsmName, AsmWeight,
-    },
-};
+use crate::vm::{asm::operation::PopNum, scheduler::Executable, AsmName, AsmWeight};
 
 use super::{
     Engine, ExternEnergyDispenser, ExternExecutionContext, ExternFunction, ExternIO,
-    ExternPathFinder, ExternResolve, ExternThreadHandler, ExternThreadIdentifier,
+    ExternPathFinder, ExternProcessIdentifier, ExternResolve, ExternThreadHandler,
+    ExternThreadIdentifier,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DefaultThreadID(pub u64);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DefaultProcessID(pub u64);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DefaultExecutionContext {}
@@ -27,17 +27,26 @@ impl Default for DefaultThreadID {
     }
 }
 
-impl ExternThreadIdentifier for DefaultThreadID {
+impl Default for DefaultProcessID {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
+impl ExternProcessIdentifier for DefaultProcessID {}
+
+impl ExternThreadIdentifier<DefaultProcessID> for DefaultThreadID {
     fn to_u64(&self) -> u64 {
         self.0
     }
 
-    fn from_u64(tid: u64) -> Self {
-        Self(tid)
+    fn from_u64(tid: u64) -> Option<Self> {
+        Some(Self(tid))
     }
-    // fn gen<E: ExternThreadHandler>(engine: &mut E) -> Self {
-    //     DefaultThreadID(2)
-    // }
+
+    fn pid(&self) -> DefaultProcessID {
+        DefaultProcessID::default()
+    }
 }
 impl ExternExecutionContext for DefaultExecutionContext {}
 
@@ -66,7 +75,7 @@ impl<E: Engine> Executable<E> for DefaultExternFunction {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
@@ -93,10 +102,17 @@ impl ExternIO for NoopEngine {
 
     fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
+    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) -> Option<String> {
         None
     }
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
+    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) {
+    }
 
     fn stdasm_print(&mut self, content: String) {}
 }
@@ -108,6 +124,7 @@ impl Engine for NoopEngine {
 
 impl ExternThreadHandler for NoopEngine {
     type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
 
     fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
@@ -118,12 +135,18 @@ impl ExternThreadHandler for NoopEngine {
     }
 }
 
-impl ExternEnergyDispenser for NoopEngine {
-    fn get_energy(&self) -> usize {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for NoopEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
         unimplemented!()
     }
 
-    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
@@ -151,10 +174,17 @@ impl ExternIO for StdoutTestEngine {
     }
     fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
+    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) -> Option<String> {
         None
     }
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
+    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) {
+    }
 
     fn stdasm_print(&mut self, content: String) {
         // println!("{}", content);
@@ -166,18 +196,25 @@ impl Engine for StdoutTestEngine {
     type FunctionContext = DefaultExecutionContext;
 }
 
-impl ExternEnergyDispenser for StdoutTestEngine {
-    fn get_energy(&self) -> usize {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for StdoutTestEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
         unimplemented!()
     }
 
-    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
 
 impl ExternThreadHandler for StdoutTestEngine {
     type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
 
     fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
@@ -211,14 +248,21 @@ impl ExternIO for StdinTestEngine {
     }
     fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
+    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) -> Option<String> {
         if self.in_buf.is_empty() {
             None
         } else {
             Some(self.in_buf.clone())
         }
     }
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
+    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) {
+    }
 
     fn stdasm_print(&mut self, content: String) {
         println!("{}", content);
@@ -230,18 +274,25 @@ impl Engine for StdinTestEngine {
     type FunctionContext = DefaultExecutionContext;
 }
 
-impl ExternEnergyDispenser for StdinTestEngine {
-    fn get_energy(&self) -> usize {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for StdinTestEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
         unimplemented!()
     }
 
-    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
 
 impl ExternThreadHandler for StdinTestEngine {
     type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
 
     fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(0))
@@ -276,10 +327,17 @@ impl ExternIO for DbgEngine {
         eprintln!("{}", content);
     }
 
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
+    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) -> Option<String> {
         Some("Hello World".to_string())
     }
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
+    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) {
+    }
 
     fn stdasm_print(&mut self, content: String) {
         println!("{}", content);
@@ -291,18 +349,25 @@ impl Engine for DbgEngine {
     type FunctionContext = DefaultExecutionContext;
 }
 
-impl ExternEnergyDispenser for DbgEngine {
-    fn get_energy(&self) -> usize {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for DbgEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
         unimplemented!()
     }
 
-    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
 
 impl ExternThreadHandler for DbgEngine {
     type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
 
     fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
@@ -333,10 +398,17 @@ impl ExternIO for ThreadTestEngine {
 
     fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
+    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) -> Option<String> {
         None
     }
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
+    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) {
+    }
 
     fn stdasm_print(&mut self, content: String) {
         println!("{}", content);
@@ -348,18 +420,25 @@ impl Engine for ThreadTestEngine {
     type FunctionContext = DefaultExecutionContext;
 }
 
-impl ExternEnergyDispenser for ThreadTestEngine {
-    fn get_energy(&self) -> usize {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for ThreadTestEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
         unimplemented!()
     }
 
-    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
 
 impl ExternThreadHandler for ThreadTestEngine {
     type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
 
     fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         self.id_auto_increment += 1;
@@ -389,10 +468,17 @@ impl ExternIO for ExternFuncTestEngine {
 
     fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
+    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) -> Option<String> {
         None
     }
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
+    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+        &mut self,
+        tid: TID,
+    ) {
+    }
 
     fn stdasm_print(&mut self, content: String) {}
 }
@@ -426,7 +512,7 @@ impl<E: Engine> Executable<E> for ExternFuncTest {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), crate::vm::runtime::RuntimeError> {
         match self {
             ExternFuncTest::TEST_ADDER => {
@@ -504,6 +590,7 @@ impl Engine for ExternFuncTestEngine {
 
 impl ExternThreadHandler for ExternFuncTestEngine {
     type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
 
     fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
@@ -514,12 +601,18 @@ impl ExternThreadHandler for ExternFuncTestEngine {
     }
 }
 
-impl ExternEnergyDispenser for ExternFuncTestEngine {
-    fn get_energy(&self) -> usize {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for ExternFuncTestEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
         unimplemented!()
     }
 
-    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
@@ -578,7 +671,7 @@ impl ExternPathFinder for ExternFuncTestEngine {
 //         heap: &mut crate::vm::allocator::heap::Heap,
 //         stdio: &mut crate::vm::stdio::StdIO,
 //         engine: &mut E,
-//         context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+//         context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID: ExternProcessIdentifier, E::TID>,
 //     ) -> Result<(), RuntimeError> {
 //         stdio.stdout.push("\"Hello World from Dynamic function\"");
 //         stdio.stdout.flush(engine);

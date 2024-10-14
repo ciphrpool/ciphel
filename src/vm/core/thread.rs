@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
 use crate::semantic::{EType, ResolveCore, TypeOf};
 use crate::vm::asm::operation::{OpPrimitive, PopNum};
@@ -347,7 +349,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self {
             ThreadAsm::Spawn => {
@@ -396,7 +398,9 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
                     }
                     Ok(())
                 }
-                let tid = E::TID::from_u64(OpPrimitive::pop_num::<u64>(stack)?);
+                let Some(tid) = E::TID::from_u64(OpPrimitive::pop_num::<u64>(stack)?) else {
+                    return Err(RuntimeError::Default);
+                };
                 let _ = signal_handler.notify(
                     crate::vm::signal::Signal::Close(tid),
                     stack,
@@ -470,7 +474,9 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
                     }
                     Ok(())
                 }
-                let target = E::TID::from_u64(OpPrimitive::pop_num::<u64>(stack)?);
+                let Some(target) = E::TID::from_u64(OpPrimitive::pop_num::<u64>(stack)?) else {
+                    return Err(RuntimeError::Default);
+                };
                 let _ = signal_handler.notify(
                     crate::vm::signal::Signal::Wake(target),
                     stack,
@@ -496,7 +502,10 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
                 }
                 let time = OpPrimitive::pop_num::<u64>(stack)? as usize;
                 let _ = signal_handler.notify(
-                    crate::vm::signal::Signal::Sleep { time },
+                    crate::vm::signal::Signal::Sleep {
+                        time,
+                        _phantom: PhantomData::default(),
+                    },
                     stack,
                     engine,
                     context.tid.clone(),
@@ -522,8 +531,9 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
                     }
                     Ok(())
                 }
-
-                let target = E::TID::from_u64(OpPrimitive::pop_num::<u64>(stack)?);
+                let Some(target) = E::TID::from_u64(OpPrimitive::pop_num::<u64>(stack)?) else {
+                    return Err(RuntimeError::Default);
+                };
                 let _ = signal_handler.notify(
                     crate::vm::signal::Signal::Join(target),
                     stack,
@@ -545,6 +555,8 @@ mod tests {
     //     Ciphel,
     // };
 
+    use std::marker::PhantomData;
+
     use crate::{
         ast::statements::parse_statements,
         semantic::Resolve,
@@ -564,8 +576,8 @@ mod tests {
         tid: &E::TID,
         runtime: &mut Runtime<E, QueuePolicy>,
     ) {
-        let mut statements =
-            parse_statements::<E::TID>(input.into(), 0).expect("Parsing should have succeeded");
+        let mut statements = parse_statements::<E::PID, E::TID>(input.into(), 0)
+            .expect("Parsing should have succeeded");
 
         let ThreadContext {
             scope_manager,
@@ -890,6 +902,7 @@ mod tests {
             .expect("Execution should have succeeded");
         if (ThreadState::JOINING {
             target: tid_2.clone(),
+            _phantom: PhantomData::default(),
         }) != *runtime
             .snapshot()
             .states

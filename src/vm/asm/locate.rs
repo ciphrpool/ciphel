@@ -31,7 +31,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Locate {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let address: u64 = self.address.into(stack);
 
@@ -62,7 +62,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for LocateOffsetFromStackPoin
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let address =
             (stack.top().checked_sub(self.offset)).ok_or(RuntimeError::MemoryViolation)?;
@@ -99,7 +99,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for LocateOffset {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
@@ -143,7 +143,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for LocateIndex {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let (mut address, index) = match self.base_address {
             Some(address) => {
