@@ -20,8 +20,8 @@ pub struct Struct {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Enum {
-    pub id: ID,
-    pub values: Vec<ID>,
+    pub id: String,
+    pub values: Vec<(String, u64)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

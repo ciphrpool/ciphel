@@ -332,15 +332,15 @@ impl GenerateCode for Vector {
         let Some(EType::Static(StaticType::Vec(item_type))) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let item_size = item_type.size_of();
+        let item_size = item_type.0.size_of();
 
         let len_bytes = (self.length as u64).to_le_bytes().as_slice().into();
         let cap_bytes = (self.capacity as u64).to_le_bytes().as_slice().into();
 
-        // Push Length on stack
-        instructions.push(Asm::Data(data::Data::Serialized { data: len_bytes }));
         // Push Capacity on stack
         instructions.push(Asm::Data(data::Data::Serialized { data: cap_bytes }));
+        // Push Length on stack
+        instructions.push(Asm::Data(data::Data::Serialized { data: len_bytes }));
 
         for element in &self.value {
             let _ = element.gencode::<E>(scope_manager, scope_id, instructions, context)?;
@@ -1079,6 +1079,36 @@ mod tests {
             let z = test_extract_variable::<u64>("z", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
             assert_eq!(z, 2);
+
+            let x = test_extract_variable::<u64>("x2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(x, 5);
+            let y = test_extract_variable::<u64>("y2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(y, 6);
+            let z = test_extract_variable::<u64>("z2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(z, 7);
+
+            let x = test_extract_variable::<u64>("x3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(x, 10);
+            let y = test_extract_variable::<u64>("y3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(y, 15);
+            let z = test_extract_variable::<u64>("z3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(z, 20);
+
+            let x = test_extract_variable::<u64>("x4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(x, 0);
+            let y = test_extract_variable::<u64>("y4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(y, 15);
+            let z = test_extract_variable::<u64>("z4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(z, 16);
             true
         }
 
@@ -1093,6 +1123,33 @@ mod tests {
         let y = Test::Y;
         let z = Test::Z;
 
+        enum Test2 {
+            X = 5,
+            Y,
+            Z,
+        }
+        let x2 = Test2::X;
+        let y2 = Test2::Y;
+        let z2 = Test2::Z;
+
+        enum Test3 {
+            X = 10,
+            Y = 15,
+            Z = 20,
+        }
+        let x3 = Test3::X;
+        let y3 = Test3::Y;
+        let z3 = Test3::Z;
+
+        
+        enum Test4 {
+            X ,
+            Y = 15,
+            Z ,
+        }
+        let x4 = Test4::X;
+        let y4 = Test4::Y;
+        let z4 = Test4::Z;
         "##,
             &mut engine,
             assert_fn,

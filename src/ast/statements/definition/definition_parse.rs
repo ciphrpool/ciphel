@@ -12,6 +12,7 @@ use crate::ast::{
         error::squash,
         io::{PResult, Span},
         lexem,
+        numbers::{parse_number, parse_number_u64},
         strings::{parse_id, wst, wst_closed},
     },
     TryParse,
@@ -128,14 +129,31 @@ impl TryParse for EnumDef {
                 preceded(wst_closed(lexem::ENUM), parse_id),
                 cut(delimited(
                     wst(lexem::BRA_O),
-                    separated_list1(wst(lexem::COMA), parse_id),
+                    separated_list1(
+                        wst(lexem::COMA),
+                        pair(parse_id, opt(preceded(wst(lexem::EQUAL), parse_number_u64))),
+                    ),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 )),
             ),
-            |(id, values)| EnumDef {
-                id,
-                values,
-                signature: None,
+            |(id, opt_values)| {
+                let mut values = Vec::with_capacity(opt_values.len());
+                let mut current: Option<u64> = None;
+                for (name, value) in opt_values {
+                    if let Some(v) = value {
+                        values.push((name, v));
+                        let _ = current.insert(v + 1);
+                    } else {
+                        let c = current.unwrap_or(0);
+                        values.push((name, c));
+                        let _ = current.insert(c + 1);
+                    }
+                }
+                EnumDef {
+                    id,
+                    values,
+                    signature: None,
+                }
             },
         )(input)
     }
@@ -273,11 +291,28 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             EnumDef {
-                id: "Sport".to_string().into(),
-                values: vec![
-                    "Football".to_string().into(),
-                    "Basketball".to_string().into()
-                ],
+                id: "Sport".to_string(),
+                values: vec![("Football".to_string(), 0), ("Basketball".to_string(), 1)],
+                signature: None,
+            },
+            value
+        );
+
+        let res = EnumDef::parse(
+            r#"
+        enum Sport {
+            Football = 2,
+            Basketball = 3,
+        }
+        "#
+            .into(),
+        );
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            EnumDef {
+                id: "Sport".to_string(),
+                values: vec![("Football".to_string(), 2), ("Basketball".to_string(), 3)],
                 signature: None,
             },
             value

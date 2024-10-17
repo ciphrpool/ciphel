@@ -39,8 +39,8 @@ pub struct UnionDef {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumDef {
-    pub id: ID,
-    pub values: Vec<ID>,
+    pub id: String,
+    pub values: Vec<(String, u64)>,
     pub signature: Option<(EType, UserType)>,
 }
 

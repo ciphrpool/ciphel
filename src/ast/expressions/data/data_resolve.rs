@@ -1191,10 +1191,10 @@ impl Resolve for Enum {
         else {
             return Err(SemanticError::ExpectedStruct);
         };
-        let Some((value, _)) = values.iter().enumerate().find(|(_, n)| **n == *self.name) else {
+        let Some((_, value)) = values.iter().find(|(n, _)| **n == *self.name) else {
             return Err(SemanticError::UnknownField);
         };
-        let _ = self.value.insert(value as u64);
+        let _ = self.value.insert(*value);
 
         self.metadata.info = crate::semantic::Info::Resolved {
             context: context.clone(),
@@ -2232,7 +2232,7 @@ mod tests {
                     id: "Geo".to_string().into(),
                     values: {
                         let mut res = Vec::new();
-                        res.push("Point".to_string().into());
+                        res.push(("Point".to_string(), 0));
                         res
                     },
                 }),
@@ -2261,7 +2261,7 @@ mod tests {
                     id: "Geo".to_string().into(),
                     values: {
                         let mut res = Vec::new();
-                        res.push("Axe".to_string().into());
+                        res.push(("Axe".to_string(), 0));
                         res
                     },
                 }),

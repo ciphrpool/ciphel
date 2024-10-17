@@ -599,7 +599,7 @@ pub mod type_printer {
                         instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::InsertBefore(
                             POINTER_SIZE,
                         ))));
-                        for (i, variant_name) in values.iter().enumerate() {
+                        for (i, (variant_name, _)) in values.iter().enumerate() {
                             instructions.push_label_by_id(
                                 else_label,
                                 format!("format_{variant_name}").into(),

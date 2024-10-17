@@ -202,7 +202,8 @@ impl Resolve for MatchStat {
                         }
                     }
                     if found_names.len() != values.len() {
-                        let names: HashSet<String> = values.clone().into_iter().collect();
+                        let names: HashSet<String> =
+                            values.clone().into_iter().map(|(n, v)| n).collect();
                         let difference: HashSet<_> =
                             names.difference(&found_names).cloned().collect();
 
