@@ -1078,312 +1078,49 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn valid_spawn() {
-    //     let mut engine = ThreadTestEngine {
-    //         closed_thread: 0,
-    //         spawned_thread: 0,
-    //     };
-    //     let mut ciphel = Ciphel::new();
-    //     let tid = ciphel
-    //         .start_arena(&mut engine)
-    //         .expect("starting should not fail");
-
-    //     let src = r##"
-
-    //     fn main() -> Unit {
-    //         print("Hello World");
-    //     }
-
-    //     let (child_tid,err) = spawn();
-    //     assert(err);
-    //     main();
-
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, tid, src)
-    //         .expect("Compilation should have succeeded");
-
-    //     ciphel.run(&mut engine).expect("no error should arise");
-
-    //     let child_tid = engine.spawned_thread;
-    //     assert_eq!(child_tid, 1)
-    // }
-
-    // #[test]
-    // fn valid_close() {
-    //     let mut engine = ThreadTestEngine {
-    //         closed_thread: 0,
-    //         spawned_thread: 0,
-    //     };
-    //     let mut ciphel = Ciphel::new();
-    //     let tid = ciphel
-    //         .start_arena(&mut engine)
-    //         .expect("starting should not fail");
-
-    //     let src = r##"
-
-    //     fn main() -> Unit {
-    //         print("Hello World");
-    //     }
-
-    //     let (child_tid,err) = spawn();
-    //     assert(err);
-    //     main();
-
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, tid, src)
-    //         .expect("Compilation should have succeeded");
-
-    //     ciphel.run(&mut engine).expect("no error should arise");
-
-    //     let child_tid = engine.spawned_thread;
-    //     assert_eq!(child_tid, 1);
-
-    //     let child_src = r##"
-
-    //     fn add(x:u64,y:u64) -> u64 {
-    //         return x+y;
-    //     }
-    //     let res = add(10,10);
-
-    //     print(f"result = {res}");
-
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, child_tid, child_src)
-    //         .expect("Compilation should have succeeded");
-
-    //     ciphel.run(&mut engine).expect("no error should arise");
-
-    //     let src = r##"
-
-    //         let err = close(child_tid);
-    //         assert(err);
-
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, tid, src)
-    //         .expect("Compilation should have succeeded");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-
-    //     let closed_tid = engine.closed_thread;
-    //     assert_eq!(closed_tid, 1);
-    //     let src = r##"
-
-    //         main();
-
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, tid, src)
-    //         .expect("Compilation should have succeeded");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     let tids = ciphel.available_tids(crate::vm::vm::Player::P1);
-    //     assert_eq!(tids.len(), MAX_THREAD_COUNT - 1);
-    // }
-
-    // #[test]
-    // fn valid_sleep() {
-    //     let mut engine = NoopEngine {};
-    //     let mut ciphel = Ciphel::new();
-    //     let tid = ciphel
-    //         .start_arena(&mut engine)
-    //         .expect("starting should not fail");
-
-    //     let src = r##"
-
-    //     fn main() -> Unit {
-    //         print("Hello World");
-    //     }
-    //     sleep(5);
-    //     main();
-
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, tid, src)
-    //         .expect("Compilation should have succeeded");
-
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    // }
-
-    // #[test]
-    // fn valid_wait_wake() {
-    //     let mut engine = ThreadTestEngine {
-    //         closed_thread: 0,
-    //         spawned_thread: 0,
-    //     };
-    //     let mut ciphel = Ciphel::new();
-    //     let tid = ciphel
-    //         .start_arena(&mut engine)
-    //         .expect("starting should not fail");
-
-    //     let src = r##"
-
-    //     fn main() -> Unit {
-    //         print("Hello World");
-    //     }
-    //     let (child_tid,err) = spawn();
-    //     assert(err);
-    //     wait();
-    //     main();
-
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, tid, src)
-    //         .expect("Compilation should have succeeded");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-
-    //     let child_tid = engine.spawned_thread;
-
-    //     let child_src = r##"
-
-    //     sleep(3);
-    //     wake(1);
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, child_tid, child_src)
-    //         .expect("Compilation should have succeeded");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    // }
-
-    // #[test]
-    // fn valid_join() {
-    //     let mut engine = ThreadTestEngine {
-    //         closed_thread: 0,
-    //         spawned_thread: 0,
-    //     };
-    //     let mut ciphel = Ciphel::new();
-    //     let tid = ciphel
-    //         .start_arena(&mut engine)
-    //         .expect("starting should not fail");
-
-    //     let src = r##"
-
-    //     fn main() -> Unit {
-    //         print("Hello World");
-    //     }
-    //     let (child_tid,err) = spawn();
-    //     assert(err);
-    //     join(child_tid);
-    //     main();
-
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, tid, src)
-    //         .expect("Compilation should have succeeded");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-
-    //     let child_tid = engine.spawned_thread;
-
-    //     let child_src = r##"
-    //     sleep(5);
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, child_tid, child_src)
-    //         .expect("Compilation should have succeeded");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    // }
-
-    // #[test]
-    // fn valid_exit() {
-    //     let mut engine = StdoutTestEngine { out: String::new() };
-    //     let mut ciphel = Ciphel::new();
-    //     let tid = ciphel
-    //         .start_arena(&mut engine)
-    //         .expect("starting should not fail");
-
-    //     let src = r##"
-
-    //     fn main() -> Unit {
-    //         print("Hello World");
-    //     }
-    //     exit();
-    //     main();
-
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, tid, src)
-    //         .expect("Compilation should have succeeded");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     let tids = ciphel.available_tids(crate::vm::vm::Player::P1);
-    //     let output = engine.out;
-    //     assert!(tids.len() == MAX_THREAD_COUNT);
-    //     assert!(output.is_empty())
-    // }
-
-    // #[test]
-    // fn valid_join_exit() {
-    //     let mut engine = ThreadTestEngine {
-    //         closed_thread: 0,
-    //         spawned_thread: 0,
-    //     };
-    //     let mut ciphel = Ciphel::new();
-    //     let tid = ciphel
-    //         .start_arena(&mut engine)
-    //         .expect("starting should not fail");
-
-    //     let src = r##"
-
-    //     fn main() -> Unit {
-    //         print("Hello World");
-    //     }
-    //     let (child_tid,err) = spawn();
-    //     assert(err);
-    //     join(child_tid);
-    //     main();
-
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, tid, src)
-    //         .expect("Compilation should have succeeded");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-
-    //     let child_tid = engine.spawned_thread;
-    //     let child_src = r##"
-    //     sleep(3);
-    //     exit();
-    //     let x = 4+5;
-    //     "##;
-
-    //     ciphel
-    //         .compile::<ThreadTestEngine>(crate::vm::vm::Player::P1, child_tid, child_src)
-    //         .expect("Compilation should have succeeded");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     ciphel.run(&mut engine).expect("no error should arise");
-    //     let tids = ciphel.available_tids(crate::vm::vm::Player::P1);
-    //     assert_eq!(tids.len(), 3);
-    // }
+    #[test]
+    fn valid_event() {
+        let mut engine = crate::vm::external::test::ExternEventTestEngine {};
+
+        let mut heap = Heap::new();
+        let mut stdio = StdIO::default();
+        let mut runtime = Runtime::default();
+
+        let tid_1 = runtime
+            .spawn(&mut engine)
+            .expect("Spawning should have succeeded");
+
+        compile_for(
+            r##"
+        test_event(move () -> {
+            let x = 5;
+        });
+        let y = 8;
+
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        let _ = runtime.trigger(tid_1.clone(), 1);
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        compile_for(
+            r##"
+            let z = 17;
+            "##,
+            &tid_1,
+            &mut runtime,
+        );
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+    }
 }

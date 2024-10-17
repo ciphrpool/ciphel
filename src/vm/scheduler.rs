@@ -1,8 +1,11 @@
-use std::ops::ControlFlow;
+use std::{default, ops::ControlFlow};
 
 use ulid::Ulid;
 
+use crate::vm::asm::operation::{GetNumFrom, OpPrimitive};
+
 use super::{
+    allocator::MemoryAddress,
     error_handler::ErrorHandler,
     external::{ExternExecutionContext, ExternProcessIdentifier, ExternThreadIdentifier},
     program::{Instruction, Program},
@@ -61,6 +64,7 @@ pub trait SchedulingPolicy: Default {
 
     fn init_watchdog(&mut self);
     fn watchdog(&mut self) -> ControlFlow<(), ()>;
+    fn event_watchdog(&mut self) -> ControlFlow<(), ()>;
 
     fn schedule<'a, E: crate::vm::external::Engine>(
         input: impl Iterator<Item = (&'a E::TID, &'a mut super::runtime::Thread<Self>)>,
@@ -109,10 +113,44 @@ impl ProgramCursor {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EventKind {
+    Once,
+    Repetable,
+}
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EventExclusivity {
+    PerTID,
+    PerPID,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum EventState {
+    #[default]
+    IDLE,
+    Triggered,
+    Running,
+    Completed,
+}
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct EventConf {
+    pub kind: EventKind,
+    pub exclu: EventExclusivity,
+}
+
+pub struct Event<E: crate::vm::external::Engine> {
+    pub tid: E::TID,
+    pub trigger: u64,
+    pub callback: MemoryAddress,
+    pub conf: EventConf,
+    pub state: EventState,
+}
+
 pub struct Scheduler<P: SchedulingPolicy> {
     pub cursor: ProgramCursor,
     error_handler: ErrorHandler,
     pub policy: P,
+    in_event: bool,
+    early_break: bool,
 }
 
 impl<P: SchedulingPolicy> Default for Scheduler<P> {
@@ -121,6 +159,8 @@ impl<P: SchedulingPolicy> Default for Scheduler<P> {
             cursor: ProgramCursor::default(),
             error_handler: ErrorHandler::default(),
             policy: P::default(),
+            in_event: false,
+            early_break: false,
         }
     }
 }
@@ -136,6 +176,11 @@ impl<P: SchedulingPolicy> Scheduler<P> {
         match self.cursor {
             ProgramCursor::Idle(_) => self.cursor = ProgramCursor::Running(to),
             ProgramCursor::Running(_) => self.cursor = ProgramCursor::Running(to),
+        }
+    }
+    pub fn signal_return(&mut self) {
+        if self.in_event {
+            self.early_break = true;
         }
     }
     pub fn push_catch(&mut self, label: &Ulid) {
@@ -172,10 +217,10 @@ impl<P: SchedulingPolicy> Scheduler<P> {
         engine: &mut E,
         signal_handler: &mut super::signal::SignalHandler<E>,
         // context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
-    ) -> Result<ControlFlow<(), ()>, RuntimeError> {
+    ) -> Result<ControlFlow<bool, ()>, RuntimeError> {
         let pid = tid.pid();
         let Some(instruction) = self.select(program)? else {
-            return Ok(ControlFlow::Break(()));
+            return Ok(ControlFlow::Break(false));
         };
 
         let weight = instruction.weight();
@@ -184,6 +229,7 @@ impl<P: SchedulingPolicy> Scheduler<P> {
             self.policy.defer(energy, pid.clone(), engine);
 
             instruction.name(stdio, program, engine);
+            self.early_break = false;
             match instruction.execute(
                 program,
                 self,
@@ -201,12 +247,69 @@ impl<P: SchedulingPolicy> Scheduler<P> {
                 Ok(_) => {}
                 Err(error) => self.jump(self.error_handler.catch(error, program)?),
             }
+            if self.early_break {
+                self.early_break = false;
+                return Ok(ControlFlow::Break(true));
+            }
             self.cursor.update(program, state);
 
             Ok(ControlFlow::Continue(()))
         } else {
-            Ok(ControlFlow::Break(()))
+            Ok(ControlFlow::Break(false))
         }
+    }
+
+    pub fn run_event<E: crate::vm::external::Engine>(
+        &mut self,
+        callback_address: MemoryAddress,
+        tid: E::TID,
+        state: &mut ThreadState<E::PID, E::TID>,
+        program: &Program<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        signal_handler: &mut super::signal::SignalHandler<E>,
+    ) -> Result<(), RuntimeError> {
+        let pid = tid.pid();
+        let saved_cursor = self.cursor.clone();
+        let function_offset =
+            OpPrimitive::get_num_from::<u64>(callback_address, stack, heap)? as usize;
+
+        let _ = stack.open_frame(0, saved_cursor.get(), Some(callback_address.into(stack)))?;
+
+        self.jump(function_offset);
+        self.in_event = true;
+
+        loop {
+            match self.run(
+                tid.clone(),
+                state,
+                program,
+                stack,
+                heap,
+                stdio,
+                engine,
+                signal_handler,
+            )? {
+                std::ops::ControlFlow::Continue(_) => match self.policy.event_watchdog() {
+                    std::ops::ControlFlow::Continue(_) => continue,
+                    std::ops::ControlFlow::Break(_) => {
+                        break;
+                    }
+                },
+                std::ops::ControlFlow::Break(true) => {
+                    break;
+                }
+                std::ops::ControlFlow::Break(_) => {
+                    break;
+                }
+            }
+        }
+
+        self.cursor = saved_cursor;
+        self.in_event = false;
+        Ok(())
     }
 }
 
@@ -256,6 +359,10 @@ impl SchedulingPolicy for ToCompletion {
         tid: &E::TID,
         state: &super::runtime::ThreadState<E::PID, E::TID>,
     ) {
+    }
+
+    fn event_watchdog(&mut self) -> ControlFlow<(), ()> {
+        ControlFlow::Continue(())
     }
 }
 
@@ -329,5 +436,9 @@ impl SchedulingPolicy for QueuePolicy {
         state: &super::runtime::ThreadState<E::PID, E::TID>,
     ) {
         self.balance = Self::MAX_BALANCE;
+    }
+
+    fn event_watchdog(&mut self) -> ControlFlow<(), ()> {
+        ControlFlow::Continue(())
     }
 }

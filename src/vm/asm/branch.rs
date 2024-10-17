@@ -307,6 +307,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Return {
     ) -> Result<(), RuntimeError> {
         let return_pointer = stack.close_frame(self.size)?;
         scheduler.jump(return_pointer);
+        scheduler.signal_return();
         Ok(())
     }
 }

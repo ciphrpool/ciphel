@@ -19,6 +19,16 @@ pub enum Signal<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> 
     Wait,
     Wake(TID),
     WaitSTDIN,
+    EventTrigger {
+        tid: TID,
+        trigger: u64,
+    },
+    EventRegistration {
+        tid: TID,
+        trigger: u64,
+        callback: super::allocator::MemoryAddress,
+        conf: super::scheduler::EventConf,
+    },
 }
 
 #[derive(Clone)]
@@ -43,6 +53,16 @@ pub enum SignalAction<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<
         target: TID,
     },
     WaitSTDIN(TID),
+    EventTrigger {
+        tid: TID,
+        trigger: u64,
+    },
+    EventRegistration {
+        tid: TID,
+        trigger: u64,
+        callback: super::allocator::MemoryAddress,
+        conf: super::scheduler::EventConf,
+    },
 }
 
 pub enum SignalResult<E: crate::vm::external::Engine> {
@@ -150,6 +170,26 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
                 self.action_buffer.push(action.clone());
                 SignalResult::Ok(action)
             }
+            Signal::EventTrigger { tid, trigger } => {
+                let action = SignalAction::EventTrigger { tid, trigger };
+                self.action_buffer.push(action.clone());
+                SignalResult::Ok(action)
+            }
+            Signal::EventRegistration {
+                tid,
+                trigger,
+                callback,
+                conf,
+            } => {
+                let action = SignalAction::EventRegistration {
+                    tid,
+                    trigger,
+                    callback,
+                    conf,
+                };
+                self.action_buffer.push(action.clone());
+                SignalResult::Ok(action)
+            }
         }
     }
 
@@ -183,6 +223,17 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
                 }
                 SignalAction::WaitSTDIN(tid) => {
                     let _ = runtime.wait_stdin(tid.clone())?;
+                }
+                SignalAction::EventTrigger { tid, trigger } => {
+                    let _ = runtime.trigger(tid.clone(), *trigger)?;
+                }
+                SignalAction::EventRegistration {
+                    tid,
+                    trigger,
+                    callback,
+                    conf,
+                } => {
+                    let _ = runtime.register_event(tid.clone(), *trigger, *callback, *conf)?;
                 }
             }
         }

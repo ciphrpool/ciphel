@@ -41,6 +41,7 @@ impl StdIO {
         // self.asm_out.push('\n');
         engine.stdasm_print(format!("\textern {content}"));
     }
+
     pub fn push_asm_label<E: crate::vm::external::Engine>(
         &mut self,
         engine: &mut E,

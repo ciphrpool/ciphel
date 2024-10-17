@@ -12,10 +12,11 @@ use super::{
     allocator::{
         heap::HeapError,
         stack::{Stack, StackError},
+        MemoryAddress,
     },
     external::{ExternProcessIdentifier, ExternThreadIdentifier},
     program::Program,
-    scheduler::{Scheduler, SchedulingPolicy},
+    scheduler::{Event, EventConf, EventExclusivity, EventState, Scheduler, SchedulingPolicy},
     GenerateCode,
 };
 
@@ -140,6 +141,8 @@ impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> Default
 pub struct Runtime<E: crate::vm::external::Engine, P: SchedulingPolicy> {
     pub modules: HashMap<E::PID, Vec<Module>>,
     contexts: HashMap<E::TID, ThreadContext<E>>,
+    events: HashMap<E::PID, Vec<Event<E>>>,
+    triggered_events: Vec<(E::TID, MemoryAddress)>,
     threads: HashMap<E::TID, Thread<P>>,
 }
 
@@ -149,6 +152,8 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Default for Runtime<E,
             modules: HashMap::default(),
             contexts: HashMap::default(),
             threads: HashMap::default(),
+            events: HashMap::default(),
+            triggered_events: Vec::default(),
         }
     }
 }
@@ -280,6 +285,50 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         Ok(())
     }
 
+    pub fn trigger(&mut self, caller: E::TID, signal: u64) -> Result<(), RuntimeError> {
+        let pid = caller.pid();
+        for Event {
+            tid,
+            trigger,
+            callback,
+            conf,
+            state,
+        } in self.events.get(&pid).unwrap_or(&Vec::default())
+        {
+            if ((EventExclusivity::PerPID == conf.exclu && pid == tid.pid())
+                || (EventExclusivity::PerTID == conf.exclu && *tid != caller))
+                && (signal & trigger != 0)
+                && (EventState::IDLE == *state)
+            {
+                self.triggered_events.push((tid.clone(), *callback));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn register_event(
+        &mut self,
+        caller: E::TID,
+        trigger: u64,
+        callback: MemoryAddress,
+        conf: EventConf,
+    ) -> Result<(), RuntimeError> {
+        let pid = caller.pid();
+        if !self.events.contains_key(&pid) {
+            self.events.insert(pid.clone(), Vec::new());
+        }
+        if let Some(events) = self.events.get_mut(&pid) {
+            events.push(Event {
+                tid: caller,
+                trigger,
+                callback,
+                conf,
+                state: EventState::default(),
+            });
+        }
+        Ok(())
+    }
+
     pub fn context_of(&mut self, tid: &E::TID) -> Result<&mut ThreadContext<E>, RuntimeError> {
         self.contexts.get_mut(tid).ok_or(RuntimeError::Default)
     }
@@ -300,6 +349,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
     ) -> Result<(), RuntimeError> {
+        stdio.push_asm_info(engine, "START MAF");
         let mut signal_handler = SignalHandler::default();
         let snapshot = self.snapshot();
         for (tid, ThreadContext { state, .. }) in self.contexts.iter_mut() {
@@ -356,6 +406,32 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         }
 
         let _ = signal_handler.commit(self)?;
+
+        // Call callback of all triggered events
+        for (tid, callback_address) in self.triggered_events.drain(..) {
+            let Some(ThreadContext {
+                ref program, state, ..
+            }) = self.contexts.get_mut(&tid)
+            else {
+                continue;
+            };
+            let Some(Thread { scheduler, stack }) = self.threads.get_mut(&tid) else {
+                continue;
+            };
+
+            let _ = scheduler.run_event(
+                callback_address,
+                tid,
+                state,
+                program,
+                stack,
+                heap,
+                stdio,
+                engine,
+                &mut signal_handler,
+            )?;
+        }
+        stdio.push_asm_info(engine, "END MAF");
         Ok(())
     }
 }
