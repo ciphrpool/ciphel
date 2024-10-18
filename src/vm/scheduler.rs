@@ -1,4 +1,4 @@
-use std::{default, ops::ControlFlow};
+use std::{default, marker::PhantomData, ops::ControlFlow};
 
 use ulid::Ulid;
 
@@ -7,7 +7,9 @@ use crate::vm::asm::operation::{GetNumFrom, OpPrimitive};
 use super::{
     allocator::MemoryAddress,
     error_handler::ErrorHandler,
-    external::{ExternExecutionContext, ExternProcessIdentifier, ExternThreadIdentifier},
+    external::{
+        ExternEventManager, ExternExecutionContext, ExternProcessIdentifier, ExternThreadIdentifier,
+    },
     program::{Instruction, Program},
     runtime::{RuntimeError, ThreadState},
     AsmName, AsmWeight, Weight,
@@ -64,7 +66,6 @@ pub trait SchedulingPolicy: Default {
 
     fn init_watchdog(&mut self);
     fn watchdog(&mut self) -> ControlFlow<(), ()>;
-    fn event_watchdog(&mut self) -> ControlFlow<(), ()>;
 
     fn schedule<'a, E: crate::vm::external::Engine>(
         input: impl Iterator<Item = (&'a E::TID, &'a mut super::runtime::Thread<Self>)>,
@@ -136,31 +137,43 @@ pub struct EventConf {
     pub kind: EventKind,
     pub exclu: EventExclusivity,
 }
-
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct EventCallback<
+    EC: ExternExecutionContext,
+    PID: ExternProcessIdentifier,
+    TID: ExternThreadIdentifier<PID>,
+    EM: super::external::ExternEventManager<EC, PID, TID>,
+> {
+    pub callback: MemoryAddress,
+    pub manager: EM,
+    pub _phantom: PhantomData<(EC, PID, TID)>,
+}
 pub struct Event<E: crate::vm::external::Engine> {
     pub tid: E::TID,
     pub trigger: u64,
-    pub callback: MemoryAddress,
+    pub callback: EventCallback<E::FunctionContext, E::PID, E::TID, E::Function>,
     pub conf: EventConf,
     pub state: EventState,
 }
 
 pub struct Scheduler<P: SchedulingPolicy> {
     pub cursor: ProgramCursor,
+    saved_cursor: Option<ProgramCursor>,
     error_handler: ErrorHandler,
     pub policy: P,
     in_event: bool,
-    early_break: bool,
+    return_signal: bool,
 }
 
 impl<P: SchedulingPolicy> Default for Scheduler<P> {
     fn default() -> Self {
         Self {
             cursor: ProgramCursor::default(),
+            saved_cursor: None,
             error_handler: ErrorHandler::default(),
             policy: P::default(),
             in_event: false,
-            early_break: false,
+            return_signal: false,
         }
     }
 }
@@ -180,7 +193,7 @@ impl<P: SchedulingPolicy> Scheduler<P> {
     }
     pub fn signal_return(&mut self) {
         if self.in_event {
-            self.early_break = true;
+            self.return_signal = true;
         }
     }
     pub fn push_catch(&mut self, label: &Ulid) {
@@ -216,11 +229,48 @@ impl<P: SchedulingPolicy> Scheduler<P> {
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
         signal_handler: &mut super::signal::SignalHandler<E>,
+        current_event: Option<&EventCallback<E::FunctionContext, E::PID, E::TID, E::Function>>,
         // context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
-    ) -> Result<ControlFlow<bool, ()>, RuntimeError> {
+    ) -> Result<ControlFlow<(), ()>, RuntimeError> {
         let pid = tid.pid();
+
+        if let Some(EventCallback {
+            callback, manager, ..
+        }) = current_event
+        {
+            if self.saved_cursor.is_none() {
+                stdio.push_asm_info(engine, "START EVENT");
+                self.in_event = true;
+                let _ = self.saved_cursor.insert(self.cursor.clone());
+
+                let function_offset =
+                    OpPrimitive::get_num_from::<u64>(*callback, stack, heap)? as usize;
+                let callback_u64: u64 = (*callback).into(stack);
+
+                let parameters_size = manager.event_setup(
+                    stack,
+                    heap,
+                    stdio,
+                    engine,
+                    &crate::vm::scheduler::ExecutionContext {
+                        external: E::FunctionContext::default(),
+                        tid,
+                        pid,
+                    },
+                )?;
+
+                let _ = stack.open_frame(
+                    parameters_size,
+                    self.saved_cursor.unwrap().get(),
+                    Some(callback_u64),
+                )?;
+
+                self.jump(function_offset);
+            }
+        }
+
         let Some(instruction) = self.select(program)? else {
-            return Ok(ControlFlow::Break(false));
+            return Ok(ControlFlow::Break(()));
         };
 
         let weight = instruction.weight();
@@ -229,7 +279,7 @@ impl<P: SchedulingPolicy> Scheduler<P> {
             self.policy.defer(energy, pid.clone(), engine);
 
             instruction.name(stdio, program, engine);
-            self.early_break = false;
+            self.return_signal = false;
             match instruction.execute(
                 program,
                 self,
@@ -247,69 +297,31 @@ impl<P: SchedulingPolicy> Scheduler<P> {
                 Ok(_) => {}
                 Err(error) => self.jump(self.error_handler.catch(error, program)?),
             }
-            if self.early_break {
-                self.early_break = false;
-                return Ok(ControlFlow::Break(true));
+            if self.return_signal {
+                self.in_event = false;
+                self.cursor = self.saved_cursor.unwrap_or_default();
+
+                if let Some(EventCallback { manager, .. }) = current_event {
+                    manager.event_conclusion(
+                        stack,
+                        heap,
+                        stdio,
+                        engine,
+                        &crate::vm::scheduler::ExecutionContext {
+                            external: E::FunctionContext::default(),
+                            tid,
+                            pid,
+                        },
+                    );
+                }
+                stdio.push_asm_info(engine, "END EVENT");
             }
             self.cursor.update(program, state);
 
             Ok(ControlFlow::Continue(()))
         } else {
-            Ok(ControlFlow::Break(false))
+            Ok(ControlFlow::Break(()))
         }
-    }
-
-    pub fn run_event<E: crate::vm::external::Engine>(
-        &mut self,
-        callback_address: MemoryAddress,
-        tid: E::TID,
-        state: &mut ThreadState<E::PID, E::TID>,
-        program: &Program<E>,
-        stack: &mut crate::vm::allocator::stack::Stack,
-        heap: &mut crate::vm::allocator::heap::Heap,
-        stdio: &mut crate::vm::stdio::StdIO,
-        engine: &mut E,
-        signal_handler: &mut super::signal::SignalHandler<E>,
-    ) -> Result<(), RuntimeError> {
-        let pid = tid.pid();
-        let saved_cursor = self.cursor.clone();
-        let function_offset =
-            OpPrimitive::get_num_from::<u64>(callback_address, stack, heap)? as usize;
-
-        let _ = stack.open_frame(0, saved_cursor.get(), Some(callback_address.into(stack)))?;
-
-        self.jump(function_offset);
-        self.in_event = true;
-
-        loop {
-            match self.run(
-                tid.clone(),
-                state,
-                program,
-                stack,
-                heap,
-                stdio,
-                engine,
-                signal_handler,
-            )? {
-                std::ops::ControlFlow::Continue(_) => match self.policy.event_watchdog() {
-                    std::ops::ControlFlow::Continue(_) => continue,
-                    std::ops::ControlFlow::Break(_) => {
-                        break;
-                    }
-                },
-                std::ops::ControlFlow::Break(true) => {
-                    break;
-                }
-                std::ops::ControlFlow::Break(_) => {
-                    break;
-                }
-            }
-        }
-
-        self.cursor = saved_cursor;
-        self.in_event = false;
-        Ok(())
     }
 }
 
@@ -359,10 +371,6 @@ impl SchedulingPolicy for ToCompletion {
         tid: &E::TID,
         state: &super::runtime::ThreadState<E::PID, E::TID>,
     ) {
-    }
-
-    fn event_watchdog(&mut self) -> ControlFlow<(), ()> {
-        ControlFlow::Continue(())
     }
 }
 
@@ -436,9 +444,5 @@ impl SchedulingPolicy for QueuePolicy {
         state: &super::runtime::ThreadState<E::PID, E::TID>,
     ) {
         self.balance = Self::MAX_BALANCE;
-    }
-
-    fn event_watchdog(&mut self) -> ControlFlow<(), ()> {
-        ControlFlow::Continue(())
     }
 }

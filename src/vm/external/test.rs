@@ -1,20 +1,23 @@
-use crate::vm::{
-    allocator::MemoryAddress, asm::operation::PopNum, scheduler::Executable, AsmName, AsmWeight,
+use crate::{
+    p_num,
+    vm::{
+        allocator::MemoryAddress, asm::operation::PopNum, scheduler::Executable, AsmName, AsmWeight,
+    },
 };
 
 use super::{
-    Engine, ExternEnergyDispenser, ExternExecutionContext, ExternFunction, ExternIO,
-    ExternPathFinder, ExternProcessIdentifier, ExternResolve, ExternThreadHandler,
+    Engine, ExternEnergyDispenser, ExternEventManager, ExternExecutionContext, ExternFunction,
+    ExternIO, ExternPathFinder, ExternProcessIdentifier, ExternResolve, ExternThreadHandler,
     ExternThreadIdentifier,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct DefaultThreadID(pub u64);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct DefaultProcessID(pub u64);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub struct DefaultExecutionContext {}
 
 impl Default for DefaultExecutionContext {
@@ -52,9 +55,10 @@ impl ExternThreadIdentifier<DefaultProcessID> for DefaultThreadID {
 }
 impl ExternExecutionContext for DefaultExecutionContext {}
 
-pub struct DefaultExternFunction;
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct DefaultExternFunctionNoopEngine;
 
-impl<E: Engine> AsmName<E> for DefaultExternFunction {
+impl<E: Engine> AsmName<E> for DefaultExternFunctionNoopEngine {
     fn name(
         &self,
         stdio: &mut crate::vm::stdio::StdIO,
@@ -65,9 +69,14 @@ impl<E: Engine> AsmName<E> for DefaultExternFunction {
     }
 }
 
-impl AsmWeight for DefaultExternFunction {}
+impl AsmWeight for DefaultExternFunctionNoopEngine {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for DefaultExternFunctionNoopEngine
+{
+    type E = NoopEngine;
+}
 
-impl<E: Engine> Executable<E> for DefaultExternFunction {
+impl<E: Engine> Executable<E> for DefaultExternFunctionNoopEngine {
     fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
@@ -83,7 +92,7 @@ impl<E: Engine> Executable<E> for DefaultExternFunction {
     }
 }
 
-impl ExternResolve for DefaultExternFunction {
+impl ExternResolve for DefaultExternFunctionNoopEngine {
     fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope: &mut crate::semantic::scope::scope::ScopeManager,
@@ -93,7 +102,7 @@ impl ExternResolve for DefaultExternFunction {
         unimplemented!()
     }
 }
-impl<E: Engine> ExternFunction<E> for DefaultExternFunction {}
+impl ExternFunction<NoopEngine> for DefaultExternFunctionNoopEngine {}
 
 #[derive(Debug, Clone)]
 pub struct NoopEngine {}
@@ -120,7 +129,7 @@ impl ExternIO for NoopEngine {
 }
 
 impl Engine for NoopEngine {
-    type Function = DefaultExternFunction;
+    type Function = DefaultExternFunctionNoopEngine;
     type FunctionContext = DefaultExecutionContext;
 }
 
@@ -162,6 +171,55 @@ impl ExternPathFinder for NoopEngine {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct DefaultExternFunctionStdoutTestEngine;
+
+impl<E: Engine> AsmName<E> for DefaultExternFunctionStdoutTestEngine {
+    fn name(
+        &self,
+        stdio: &mut crate::vm::stdio::StdIO,
+        program: &crate::vm::program::Program<E>,
+        engine: &mut E,
+    ) {
+        unimplemented!()
+    }
+}
+
+impl AsmWeight for DefaultExternFunctionStdoutTestEngine {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for DefaultExternFunctionStdoutTestEngine
+{
+    type E = StdoutTestEngine;
+}
+
+impl<E: Engine> Executable<E> for DefaultExternFunctionStdoutTestEngine {
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
+        &self,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
+    }
+}
+
+impl ExternResolve for DefaultExternFunctionStdoutTestEngine {
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<crate::semantic::EType, crate::semantic::SemanticError> {
+        unimplemented!()
+    }
+}
+impl ExternFunction<StdoutTestEngine> for DefaultExternFunctionStdoutTestEngine {}
+
 #[derive(Debug, Clone)]
 pub struct StdoutTestEngine {
     pub out: String,
@@ -194,7 +252,7 @@ impl ExternIO for StdoutTestEngine {
 }
 
 impl Engine for StdoutTestEngine {
-    type Function = DefaultExternFunction;
+    type Function = DefaultExternFunctionStdoutTestEngine;
     type FunctionContext = DefaultExecutionContext;
 }
 
@@ -235,6 +293,56 @@ impl ExternPathFinder for StdoutTestEngine {
         unimplemented!()
     }
 }
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct DefaultExternFunctionStdinTestEngine;
+
+impl<E: Engine> AsmName<E> for DefaultExternFunctionStdinTestEngine {
+    fn name(
+        &self,
+        stdio: &mut crate::vm::stdio::StdIO,
+        program: &crate::vm::program::Program<E>,
+        engine: &mut E,
+    ) {
+        unimplemented!()
+    }
+}
+
+impl AsmWeight for DefaultExternFunctionStdinTestEngine {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for DefaultExternFunctionStdinTestEngine
+{
+    type E = StdinTestEngine;
+}
+
+impl<E: Engine> Executable<E> for DefaultExternFunctionStdinTestEngine {
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
+        &self,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
+    }
+}
+
+impl ExternResolve for DefaultExternFunctionStdinTestEngine {
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<crate::semantic::EType, crate::semantic::SemanticError> {
+        unimplemented!()
+    }
+}
+impl ExternFunction<StdinTestEngine> for DefaultExternFunctionStdinTestEngine {}
+
 #[derive(Debug, Clone)]
 pub struct StdinTestEngine {
     pub out: String,
@@ -272,7 +380,7 @@ impl ExternIO for StdinTestEngine {
 }
 
 impl Engine for StdinTestEngine {
-    type Function = DefaultExternFunction;
+    type Function = DefaultExternFunctionStdinTestEngine;
     type FunctionContext = DefaultExecutionContext;
 }
 
@@ -346,8 +454,57 @@ impl ExternIO for DbgEngine {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct DefaultExternFunctionDbgEngine;
+
+impl<E: Engine> AsmName<E> for DefaultExternFunctionDbgEngine {
+    fn name(
+        &self,
+        stdio: &mut crate::vm::stdio::StdIO,
+        program: &crate::vm::program::Program<E>,
+        engine: &mut E,
+    ) {
+        unimplemented!()
+    }
+}
+
+impl AsmWeight for DefaultExternFunctionDbgEngine {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for DefaultExternFunctionDbgEngine
+{
+    type E = DbgEngine;
+}
+
+impl<E: Engine> Executable<E> for DefaultExternFunctionDbgEngine {
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
+        &self,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
+    }
+}
+
+impl ExternResolve for DefaultExternFunctionDbgEngine {
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<crate::semantic::EType, crate::semantic::SemanticError> {
+        unimplemented!()
+    }
+}
+impl ExternFunction<DbgEngine> for DefaultExternFunctionDbgEngine {}
+
 impl Engine for DbgEngine {
-    type Function = DefaultExternFunction;
+    type Function = DefaultExternFunctionDbgEngine;
     type FunctionContext = DefaultExecutionContext;
 }
 
@@ -389,6 +546,55 @@ impl ExternPathFinder for DbgEngine {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct DefaultExternFunctionThreadTestEngine;
+
+impl<E: Engine> AsmName<E> for DefaultExternFunctionThreadTestEngine {
+    fn name(
+        &self,
+        stdio: &mut crate::vm::stdio::StdIO,
+        program: &crate::vm::program::Program<E>,
+        engine: &mut E,
+    ) {
+        unimplemented!()
+    }
+}
+
+impl AsmWeight for DefaultExternFunctionThreadTestEngine {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for DefaultExternFunctionThreadTestEngine
+{
+    type E = ThreadTestEngine;
+}
+
+impl<E: Engine> Executable<E> for DefaultExternFunctionThreadTestEngine {
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
+        &self,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
+    }
+}
+
+impl ExternResolve for DefaultExternFunctionThreadTestEngine {
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<crate::semantic::EType, crate::semantic::SemanticError> {
+        unimplemented!()
+    }
+}
+impl ExternFunction<ThreadTestEngine> for DefaultExternFunctionThreadTestEngine {}
+
 #[derive(Debug, Clone)]
 pub struct ThreadTestEngine {
     pub id_auto_increment: u64,
@@ -418,7 +624,7 @@ impl ExternIO for ThreadTestEngine {
 }
 
 impl Engine for ThreadTestEngine {
-    type Function = DefaultExternFunction;
+    type Function = DefaultExternFunctionThreadTestEngine;
     type FunctionContext = DefaultExecutionContext;
 }
 
@@ -485,6 +691,7 @@ impl ExternIO for ExternFuncTestEngine {
     fn stdasm_print(&mut self, content: String) {}
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ExternFuncTest {
     TEST_ADDER,
 }
@@ -503,6 +710,11 @@ impl<E: Engine> AsmName<E> for ExternFuncTest {
 }
 
 impl AsmWeight for ExternFuncTest {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for ExternFuncTest
+{
+    type E = ExternFuncTestEngine;
+}
 
 impl<E: Engine> Executable<E> for ExternFuncTest {
     fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
@@ -583,7 +795,8 @@ impl ExternResolve for ExternFuncTest {
         }
     }
 }
-impl<E: Engine> ExternFunction<E> for ExternFuncTest {}
+
+impl ExternFunction<ExternFuncTestEngine> for ExternFuncTest {}
 
 impl Engine for ExternFuncTestEngine {
     type Function = ExternFuncTest;
@@ -658,8 +871,11 @@ impl ExternIO for ExternEventTestEngine {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ExternFuncEventTest {
     TEST_EVENT,
+    TEST_EVENT_WITH_ARG,
+    TEST_EVENT_WITH_RETURN,
 }
 
 impl<E: Engine> AsmName<E> for ExternFuncEventTest {
@@ -670,8 +886,67 @@ impl<E: Engine> AsmName<E> for ExternFuncEventTest {
         engine: &mut E,
     ) {
         match self {
-            ExternFuncEventTest::TEST_EVENT => stdio.push_asm_lib(engine, "test_event"),
+            ExternFuncEventTest::TEST_EVENT => stdio.push_extern_lib(engine, "test_event"),
+            ExternFuncEventTest::TEST_EVENT_WITH_ARG => {
+                stdio.push_extern_lib(engine, "test_event_with_arg")
+            }
+            ExternFuncEventTest::TEST_EVENT_WITH_RETURN => {
+                stdio.push_extern_lib(engine, "test_event_with_return")
+            }
         }
+    }
+}
+
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for ExternFuncEventTest
+{
+    type E = ExternEventTestEngine;
+
+    fn event_conclusion(
+        &self,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut Self::E,
+        context: &crate::vm::scheduler::ExecutionContext<
+            DefaultExecutionContext,
+            DefaultProcessID,
+            DefaultThreadID,
+        >,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        match self {
+            ExternFuncEventTest::TEST_EVENT => {}
+            ExternFuncEventTest::TEST_EVENT_WITH_ARG => {}
+            ExternFuncEventTest::TEST_EVENT_WITH_RETURN => {
+                let res = crate::vm::asm::operation::OpPrimitive::pop_num::<u64>(stack)?;
+                assert_eq!(res, 420);
+            }
+        }
+        Ok(())
+    }
+
+    fn event_setup(
+        &self,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut Self::E,
+        context: &crate::vm::scheduler::ExecutionContext<
+            DefaultExecutionContext,
+            DefaultProcessID,
+            DefaultThreadID,
+        >,
+    ) -> Result<usize, crate::vm::runtime::RuntimeError> {
+        stack.push_with(&(69u64).to_le_bytes())?;
+        match self {
+            ExternFuncEventTest::TEST_EVENT => Ok(0),
+            ExternFuncEventTest::TEST_EVENT_WITH_ARG => Ok(8),
+            ExternFuncEventTest::TEST_EVENT_WITH_RETURN => Ok(0),
+        }
+    }
+
+    fn event_trigger(&self, signal: u64, trigger: u64) -> bool {
+        signal & trigger != 0
     }
 }
 
@@ -681,7 +956,15 @@ impl AsmWeight for ExternFuncEventTest {
     }
 }
 
-impl<E: Engine> Executable<E> for ExternFuncEventTest {
+impl<
+        E: Engine<
+            FunctionContext = DefaultExecutionContext,
+            PID = DefaultProcessID,
+            TID = DefaultThreadID,
+            Function = ExternFuncEventTest,
+        >,
+    > Executable<E> for ExternFuncEventTest
+{
     fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
@@ -694,7 +977,9 @@ impl<E: Engine> Executable<E> for ExternFuncEventTest {
         context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), crate::vm::runtime::RuntimeError> {
         match self {
-            ExternFuncEventTest::TEST_EVENT => {
+            ExternFuncEventTest::TEST_EVENT
+            | ExternFuncEventTest::TEST_EVENT_WITH_ARG
+            | ExternFuncEventTest::TEST_EVENT_WITH_RETURN => {
                 let callback: MemoryAddress =
                     crate::vm::asm::operation::OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
@@ -708,7 +993,11 @@ impl<E: Engine> Executable<E> for ExternFuncEventTest {
                     crate::vm::signal::Signal::EventRegistration {
                         tid: context.tid.clone(),
                         trigger: 1,
-                        callback,
+                        callback: crate::vm::scheduler::EventCallback {
+                            callback,
+                            manager: *self,
+                            _phantom: std::marker::PhantomData::default(),
+                        },
                         conf: crate::vm::scheduler::EventConf {
                             kind: crate::vm::scheduler::EventKind::Once,
                             exclu: crate::vm::scheduler::EventExclusivity::PerPID,
@@ -782,10 +1071,100 @@ impl ExternResolve for ExternFuncEventTest {
                     crate::semantic::scope::static_types::StaticType::Unit,
                 ))
             }
+            ExternFuncEventTest::TEST_EVENT_WITH_ARG => {
+                if params.len() != 1 {
+                    return Err(crate::semantic::SemanticError::IncorrectArguments);
+                }
+                let callback = &mut params[0];
+
+                let _ = crate::semantic::Resolve::resolve::<E>(
+                    callback,
+                    scope_manager,
+                    scope_id,
+                    &Some(crate::semantic::EType::Static(
+                        crate::semantic::scope::static_types::StaticType::Closure(
+                            crate::semantic::scope::static_types::ClosureType {
+                                params: vec![p_num!(I64)],
+                                ret: crate::semantic::EType::Static(
+                                    crate::semantic::scope::static_types::StaticType::Unit,
+                                )
+                                .into(),
+                            },
+                        ),
+                    )),
+                    &mut None,
+                )?;
+
+                let callback_type =
+                    crate::semantic::TypeOf::type_of(callback, &scope_manager, scope_id)?;
+
+                match callback_type {
+                    crate::semantic::EType::Static(
+                        crate::semantic::scope::static_types::StaticType::Closure(
+                            crate::semantic::scope::static_types::ClosureType { params, ret },
+                        ),
+                    ) => {
+                        if params.len() != 1
+                            || crate::semantic::EType::Static(
+                                crate::semantic::scope::static_types::StaticType::Unit,
+                            ) != *ret
+                        {
+                            return Err(crate::semantic::SemanticError::IncorrectArguments);
+                        }
+                    }
+                    _ => return Err(crate::semantic::SemanticError::IncorrectArguments),
+                }
+
+                Ok(crate::semantic::EType::Static(
+                    crate::semantic::scope::static_types::StaticType::Unit,
+                ))
+            }
+            ExternFuncEventTest::TEST_EVENT_WITH_RETURN => {
+                if params.len() != 1 {
+                    return Err(crate::semantic::SemanticError::IncorrectArguments);
+                }
+                let callback = &mut params[0];
+
+                let _ = crate::semantic::Resolve::resolve::<E>(
+                    callback,
+                    scope_manager,
+                    scope_id,
+                    &Some(crate::semantic::EType::Static(
+                        crate::semantic::scope::static_types::StaticType::Closure(
+                            crate::semantic::scope::static_types::ClosureType {
+                                params: Vec::default(),
+                                ret: p_num!(I64).into(),
+                            },
+                        ),
+                    )),
+                    &mut None,
+                )?;
+
+                let callback_type =
+                    crate::semantic::TypeOf::type_of(callback, &scope_manager, scope_id)?;
+
+                match callback_type {
+                    crate::semantic::EType::Static(
+                        crate::semantic::scope::static_types::StaticType::Closure(
+                            crate::semantic::scope::static_types::ClosureType { params, ret },
+                        ),
+                    ) => {
+                        if params.len() != 0 || p_num!(I64) != *ret {
+                            return Err(crate::semantic::SemanticError::IncorrectArguments);
+                        }
+                    }
+                    _ => return Err(crate::semantic::SemanticError::IncorrectArguments),
+                }
+
+                Ok(crate::semantic::EType::Static(
+                    crate::semantic::scope::static_types::StaticType::Unit,
+                ))
+            }
         }
     }
 }
-impl<E: Engine> ExternFunction<E> for ExternFuncEventTest {}
+
+impl ExternFunction<ExternEventTestEngine> for ExternFuncEventTest {}
 
 impl Engine for ExternEventTestEngine {
     type Function = ExternFuncEventTest;
@@ -826,10 +1205,11 @@ impl ExternPathFinder for ExternEventTestEngine {
     where
         Self: super::Engine,
     {
-        if name == "test_event" {
-            Some(ExternFuncEventTest::TEST_EVENT)
-        } else {
-            None
+        match name {
+            "test_event" => Some(ExternFuncEventTest::TEST_EVENT),
+            "test_event_with_arg" => Some(ExternFuncEventTest::TEST_EVENT_WITH_ARG),
+            "test_event_with_return" => Some(ExternFuncEventTest::TEST_EVENT_WITH_RETURN),
+            _ => None,
         }
     }
 }

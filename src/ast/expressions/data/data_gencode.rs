@@ -394,7 +394,7 @@ impl GenerateCode for ClosureReprData {
     ) -> Result<(), crate::vm::CodeGenerationError> {
         instructions.push(Asm::Mem(Mem::Label(self.closure_label)));
         instructions.push(Asm::Data(data::Data::Serialized {
-            data: self.bucket_size.to_le_bytes().into(),
+            data: (self.bucket_size as u64).to_le_bytes().into(),
         }));
         for (id, _) in &self.offsets {
             let Ok(crate::semantic::scope::scope::VariableInfo { ctype, address, .. }) =

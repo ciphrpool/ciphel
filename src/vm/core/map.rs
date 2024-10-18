@@ -1135,7 +1135,6 @@ impl MapLayout {
     }
 
     pub fn clear_buckets(&self, heap: &mut Heap) -> Result<(), RuntimeError> {
-        dbg!(self.bucket_size);
         let _ = heap.write(
             self.ptr_buckets,
             &vec![0; (1 << self.log_cap) * self.bucket_size],

@@ -25,8 +25,49 @@ pub trait ExternPathFinderFunctions {
         Self: Sized;
 }
 
+pub trait ExternEventManager<
+    EC: ExternExecutionContext,
+    PID: ExternProcessIdentifier,
+    TID: ExternThreadIdentifier<PID>,
+>: Clone + Copy + Debug + PartialEq
+{
+    type E: Engine<FunctionContext = EC, PID = PID, TID = TID>;
+    fn event_setup(
+        &self,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut Self::E,
+        context: &crate::vm::scheduler::ExecutionContext<EC, PID, TID>,
+    ) -> Result<usize, crate::vm::runtime::RuntimeError> {
+        Ok(0)
+    }
+    fn event_conclusion(
+        &self,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut Self::E,
+        context: &crate::vm::scheduler::ExecutionContext<EC, PID, TID>,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        Ok(())
+    }
+    fn event_trigger(&self, signal: u64, trigger: u64) -> bool {
+        false
+    }
+}
+
 pub trait ExternFunction<E: Engine>:
-    super::AsmName<E> + super::AsmWeight + super::scheduler::Executable<E> + Sized + ExternResolve
+    super::AsmName<E>
+    + super::AsmWeight
+    + super::scheduler::Executable<E>
+    + Sized
+    + ExternResolve
+    + Clone
+    + Copy
+    + Debug
+    + PartialEq
+    + ExternEventManager<E::FunctionContext, E::PID, E::TID, E = E>
 {
 }
 
@@ -72,10 +113,10 @@ pub trait Engine:
     type FunctionContext: ExternExecutionContext;
 }
 
-pub trait ExternExecutionContext: Default {}
+pub trait ExternExecutionContext: Default + Debug + Clone + Copy {}
 
 pub trait ExternThreadIdentifier<PID: ExternProcessIdentifier>:
-    Hash + PartialEq + std::cmp::Eq + Clone + Sized + Debug + Default
+    Hash + PartialEq + std::cmp::Eq + Clone + Sized + Debug + Default + Copy
 {
     fn to_u64(&self) -> u64;
     fn from_u64(tid: u64) -> Option<Self>;
@@ -83,6 +124,6 @@ pub trait ExternThreadIdentifier<PID: ExternProcessIdentifier>:
 }
 
 pub trait ExternProcessIdentifier:
-    Hash + PartialEq + std::cmp::Eq + Clone + Sized + Debug + Default
+    Hash + PartialEq + std::cmp::Eq + Clone + Sized + Debug + Default + Copy
 {
 }

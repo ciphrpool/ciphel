@@ -1106,12 +1106,114 @@ mod tests {
             .run(&mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
 
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
         let _ = runtime.trigger(tid_1.clone(), 1);
 
         let _ = runtime
             .run(&mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
+        compile_for(
+            r##"
+            let z = 17;
+            "##,
+            &tid_1,
+            &mut runtime,
+        );
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+    }
 
+    #[test]
+    fn valid_event_with_arg() {
+        let mut engine = crate::vm::external::test::ExternEventTestEngine {};
+
+        let mut heap = Heap::new();
+        let mut stdio = StdIO::default();
+        let mut runtime = Runtime::default();
+
+        let tid_1 = runtime
+            .spawn(&mut engine)
+            .expect("Spawning should have succeeded");
+
+        compile_for(
+            r##"
+        test_event_with_arg(move (y) -> {
+            let x = y;
+        });
+        let y = 8;
+
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        let _ = runtime.trigger(tid_1.clone(), 1);
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+        compile_for(
+            r##"
+            let z = 17;
+            "##,
+            &tid_1,
+            &mut runtime,
+        );
+        let _ = runtime.run(&mut heap, &mut stdio, &mut engine).expect(
+            "Execut
+            ion should have succeeded",
+        );
+    }
+
+    #[test]
+    fn valid_event_with_return() {
+        let mut engine = crate::vm::external::test::ExternEventTestEngine {};
+
+        let mut heap = Heap::new();
+        let mut stdio = StdIO::default();
+        let mut runtime = Runtime::default();
+
+        let tid_1 = runtime
+            .spawn(&mut engine)
+            .expect("Spawning should have succeeded");
+
+        compile_for(
+            r##"
+        test_event_with_return(move () -> {
+            420
+        });
+        let y = 8;
+
+        "##,
+            &tid_1,
+            &mut runtime,
+        );
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
+
+        let _ = runtime.trigger(tid_1.clone(), 1);
+
+        let _ = runtime
+            .run(&mut heap, &mut stdio, &mut engine)
+            .expect("Execution should have succeeded");
         compile_for(
             r##"
             let z = 17;

@@ -67,8 +67,6 @@ impl<E: crate::vm::external::Engine> Executable<E> for Mem {
                     MemoryAddress::Heap { offset } => {
                         let data = stack.pop(*size)?;
                         let _ = heap.write(address, &data.to_vec())?;
-                        let heap_address: u64 = address.into(stack);
-                        let _ = stack.push_with(&heap_address.to_le_bytes())?;
                     }
                     MemoryAddress::Global { offset } => {
                         let data = stack.pop(*size)?.to_vec();

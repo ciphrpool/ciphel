@@ -1,13 +1,20 @@
 use std::marker::PhantomData;
 
 use super::{
-    external::{ExternProcessIdentifier, ExternThreadIdentifier},
+    external::{
+        ExternEventManager, ExternExecutionContext, ExternProcessIdentifier, ExternThreadIdentifier,
+    },
     runtime::{Runtime, RuntimeError, RuntimeSnapshot},
-    scheduler::SchedulingPolicy,
+    scheduler::{EventCallback, SchedulingPolicy},
 };
 
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub enum Signal<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> {
+pub enum Signal<
+    EC: ExternExecutionContext,
+    PID: ExternProcessIdentifier,
+    TID: ExternThreadIdentifier<PID>,
+    EM: ExternEventManager<EC, PID, TID>,
+> {
     Spawn,
     Exit,
     Close(TID),
@@ -26,13 +33,18 @@ pub enum Signal<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> 
     EventRegistration {
         tid: TID,
         trigger: u64,
-        callback: super::allocator::MemoryAddress,
+        callback: EventCallback<EC, PID, TID, EM>,
         conf: super::scheduler::EventConf,
     },
 }
 
 #[derive(Clone)]
-pub enum SignalAction<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> {
+pub enum SignalAction<
+    EC: ExternExecutionContext,
+    PID: ExternProcessIdentifier,
+    TID: ExternThreadIdentifier<PID>,
+    EM: ExternEventManager<EC, PID, TID>,
+> {
     Spawn(TID),
     Exit(TID),
     Close(TID),
@@ -60,19 +72,19 @@ pub enum SignalAction<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<
     EventRegistration {
         tid: TID,
         trigger: u64,
-        callback: super::allocator::MemoryAddress,
+        callback: EventCallback<EC, PID, TID, EM>,
         conf: super::scheduler::EventConf,
     },
 }
 
 pub enum SignalResult<E: crate::vm::external::Engine> {
-    Ok(SignalAction<E::PID, E::TID>),
+    Ok(SignalAction<E::FunctionContext, E::PID, E::TID, E::Function>),
     Error,
 }
 
 pub struct SignalHandler<E: crate::vm::external::Engine> {
     snapshot: RuntimeSnapshot<E::PID, E::TID>,
-    action_buffer: Vec<SignalAction<E::PID, E::TID>>,
+    action_buffer: Vec<SignalAction<E::FunctionContext, E::PID, E::TID, E::Function>>,
 }
 
 impl<E: crate::vm::external::Engine> Default for SignalHandler<E> {
@@ -93,7 +105,7 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
     fn handle(
         &mut self,
         caller: E::TID,
-        signal: Signal<E::PID, E::TID>,
+        signal: Signal<E::FunctionContext, E::PID, E::TID, E::Function>,
         engine: &mut E,
     ) -> SignalResult<E> {
         match signal {
@@ -242,7 +254,7 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
 
     pub fn notify(
         &mut self,
-        signal: Signal<E::PID, E::TID>,
+        signal: Signal<E::FunctionContext, E::PID, E::TID, E::Function>,
         stack: &mut crate::vm::allocator::stack::Stack,
         engine: &mut E,
         tid: E::TID,

@@ -19,8 +19,6 @@ impl<'a> fmt::Display for HexSlice<'a> {
 #[derive(Debug, Clone)]
 pub enum Data {
     Serialized { data: Box<[u8]> },
-    Dump { data: Box<[Box<[u8]>]> },
-    Table { data: Box<[Ulid]> },
     // Get { label: Ulid, idx: Option<usize> },
 }
 
@@ -29,25 +27,6 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Data {
         match self {
             Data::Serialized { data } => {
                 stdio.push_asm(engine, &format!("dmp 0x{}", HexSlice(data.as_ref())))
-            }
-            Data::Dump { data } => {
-                let arr: Vec<String> = data.iter().map(|e| format!("0x{}", HexSlice(e))).collect();
-                let arr = arr.join(", ");
-                stdio.push_asm(engine, &format!("data {}", arr))
-            }
-            Data::Table { data } => {
-                let arr: Vec<String> = data
-                    .iter()
-                    .map(|e| {
-                        let label = program
-                            .get_label_name(e)
-                            .unwrap_or("".to_string().into())
-                            .to_string();
-                        label.to_string()
-                    })
-                    .collect();
-                let arr = arr.join(", ");
-                stdio.push_asm(engine, &format!("labels {}", arr))
             }
         }
     }
@@ -62,8 +41,6 @@ impl crate::vm::AsmWeight for Data {
                     crate::vm::Weight::LOW
                 }
             }
-            Data::Dump { data } => crate::vm::Weight::ZERO,
-            Data::Table { data } => crate::vm::Weight::ZERO,
         }
     }
 }
@@ -84,8 +61,6 @@ impl<E: crate::vm::external::Engine> Executable<E> for Data {
                 let _ = stack.push_with(&data)?;
                 scheduler.next();
             }
-            Data::Dump { data } => scheduler.next(),
-            Data::Table { data } => scheduler.next(),
         }
         Ok(())
     }
