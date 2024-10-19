@@ -1,7 +1,10 @@
 use crate::{
     p_num,
     vm::{
-        allocator::MemoryAddress, asm::operation::PopNum, scheduler::Executable, AsmName, AsmWeight,
+        allocator::MemoryAddress,
+        asm::operation::{GetNumFrom, OpPrimitive, PopNum},
+        scheduler::Executable,
+        AsmName, AsmWeight,
     },
 };
 
@@ -876,6 +879,7 @@ pub enum ExternFuncEventTest {
     TEST_EVENT,
     TEST_EVENT_WITH_ARG,
     TEST_EVENT_WITH_RETURN,
+    TEST_EVENT_REPETABLE,
 }
 
 impl<E: Engine> AsmName<E> for ExternFuncEventTest {
@@ -893,6 +897,9 @@ impl<E: Engine> AsmName<E> for ExternFuncEventTest {
             ExternFuncEventTest::TEST_EVENT_WITH_RETURN => {
                 stdio.push_extern_lib(engine, "test_event_with_return")
             }
+            ExternFuncEventTest::TEST_EVENT_REPETABLE => {
+                stdio.push_extern_lib(engine, "test_event_repetable")
+            }
         }
     }
 }
@@ -901,6 +908,31 @@ impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThread
     for ExternFuncEventTest
 {
     type E = ExternEventTestEngine;
+
+    fn event_cleanup(
+        &self,
+        callback_address: MemoryAddress,
+        event_state: crate::vm::scheduler::EventState,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut Self::E,
+        context: &crate::vm::scheduler::ExecutionContext<
+            DefaultExecutionContext,
+            DefaultProcessID,
+            DefaultThreadID,
+        >,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        match self {
+            ExternFuncEventTest::TEST_EVENT
+            | ExternFuncEventTest::TEST_EVENT_WITH_ARG
+            | ExternFuncEventTest::TEST_EVENT_WITH_RETURN => {
+                let _ = heap.free(callback_address)?;
+            }
+            ExternFuncEventTest::TEST_EVENT_REPETABLE => {}
+        }
+        Ok(())
+    }
 
     fn event_conclusion(
         &self,
@@ -921,12 +953,14 @@ impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThread
                 let res = crate::vm::asm::operation::OpPrimitive::pop_num::<u64>(stack)?;
                 assert_eq!(res, 420);
             }
+            ExternFuncEventTest::TEST_EVENT_REPETABLE => {}
         }
         Ok(())
     }
 
     fn event_setup(
         &self,
+        callback_address: MemoryAddress,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
@@ -936,12 +970,33 @@ impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThread
             DefaultProcessID,
             DefaultThreadID,
         >,
-    ) -> Result<usize, crate::vm::runtime::RuntimeError> {
+    ) -> Result<super::EventSetupResult, crate::vm::runtime::RuntimeError> {
+        let function_offset =
+            OpPrimitive::get_num_from::<u64>(callback_address, stack, heap)? as usize;
+        let callback: u64 = (callback_address).into(stack);
+
         stack.push_with(&(69u64).to_le_bytes())?;
         match self {
-            ExternFuncEventTest::TEST_EVENT => Ok(0),
-            ExternFuncEventTest::TEST_EVENT_WITH_ARG => Ok(8),
-            ExternFuncEventTest::TEST_EVENT_WITH_RETURN => Ok(0),
+            ExternFuncEventTest::TEST_EVENT => Ok(super::EventSetupResult {
+                parameters_size: 0,
+                function_offset,
+                callback,
+            }),
+            ExternFuncEventTest::TEST_EVENT_WITH_ARG => Ok(super::EventSetupResult {
+                parameters_size: 8,
+                function_offset,
+                callback,
+            }),
+            ExternFuncEventTest::TEST_EVENT_WITH_RETURN => Ok(super::EventSetupResult {
+                parameters_size: 0,
+                function_offset,
+                callback,
+            }),
+            ExternFuncEventTest::TEST_EVENT_REPETABLE => Ok(super::EventSetupResult {
+                parameters_size: 0,
+                function_offset,
+                callback,
+            }),
         }
     }
 
@@ -1011,6 +1066,38 @@ impl<
                 scheduler.next();
                 Ok(())
             }
+            ExternFuncEventTest::TEST_EVENT_REPETABLE => {
+                let callback: MemoryAddress =
+                    crate::vm::asm::operation::OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+
+                fn signal_callback<E: crate::vm::external::Engine>(
+                    response: crate::vm::signal::SignalResult<E>,
+                    stack: &mut crate::vm::allocator::stack::Stack,
+                ) -> Result<(), crate::vm::runtime::RuntimeError> {
+                    Ok(())
+                }
+                let _ = signal_handler.notify(
+                    crate::vm::signal::Signal::EventRegistration {
+                        tid: context.tid.clone(),
+                        trigger: 1,
+                        callback: crate::vm::scheduler::EventCallback {
+                            callback,
+                            manager: *self,
+                            _phantom: std::marker::PhantomData::default(),
+                        },
+                        conf: crate::vm::scheduler::EventConf {
+                            kind: crate::vm::scheduler::EventKind::Repetable,
+                            exclu: crate::vm::scheduler::EventExclusivity::PerPID,
+                        },
+                    },
+                    stack,
+                    engine,
+                    context.tid.clone(),
+                    signal_callback::<E>,
+                )?;
+                scheduler.next();
+                Ok(())
+            }
         }
     }
 }
@@ -1023,7 +1110,7 @@ impl ExternResolve for ExternFuncEventTest {
         params: &mut Vec<crate::ast::expressions::Expression>,
     ) -> Result<crate::semantic::EType, crate::semantic::SemanticError> {
         match self {
-            ExternFuncEventTest::TEST_EVENT => {
+            ExternFuncEventTest::TEST_EVENT | ExternFuncEventTest::TEST_EVENT_REPETABLE => {
                 if params.len() != 1 {
                     return Err(crate::semantic::SemanticError::IncorrectArguments);
                 }
@@ -1209,6 +1296,7 @@ impl ExternPathFinder for ExternEventTestEngine {
             "test_event" => Some(ExternFuncEventTest::TEST_EVENT),
             "test_event_with_arg" => Some(ExternFuncEventTest::TEST_EVENT_WITH_ARG),
             "test_event_with_return" => Some(ExternFuncEventTest::TEST_EVENT_WITH_RETURN),
+            "test_event_repetable" => Some(ExternFuncEventTest::TEST_EVENT_REPETABLE),
             _ => None,
         }
     }

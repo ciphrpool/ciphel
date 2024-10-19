@@ -1,6 +1,6 @@
 use std::{fmt::Debug, hash::Hash};
 
-use super::runtime::RuntimeError;
+use super::{allocator::MemoryAddress, runtime::RuntimeError};
 
 pub mod test;
 
@@ -25,6 +25,12 @@ pub trait ExternPathFinderFunctions {
         Self: Sized;
 }
 
+#[derive(Debug, Default)]
+pub struct EventSetupResult {
+    pub parameters_size: usize,
+    pub function_offset: usize,
+    pub callback: u64,
+}
 pub trait ExternEventManager<
     EC: ExternExecutionContext,
     PID: ExternProcessIdentifier,
@@ -32,18 +38,32 @@ pub trait ExternEventManager<
 >: Clone + Copy + Debug + PartialEq
 {
     type E: Engine<FunctionContext = EC, PID = PID, TID = TID>;
+
     fn event_setup(
+        &self,
+        callback_address: MemoryAddress,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut Self::E,
+        context: &crate::vm::scheduler::ExecutionContext<EC, PID, TID>,
+    ) -> Result<EventSetupResult, crate::vm::runtime::RuntimeError> {
+        Ok(EventSetupResult::default())
+    }
+    fn event_conclusion(
         &self,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut Self::E,
         context: &crate::vm::scheduler::ExecutionContext<EC, PID, TID>,
-    ) -> Result<usize, crate::vm::runtime::RuntimeError> {
-        Ok(0)
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        Ok(())
     }
-    fn event_conclusion(
+    fn event_cleanup(
         &self,
+        callback_address: MemoryAddress,
+        event_state: crate::vm::scheduler::EventState,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,

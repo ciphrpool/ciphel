@@ -17,7 +17,7 @@ impl Default for StdIO {
 
 impl StdIO {
     pub fn push_asm_info<E: crate::vm::external::Engine>(&mut self, engine: &mut E, content: &str) {
-        engine.stdasm_print(format!("INFO :: {content}\n"));
+        engine.stdasm_print(format!("INFO :: {content}"));
     }
     pub fn push_asm<E: crate::vm::external::Engine>(&mut self, engine: &mut E, content: &str) {
         // self.asm_out.push('\t');

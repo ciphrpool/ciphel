@@ -1,4 +1,7 @@
-use std::{collections::HashMap, marker::PhantomData};
+use std::{
+    collections::{HashMap, VecDeque},
+    marker::PhantomData,
+};
 
 use thiserror::Error;
 
@@ -11,7 +14,8 @@ use super::{
     external::{ExternProcessIdentifier, ExternThreadIdentifier},
     program::Program,
     scheduler::{
-        Event, EventCallback, EventConf, EventExclusivity, EventState, Scheduler, SchedulingPolicy,
+        Event, EventCallback, EventConf, EventExclusivity, EventKind, EventQueue, EventState,
+        Scheduler, SchedulingPolicy,
     },
     GenerateCode,
 };
@@ -143,9 +147,8 @@ impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> Default
 pub struct Runtime<E: crate::vm::external::Engine, P: SchedulingPolicy> {
     pub modules: HashMap<E::PID, Vec<Module>>,
     contexts: HashMap<E::TID, ThreadContext<E>>,
-    events: HashMap<E::PID, Vec<Event<E>>>,
-    running_events: HashMap<E::TID, EventCallback<E::FunctionContext, E::PID, E::TID, E::Function>>,
     threads: HashMap<E::TID, Thread<P>>,
+    pub(crate) event_queue: EventQueue<E>,
 }
 
 impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Default for Runtime<E, P> {
@@ -154,8 +157,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Default for Runtime<E,
             modules: HashMap::default(),
             contexts: HashMap::default(),
             threads: HashMap::default(),
-            events: HashMap::default(),
-            running_events: HashMap::default(),
+            event_queue: EventQueue::<E>::default(),
         }
     }
 }
@@ -288,25 +290,47 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
     }
 
     pub fn trigger(&mut self, caller: E::TID, signal: u64) -> Result<(), RuntimeError> {
-        let pid = caller.pid();
-        for Event {
-            tid,
-            trigger,
-            callback,
-            conf,
-            state,
-        } in self.events.get(&pid).unwrap_or(&Vec::default())
-        {
-            if ((EventExclusivity::PerPID == conf.exclu && pid == tid.pid())
-                || (EventExclusivity::PerTID == conf.exclu && *tid != caller))
-                && (callback.manager.event_trigger(signal, *trigger))
-                && (EventState::IDLE == *state)
-            {
-                if let Some(Thread { scheduler, .. }) = self.threads.get_mut(&tid) {
-                    self.running_events.insert(tid.clone(), *callback);
+        let caller_pid = caller.pid();
+        let mut triggered = Vec::new();
+
+        for (e_tid, events) in self.event_queue.events.iter_mut() {
+            let mut i = 0;
+            while i < events.len() {
+                let should_trigger = {
+                    let event = &events[i];
+                    ((EventExclusivity::PerPID == event.conf.exclu && caller_pid == event.pid)
+                        || (EventExclusivity::PerTID == event.conf.exclu && event.tid != caller))
+                        && (event.callback.manager.event_trigger(signal, event.trigger))
+                        && (EventState::IDLE == event.state)
+                };
+
+                if should_trigger {
+                    if !self.threads.contains_key(&events[i].tid) {
+                        return Err(RuntimeError::Default);
+                    }
+                    let event = events.swap_remove(i);
+                    triggered.push((e_tid.clone(), event));
+                } else {
+                    i += 1;
                 }
             }
         }
+
+        // Move triggered events
+        for (tid, mut event) in triggered {
+            if self.event_queue.current_events.contains_key(&tid) {
+                event.state = EventState::Triggered;
+                self.event_queue
+                    .running_events
+                    .entry(tid)
+                    .or_insert_with(VecDeque::new)
+                    .push_back(event);
+            } else {
+                event.state = EventState::Running;
+                self.event_queue.current_events.insert(tid, event);
+            }
+        }
+
         Ok(())
     }
 
@@ -317,19 +341,18 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         callback: super::scheduler::EventCallback<E::FunctionContext, E::PID, E::TID, E::Function>,
         conf: EventConf,
     ) -> Result<(), RuntimeError> {
-        let pid = caller.pid();
-        if !self.events.contains_key(&pid) {
-            self.events.insert(pid.clone(), Vec::new());
-        }
-        if let Some(events) = self.events.get_mut(&pid) {
-            events.push(Event {
+        self.event_queue
+            .events
+            .entry(caller)
+            .or_insert_with(Vec::new)
+            .push(Event {
+                pid: caller.pid(),
                 tid: caller,
                 trigger,
                 callback,
                 conf,
                 state: EventState::default(),
             });
-        }
         Ok(())
     }
 
@@ -354,8 +377,10 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         engine: &mut E,
     ) -> Result<(), RuntimeError> {
         stdio.push_asm_info(engine, "START MAF");
+
         let mut signal_handler = SignalHandler::default();
         let snapshot = self.snapshot();
+
         for (tid, ThreadContext { state, .. }) in self.contexts.iter_mut() {
             state.init_maf(tid.clone(), &snapshot, stdio, engine);
         }
@@ -377,10 +402,22 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
             };
             scheduler.cursor.update(program, state);
 
-            if self.running_events.contains_key(tid) {
-                // Hard set the thread to running when an event is running
-                *state = ThreadState::RUNNING;
-            }
+            let context = &crate::vm::scheduler::ExecutionContext {
+                external: E::FunctionContext::default(),
+                tid: tid.clone(),
+                pid: tid.pid(),
+            };
+
+            self.event_queue.prepare(
+                tid.clone(),
+                state,
+                program,
+                stack,
+                heap,
+                stdio,
+                engine,
+                context,
+            )?;
 
             if ThreadState::RUNNING != *state {
                 continue;
@@ -398,7 +435,8 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
                     stdio,
                     engine,
                     &mut signal_handler,
-                    self.running_events.get(tid),
+                    self.event_queue.current_events.get_mut(tid),
+                    context,
                 )? {
                     std::ops::ControlFlow::Continue(_) => match scheduler.policy.watchdog() {
                         std::ops::ControlFlow::Continue(_) => continue,

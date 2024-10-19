@@ -1,4 +1,9 @@
-use std::{default, marker::PhantomData, ops::ControlFlow};
+use std::{
+    collections::{HashMap, VecDeque},
+    default,
+    marker::PhantomData,
+    ops::ControlFlow,
+};
 
 use ulid::Ulid;
 
@@ -148,12 +153,91 @@ pub struct EventCallback<
     pub manager: EM,
     pub _phantom: PhantomData<(EC, PID, TID)>,
 }
-pub struct Event<E: crate::vm::external::Engine> {
-    pub tid: E::TID,
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct Event<
+    EC: ExternExecutionContext,
+    PID: ExternProcessIdentifier,
+    TID: ExternThreadIdentifier<PID>,
+    EM: super::external::ExternEventManager<EC, PID, TID>,
+> {
+    pub pid: PID,
+    pub tid: TID,
     pub trigger: u64,
-    pub callback: EventCallback<E::FunctionContext, E::PID, E::TID, E::Function>,
+    pub callback: EventCallback<EC, PID, TID, EM>,
     pub conf: EventConf,
     pub state: EventState,
+}
+
+pub struct EventQueue<E: crate::vm::external::Engine> {
+    pub current_events: HashMap<E::TID, Event<E::FunctionContext, E::PID, E::TID, E::Function>>,
+    pub running_events:
+        HashMap<E::TID, VecDeque<Event<E::FunctionContext, E::PID, E::TID, E::Function>>>,
+    pub events: HashMap<E::TID, Vec<Event<E::FunctionContext, E::PID, E::TID, E::Function>>>,
+}
+
+impl<E: crate::vm::external::Engine> Default for EventQueue<E> {
+    fn default() -> Self {
+        Self {
+            current_events: HashMap::default(),
+            events: HashMap::default(),
+            running_events: HashMap::default(),
+        }
+    }
+}
+
+impl<E: crate::vm::external::Engine> EventQueue<E> {
+    pub fn prepare(
+        &mut self,
+        tid: E::TID,
+        state: &mut ThreadState<E::PID, E::TID>,
+        program: &Program<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
+    ) -> Result<(), RuntimeError> {
+        if let Some(event_state) = self.current_events.get(&tid).map(|e| e.state) {
+            if EventState::Completed == event_state {
+                if let Some(mut event) = self.current_events.remove(&tid) {
+                    if EventKind::Repetable == event.conf.kind {
+                        event.state = EventState::IDLE;
+                        self.events
+                            .entry(event.tid)
+                            .or_insert_with(Vec::new)
+                            .push(event);
+                    } else {
+                        let _ = event.callback.manager.event_cleanup(
+                            event.callback.callback,
+                            event_state,
+                            stack,
+                            heap,
+                            stdio,
+                            engine,
+                            context,
+                        )?;
+                    }
+                }
+
+                if let Some(mut event) = self
+                    .running_events
+                    .get_mut(&tid)
+                    .map(|queue| queue.pop_front())
+                    .flatten()
+                {
+                    event.state = EventState::Running;
+                    self.current_events.insert(tid, event);
+                    // Hard set the thread to running when an event is running
+                    *state = ThreadState::RUNNING;
+                }
+            } else {
+                // Hard set the thread to running when an event is running
+                *state = ThreadState::RUNNING;
+            }
+        }
+        Ok(())
+    }
 }
 
 pub struct Scheduler<P: SchedulingPolicy> {
@@ -229,43 +313,34 @@ impl<P: SchedulingPolicy> Scheduler<P> {
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
         signal_handler: &mut super::signal::SignalHandler<E>,
-        current_event: Option<&EventCallback<E::FunctionContext, E::PID, E::TID, E::Function>>,
-        // context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
+        current_event: Option<&mut Event<E::FunctionContext, E::PID, E::TID, E::Function>>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<ControlFlow<(), ()>, RuntimeError> {
         let pid = tid.pid();
 
-        if let Some(EventCallback {
-            callback, manager, ..
+        if let Some(Event {
+            state: ref event_state,
+            callback: EventCallback {
+                callback, manager, ..
+            },
+            ..
         }) = current_event
         {
-            if self.saved_cursor.is_none() {
+            if self.saved_cursor.is_none() && EventState::Running == *event_state {
                 stdio.push_asm_info(engine, "START EVENT");
                 self.in_event = true;
                 let _ = self.saved_cursor.insert(self.cursor.clone());
 
-                let function_offset =
-                    OpPrimitive::get_num_from::<u64>(*callback, stack, heap)? as usize;
-                let callback_u64: u64 = (*callback).into(stack);
-
-                let parameters_size = manager.event_setup(
-                    stack,
-                    heap,
-                    stdio,
-                    engine,
-                    &crate::vm::scheduler::ExecutionContext {
-                        external: E::FunctionContext::default(),
-                        tid,
-                        pid,
-                    },
-                )?;
+                let setup_res =
+                    manager.event_setup(*callback, stack, heap, stdio, engine, context)?;
 
                 let _ = stack.open_frame(
-                    parameters_size,
+                    setup_res.parameters_size,
                     self.saved_cursor.unwrap().get(),
-                    Some(callback_u64),
+                    Some(setup_res.callback),
                 )?;
 
-                self.jump(function_offset);
+                self.jump(setup_res.function_offset);
             }
         }
 
@@ -300,9 +375,18 @@ impl<P: SchedulingPolicy> Scheduler<P> {
             if self.return_signal {
                 self.in_event = false;
                 self.cursor = self.saved_cursor.unwrap_or_default();
+                self.saved_cursor = None;
 
-                if let Some(EventCallback { manager, .. }) = current_event {
-                    manager.event_conclusion(
+                if let Some(Event {
+                    state,
+                    callback:
+                        EventCallback {
+                            callback, manager, ..
+                        },
+                    ..
+                }) = current_event
+                {
+                    let _ = manager.event_conclusion(
                         stack,
                         heap,
                         stdio,
@@ -312,7 +396,8 @@ impl<P: SchedulingPolicy> Scheduler<P> {
                             tid,
                             pid,
                         },
-                    );
+                    )?;
+                    *state = EventState::Completed;
                 }
                 stdio.push_asm_info(engine, "END EVENT");
             }
