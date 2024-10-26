@@ -242,7 +242,7 @@ mod tests {
 
         let tid = ciphel
             .runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         ciphel

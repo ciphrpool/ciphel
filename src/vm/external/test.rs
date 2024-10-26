@@ -140,11 +140,15 @@ impl ExternThreadHandler for NoopEngine {
     type TID = DefaultThreadID;
     type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
@@ -279,11 +283,15 @@ impl ExternThreadHandler for StdoutTestEngine {
     type TID = DefaultThreadID;
     type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
@@ -407,11 +415,15 @@ impl ExternThreadHandler for StdinTestEngine {
     type TID = DefaultThreadID;
     type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(0))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
@@ -531,11 +543,15 @@ impl ExternThreadHandler for DbgEngine {
     type TID = DefaultThreadID;
     type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
@@ -651,12 +667,16 @@ impl ExternThreadHandler for ThreadTestEngine {
     type TID = DefaultThreadID;
     type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         self.id_auto_increment += 1;
         Ok(DefaultThreadID(self.id_auto_increment))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         Ok(())
     }
 }
@@ -810,11 +830,15 @@ impl ExternThreadHandler for ExternFuncTestEngine {
     type TID = DefaultThreadID;
     type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
@@ -1262,11 +1286,15 @@ impl ExternThreadHandler for ExternEventTestEngine {
     type TID = DefaultThreadID;
     type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }

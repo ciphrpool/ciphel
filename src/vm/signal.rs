@@ -110,7 +110,7 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
     ) -> SignalResult<E> {
         match signal {
             Signal::Spawn => {
-                let Ok(tid) = engine.spawn() else {
+                let Ok(tid) = engine.spawn(&caller.pid()) else {
                     return SignalResult::Error;
                 };
                 let action = SignalAction::Spawn(tid);
@@ -118,7 +118,7 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
                 SignalResult::Ok(action)
             }
             Signal::Exit => {
-                if engine.close(&caller).is_err() {
+                if engine.close(&caller.pid(), &caller).is_err() {
                     return SignalResult::Error;
                 };
                 let action = SignalAction::Exit(caller);
@@ -130,7 +130,7 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
                     return SignalResult::Error;
                 }
 
-                if engine.close(&tid).is_err() {
+                if engine.close(&caller.pid(), &tid).is_err() {
                     return SignalResult::Error;
                 };
                 let action = SignalAction::Close(tid);

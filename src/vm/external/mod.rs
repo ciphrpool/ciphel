@@ -118,8 +118,8 @@ pub trait ExternEnergyDispenser<PID: ExternProcessIdentifier, TID: ExternThreadI
 pub trait ExternThreadHandler {
     type PID: ExternProcessIdentifier;
     type TID: ExternThreadIdentifier<Self::PID>;
-    fn spawn(&mut self) -> Result<Self::TID, RuntimeError>;
-    fn close(&mut self, tid: &Self::TID) -> Result<(), RuntimeError>;
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, RuntimeError>;
+    fn close(&mut self, pid: &Self::PID, tid: &Self::TID) -> Result<(), RuntimeError>;
 }
 
 pub trait Engine:

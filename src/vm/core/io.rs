@@ -310,6 +310,7 @@ mod tests {
         vm::{
             allocator::{heap::Heap, MemoryAddress},
             asm::operation::{GetNumFrom, OpPrimitive},
+            external::test::DefaultProcessID,
             runtime::{Runtime, Thread, ThreadContext, ThreadState},
             scheduler::QueuePolicy,
             stdio::StdIO,
@@ -653,7 +654,7 @@ mod tests {
         let mut runtime = Runtime::default();
 
         let tid_1 = runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         compile_for(

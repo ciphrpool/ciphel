@@ -177,9 +177,8 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         }
     }
 
-    pub fn spawn(&mut self, engine: &mut E) -> Result<E::TID, RuntimeError> {
-        let tid = engine.spawn()?;
-        let pid = tid.pid();
+    pub fn spawn(&mut self, pid: E::PID, engine: &mut E) -> Result<E::TID, RuntimeError> {
+        let tid = engine.spawn(&pid)?;
 
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let mut program = crate::vm::program::Program::default();

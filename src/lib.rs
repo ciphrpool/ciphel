@@ -206,7 +206,7 @@ pub fn test_statements<E: crate::vm::external::Engine>(
     let mut runtime: Runtime<E, vm::scheduler::ToCompletion> = Runtime::default();
 
     let tid = runtime
-        .spawn(engine)
+        .spawn(E::PID::default(), engine)
         .expect("Spawning should have succeeded");
     {
         let vm::runtime::ThreadContext {

@@ -563,7 +563,7 @@ mod tests {
         test_extract_variable,
         vm::{
             allocator::heap::Heap,
-            external::test::DefaultThreadID,
+            external::test::{DefaultProcessID, DefaultThreadID},
             runtime::{Runtime, Thread, ThreadContext, ThreadState},
             scheduler::QueuePolicy,
             stdio::StdIO,
@@ -619,7 +619,7 @@ mod tests {
         let mut runtime = Runtime::default();
 
         let tid_1 = runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         compile_for(
@@ -693,7 +693,7 @@ mod tests {
         let mut runtime = Runtime::default();
 
         let tid_1 = runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         compile_for(
@@ -721,7 +721,7 @@ mod tests {
         let mut runtime = Runtime::default();
 
         let tid_1 = runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         compile_for(
@@ -782,7 +782,7 @@ mod tests {
         let mut runtime = Runtime::default();
 
         let tid_1 = runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         compile_for(
@@ -853,7 +853,7 @@ mod tests {
         let mut runtime = Runtime::default();
 
         let tid_1 = runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         compile_for(
@@ -952,7 +952,7 @@ mod tests {
         let mut runtime = Runtime::default();
 
         let tid_1 = runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         compile_for(
@@ -1087,7 +1087,7 @@ mod tests {
         let mut runtime = Runtime::default();
 
         let tid_1 = runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         compile_for(
@@ -1136,7 +1136,7 @@ mod tests {
         let mut runtime = Runtime::default();
 
         let tid_1 = runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         compile_for(
@@ -1186,7 +1186,7 @@ mod tests {
         let mut runtime = Runtime::default();
 
         let tid_1 = runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         compile_for(
@@ -1235,7 +1235,7 @@ mod tests {
         let mut runtime = Runtime::default();
 
         let tid_1 = runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         compile_for(
@@ -1299,7 +1299,7 @@ mod tests {
         let mut runtime = Runtime::default();
 
         let tid_1 = runtime
-            .spawn(&mut engine)
+            .spawn(DefaultProcessID::default(), &mut engine)
             .expect("Spawning should have succeeded");
 
         compile_for(
