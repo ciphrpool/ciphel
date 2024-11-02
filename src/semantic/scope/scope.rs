@@ -155,6 +155,25 @@ pub struct FrameMapping {
     pub vars: Vec<(u64, usize)>, // var id and offset
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct TransactionStore {
+    pub created_scopes: HashSet<u128>,
+    pub created_vars: HashSet<u64>,
+    pub created_types: HashSet<u64>,
+    pub previous_global_top: usize,
+    pub is_open: bool,
+}
+
+impl TransactionStore {
+    pub fn open(&mut self, previous_global_top: usize) {
+        self.created_scopes.clear();
+        self.created_vars.clear();
+        self.created_types.clear();
+        self.previous_global_top = previous_global_top;
+        self.is_open = true;
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ScopeManager {
     pub modules: Vec<Module>,
@@ -169,6 +188,8 @@ pub struct ScopeManager {
     pub scope_lookup: HashMap<u128, HashSet<u64>>,
     pub scope_states: HashMap<u128, ScopeState>,
     pub global_mapping: GlobalMapping,
+
+    pub transaction_store: TransactionStore,
 }
 
 impl Default for ScopeManager {
@@ -185,11 +206,57 @@ impl Default for ScopeManager {
             scope_states: HashMap::default(),
             global_mapping: GlobalMapping::default(),
             modules: Vec::default(),
+            transaction_store: TransactionStore::default(),
         }
     }
 }
 
 impl ScopeManager {
+    pub fn open_transaction(&mut self) {
+        self.transaction_store.open(self.global_mapping.top);
+    }
+    pub fn reject_transaction(&mut self) {
+        self.global_mapping.top = self.transaction_store.previous_global_top;
+
+        // Remove created variables
+        for var_id in self.transaction_store.created_vars.iter() {
+            self.vars.remove(var_id);
+        }
+
+        // Remove created types
+        let types_to_keep: Vec<TypeInfo> = self
+            .types
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !self.transaction_store.created_types.contains(&(*i as u64)))
+            .map(|(_, t)| t.clone())
+            .collect();
+        self.types = types_to_keep;
+
+        // Remove created scopes and clean up related mappings
+        for scope_id in self.transaction_store.created_scopes.iter() {
+            // Remove from scope branches
+            self.scope_branches.remove(scope_id);
+
+            // Remove from allocating scope
+            self.allocating_scope.remove(scope_id);
+
+            // Remove from scope types
+            self.scope_types.remove(scope_id);
+
+            // Remove from scope lookup
+            self.scope_lookup.remove(scope_id);
+
+            // Remove from scope states
+            self.scope_states.remove(scope_id);
+        }
+        self.transaction_store.is_open = false;
+    }
+
+    pub fn accept_transaction(&mut self) {
+        self.transaction_store.is_open = false;
+    }
+
     pub fn spawn(&mut self, parent: Option<u128>) -> Result<u128, SemanticError> {
         let scope_id = Ulid::new().0;
 
@@ -202,6 +269,10 @@ impl ScopeManager {
             self.scope_branches.insert(scope_id, branch);
         } else {
             self.scope_branches.insert(scope_id, vec![scope_id]);
+        }
+
+        if self.transaction_store.is_open {
+            self.transaction_store.created_scopes.insert(scope_id);
         }
 
         self.scope_lookup.insert(scope_id, HashSet::new());
@@ -224,6 +295,9 @@ impl ScopeManager {
                 vars: Vec::default(),
             },
         );
+        if self.transaction_store.is_open {
+            self.transaction_store.created_scopes.insert(scope_id);
+        }
         Ok(scope_id)
     }
 
@@ -305,6 +379,9 @@ impl ScopeManager {
                 state: scope.map_or(VariableState::Global, |_| VariableState::Local),
             },
         );
+        if self.transaction_store.is_open {
+            self.transaction_store.created_vars.insert(var_id);
+        }
         Ok(var_id)
     }
 
@@ -339,6 +416,9 @@ impl ScopeManager {
                 state: VariableState::Parameter,
             },
         );
+        if self.transaction_store.is_open {
+            self.transaction_store.created_vars.insert(var_id);
+        }
         Ok(var_id)
     }
 
@@ -372,6 +452,10 @@ impl ScopeManager {
                 state: VariableState::Function,
             },
         );
+
+        if self.transaction_store.is_open {
+            self.transaction_store.created_vars.insert(var_id);
+        }
         Ok(var_id)
     }
 
@@ -397,6 +481,10 @@ impl ScopeManager {
             def: ctype,
             scope,
         });
+
+        if self.transaction_store.is_open {
+            self.transaction_store.created_types.insert(type_id);
+        }
         Ok(type_id)
     }
 

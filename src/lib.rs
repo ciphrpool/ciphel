@@ -86,22 +86,27 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Ciphel<E, P> {
             .context_of(&tid)
             .map_err(|_| CompilationError::InvalidTID(tid))?;
 
+        scope_manager.open_transaction();
+
         for statement in statements.iter_mut() {
-            statement
-                .resolve::<E>(scope_manager, None, &None, &mut ())
-                .map_err(|err| CompilationError::SemanticError(statement.line, err))?;
+            if let Err(err) = statement.resolve::<E>(scope_manager, None, &None, &mut ()) {
+                scope_manager.reject_transaction();
+                return Err(CompilationError::SemanticError(statement.line, err));
+            }
         }
 
         for statement in statements {
-            statement
-                .gencode::<E>(
-                    scope_manager,
-                    None,
-                    program,
-                    &crate::vm::CodeGenerationContext::default(),
-                )
-                .map_err(|err| CompilationError::CodeGen(statement.line, err))?;
+            if let Err(err) = statement.gencode::<E>(
+                scope_manager,
+                None,
+                program,
+                &crate::vm::CodeGenerationContext::default(),
+            ) {
+                scope_manager.reject_transaction();
+                return Err(CompilationError::CodeGen(statement.line, err));
+            }
         }
+        scope_manager.accept_transaction();
         Ok(())
     }
 
