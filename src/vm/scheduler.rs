@@ -59,9 +59,10 @@ pub trait Executable<E: crate::vm::external::Engine> {
 
 pub trait SchedulingPolicy: Default {
     fn weight_to_energy(&self, weight: Weight) -> usize;
+    fn weight_of(&self, weight: Weight) -> usize;
 
-    fn accept<E: crate::vm::external::Engine>(&self, energy: usize, engine: &E) -> bool;
-    fn defer<E: crate::vm::external::Engine>(&mut self, energy: usize, pid: E::PID, engine: &mut E);
+    fn accept<E: crate::vm::external::Engine>(&self, weight: usize, energy: usize, pid: E::PID,  engine: &E) -> bool;
+    fn defer<E: crate::vm::external::Engine>(&mut self,weight: usize, energy: usize, pid: E::PID, engine: &mut E) -> Result<(), RuntimeError> ;
 
     fn init_maf<E: crate::vm::external::Engine>(
         &mut self,
@@ -349,9 +350,10 @@ impl<P: SchedulingPolicy> Scheduler<P> {
         };
 
         let weight = instruction.weight();
+        let acceptance_weight = self.policy.weight_of(weight);
         let energy = self.policy.weight_to_energy(weight);
-        if self.policy.accept::<E>(energy, engine) {
-            self.policy.defer(energy, pid.clone(), engine);
+        if self.policy.accept::<E>(acceptance_weight,energy, pid.clone(), engine) {
+            let _ = self.policy.defer(acceptance_weight,energy, pid.clone(), engine)?;
 
             instruction.name(stdio, program, engine);
             self.return_signal = false;
@@ -423,16 +425,18 @@ impl SchedulingPolicy for ToCompletion {
         1
     }
 
-    fn accept<E: crate::vm::external::Engine>(&self, energy: usize, engine: &E) -> bool {
+    fn accept<E: crate::vm::external::Engine>(&self, weight: usize, energy: usize, pid: E::PID,  engine: &E) -> bool {
         true
     }
 
     fn defer<E: crate::vm::external::Engine>(
         &mut self,
+        weight: usize,
         energy: usize,
         pid: E::PID,
         engine: &mut E,
-    ) {
+    )  -> Result<(), RuntimeError> {
+        Ok(())
     }
 
     fn init_watchdog(&mut self) {}
@@ -456,6 +460,10 @@ impl SchedulingPolicy for ToCompletion {
         tid: &E::TID,
         state: &super::runtime::ThreadState<E::PID, E::TID>,
     ) {
+    }
+    
+    fn weight_of(&self, weight: Weight) -> usize {
+        1
     }
 }
 
@@ -493,18 +501,31 @@ impl SchedulingPolicy for QueuePolicy {
             }
         }
     }
-
-    fn accept<E: crate::vm::external::Engine>(&self, energy: usize, engine: &E) -> bool {
+    fn weight_of(&self, weight: Weight) -> usize {
+        match weight {
+            Weight::ZERO => 0,
+            Weight::MAX => Self::MAX_BALANCE,
+            Weight::CUSTOM(w) => w,
+            Weight::LOW => 1,
+            Weight::MEDIUM => 2,
+            Weight::HIGH => 4,
+            Weight::EXTREME => 8,
+            Weight::END => 16
+        }
+    }
+    fn accept<E: crate::vm::external::Engine>(&self, weight: usize, energy: usize, pid: E::PID, engine: &E) -> bool {
         self.balance.checked_sub(energy).is_some()
     }
 
     fn defer<E: crate::vm::external::Engine>(
         &mut self,
+        weight: usize,
         energy: usize,
         pid: E::PID,
         engine: &mut E,
-    ) {
-        self.balance = self.balance.checked_sub(energy).unwrap_or(0);
+    )  -> Result<(), RuntimeError> {
+        self.balance = self.balance.checked_sub(weight).unwrap_or(0);
+        Ok(())
     }
 
     fn init_watchdog(&mut self) {}
