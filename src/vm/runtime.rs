@@ -237,10 +237,9 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         Ok(())
     }
 
-    pub fn close(&mut self, tid: E::TID) -> Result<(), RuntimeError> {
+    pub fn close(&mut self, tid: E::TID) {
         self.contexts.remove(&tid);
         self.threads.remove(&tid);
-        Ok(())
     }
 
     pub fn put_to_sleep_for(&mut self, tid: E::TID, time: usize) -> Result<(), RuntimeError> {

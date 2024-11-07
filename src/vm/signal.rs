@@ -216,10 +216,10 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
                     let _ = runtime.spawn_with_id(tid.clone())?;
                 }
                 SignalAction::Exit(tid) => {
-                    let _ = runtime.close(tid.clone())?;
+                    runtime.close(tid.clone());
                 }
                 SignalAction::Close(tid) => {
-                    let _ = runtime.close(tid.clone())?;
+                    runtime.close(tid.clone());
                 }
                 SignalAction::Sleep { tid, time, .. } => {
                     let _ = runtime.put_to_sleep_for(tid.clone(), *time)?;
