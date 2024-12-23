@@ -19,8 +19,8 @@ impl Label {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Label {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
-        stdio.push_asm_label(engine, &self.name);
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
+        stdio.push_asm_label(engine, pid,  &self.name);
     }
 }
 impl crate::vm::AsmWeight for Label {
@@ -55,17 +55,17 @@ pub enum Call {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Call {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
             Call::From { label, param_size } => {
                 let label = program
                     .get_label_name(label)
                     .unwrap_or("".to_string().into())
                     .to_string();
-                stdio.push_asm(engine, &format!("call {label} {param_size}"));
+                stdio.push_asm(engine, pid, &format!("call {label} {param_size}"));
             }
-            Call::Function { param_size } => stdio.push_asm(engine, "call"),
-            Call::Closure { param_size } => stdio.push_asm(engine, "call"),
+            Call::Function { param_size } => stdio.push_asm(engine, pid, "call"),
+            Call::Closure { param_size } => stdio.push_asm(engine, pid, "call"),
         }
     }
 }
@@ -119,16 +119,16 @@ pub struct Goto {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Goto {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self.label {
             Some(label) => {
                 let label = program
                     .get_label_name(&label)
                     .unwrap_or("".to_string().into())
                     .to_string();
-                stdio.push_asm(engine, &format!("goto {label}"));
+                stdio.push_asm(engine, pid, &format!("goto {label}"));
             }
-            None => stdio.push_asm(engine, "goto"),
+            None => stdio.push_asm(engine, pid, "goto"),
         }
     }
 }
@@ -172,12 +172,12 @@ pub struct BranchIf {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for BranchIf {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         let label = program
             .get_label_name(&self.else_label)
             .unwrap_or("".to_string().into())
             .to_string();
-        stdio.push_asm(engine, &format!("else_goto {label}"));
+        stdio.push_asm(engine, pid, &format!("else_goto {label}"));
     }
 }
 
@@ -220,16 +220,16 @@ pub enum BranchTry {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for BranchTry {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
             BranchTry::StartTry { else_label } => {
                 let label = program
                     .get_label_name(&else_label)
                     .unwrap_or("".to_string().into())
                     .to_string();
-                stdio.push_asm(engine, &format!("try_else {label}"));
+                stdio.push_asm(engine, pid, &format!("try_else {label}"));
             }
-            BranchTry::EndTry => stdio.push_asm(engine, &format!("try_end")),
+            BranchTry::EndTry => stdio.push_asm(engine, pid, &format!("try_end")),
         }
     }
 }
@@ -269,8 +269,8 @@ pub struct Return {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Return {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
-        stdio.push_asm(engine, &format!("return {0}", self.size))
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
+        stdio.push_asm(engine, pid, &format!("return {0}", self.size))
     }
 }
 impl crate::vm::AsmWeight for Return {
@@ -283,8 +283,8 @@ impl crate::vm::AsmWeight for Return {
 pub struct CloseFrame;
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for CloseFrame {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
-        stdio.push_asm(engine, "return")
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
+        stdio.push_asm(engine, pid, "return")
     }
 }
 impl crate::vm::AsmWeight for CloseFrame {

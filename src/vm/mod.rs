@@ -67,7 +67,7 @@ pub enum Weight {
 }
 
 pub trait AsmName<E: crate::vm::external::Engine> {
-    fn name(&self, stdio: &mut stdio::StdIO, program: &program::Program<E>, engine: &mut E);
+    fn name(&self, stdio: &mut stdio::StdIO, program: &program::Program<E>, engine: &mut E, pid : E::PID);
 }
 
 pub trait AsmWeight {

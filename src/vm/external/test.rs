@@ -66,7 +66,7 @@ impl<E: Engine> AsmName<E> for DefaultExternFunctionNoopEngine {
         &self,
         stdio: &mut crate::vm::stdio::StdIO,
         program: &crate::vm::program::Program<E>,
-        engine: &mut E,
+        engine: &mut E, pid : E::PID
     ) {
         unimplemented!()
     }
@@ -110,25 +110,25 @@ impl ExternFunction<NoopEngine> for DefaultExternFunctionNoopEngine {}
 #[derive(Debug, Clone)]
 pub struct NoopEngine {}
 
-impl ExternIO for NoopEngine {
-    fn stdout_print(&mut self, content: String) {}
-    fn stdout_println(&mut self, content: String) {}
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID,TID> for NoopEngine {
+    fn stdout_print(&mut self, pid: PID, content: String) {}
+    fn stdout_println(&mut self, pid: PID, content: String) {}
 
-    fn stderr_print(&mut self, content: String) {}
+    fn stderr_print(&mut self, pid: PID, content: String) {}
 
-    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stdin_scan(
         &mut self,
         tid: TID,
     ) -> Option<String> {
         None
     }
-    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stdin_request(
         &mut self,
         tid: TID,
     ) {
     }
 
-    fn stdasm_print(&mut self, content: String) {}
+    fn stdasm_print(&mut self, pid: PID, content: String) {}
 }
 
 impl Engine for NoopEngine {
@@ -186,7 +186,7 @@ impl<E: Engine> AsmName<E> for DefaultExternFunctionStdoutTestEngine {
         &self,
         stdio: &mut crate::vm::stdio::StdIO,
         program: &crate::vm::program::Program<E>,
-        engine: &mut E,
+        engine: &mut E, pid : E::PID
     ) {
         unimplemented!()
     }
@@ -231,32 +231,31 @@ impl ExternFunction<StdoutTestEngine> for DefaultExternFunctionStdoutTestEngine 
 pub struct StdoutTestEngine {
     pub out: String,
 }
-
-impl ExternIO for StdoutTestEngine {
-    fn stdout_print(&mut self, content: String) {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID,TID> for StdoutTestEngine {
+    fn stdout_print(&mut self, pid: PID, content: String) {
         self.out = content;
     }
-    fn stdout_println(&mut self, content: String) {
+    fn stdout_println(&mut self, pid: PID, content: String) {
         self.out = format!("{}\n", content);
     }
-    fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stderr_print(&mut self, pid: PID, content: String) {}
+
+    fn stdin_scan(
         &mut self,
         tid: TID,
     ) -> Option<String> {
         None
     }
-    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stdin_request(
         &mut self,
         tid: TID,
     ) {
     }
 
-    fn stdasm_print(&mut self, content: String) {
-        // println!("{}", content);
-    }
+    fn stdasm_print(&mut self, pid: PID, content: String) {}
 }
+
 
 impl Engine for StdoutTestEngine {
     type Function = DefaultExternFunctionStdoutTestEngine;
@@ -313,7 +312,7 @@ impl<E: Engine> AsmName<E> for DefaultExternFunctionStdinTestEngine {
         &self,
         stdio: &mut crate::vm::stdio::StdIO,
         program: &crate::vm::program::Program<E>,
-        engine: &mut E,
+        engine: &mut E, pid : E::PID
     ) {
         unimplemented!()
     }
@@ -360,16 +359,17 @@ pub struct StdinTestEngine {
     pub in_buf: String,
 }
 
-impl ExternIO for StdinTestEngine {
-    fn stdout_print(&mut self, content: String) {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID,TID> for StdinTestEngine {
+    fn stdout_print(&mut self, pid: PID, content: String) {
         self.out = content;
     }
-    fn stdout_println(&mut self, content: String) {
+    fn stdout_println(&mut self, pid: PID, content: String) {
         self.out = format!("{}\n", content);
     }
-    fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stderr_print(&mut self, pid: PID, content: String) {}
+
+    fn stdin_scan(
         &mut self,
         tid: TID,
     ) -> Option<String> {
@@ -379,14 +379,14 @@ impl ExternIO for StdinTestEngine {
             Some(self.in_buf.clone())
         }
     }
-    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stdin_request(
         &mut self,
         tid: TID,
     ) {
     }
 
-    fn stdasm_print(&mut self, content: String) {
-        println!("{}", content);
+    fn stdasm_print(&mut self, pid: PID, content: String) {
+        // println!("{}", content);
     }
 }
 
@@ -440,31 +440,32 @@ impl ExternPathFinder for StdinTestEngine {
 #[derive(Debug, Clone)]
 pub struct DbgEngine {}
 
-impl ExternIO for DbgEngine {
-    fn stdout_print(&mut self, content: String) {
+
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID,TID> for DbgEngine {
+    fn stdout_print(&mut self, pid: PID, content: String) {
         print!("{}", content);
     }
-    fn stdout_println(&mut self, content: String) {
+    fn stdout_println(&mut self, pid: PID, content: String) {
         println!("{}", content);
     }
 
-    fn stderr_print(&mut self, content: String) {
+    fn stderr_print(&mut self, pid: PID, content: String) {
         eprintln!("{}", content);
     }
 
-    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stdin_scan(
         &mut self,
         tid: TID,
     ) -> Option<String> {
         Some("Hello World".to_string())
     }
-    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stdin_request(
         &mut self,
         tid: TID,
     ) {
     }
 
-    fn stdasm_print(&mut self, content: String) {
+    fn stdasm_print(&mut self, pid: PID, content: String) {
         println!("{}", content);
     }
 }
@@ -477,7 +478,7 @@ impl<E: Engine> AsmName<E> for DefaultExternFunctionDbgEngine {
         &self,
         stdio: &mut crate::vm::stdio::StdIO,
         program: &crate::vm::program::Program<E>,
-        engine: &mut E,
+        engine: &mut E, pid : E::PID
     ) {
         unimplemented!()
     }
@@ -573,7 +574,7 @@ impl<E: Engine> AsmName<E> for DefaultExternFunctionThreadTestEngine {
         &self,
         stdio: &mut crate::vm::stdio::StdIO,
         program: &crate::vm::program::Program<E>,
-        engine: &mut E,
+        engine: &mut E, pid : E::PID
     ) {
         unimplemented!()
     }
@@ -619,28 +620,28 @@ pub struct ThreadTestEngine {
     pub id_auto_increment: u64,
 }
 
-impl ExternIO for ThreadTestEngine {
-    fn stdout_print(&mut self, content: String) {}
-    fn stdout_println(&mut self, content: String) {}
 
-    fn stderr_print(&mut self, content: String) {}
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID,TID> for ThreadTestEngine {
+    fn stdout_print(&mut self, pid: PID, content: String) {}
+    fn stdout_println(&mut self, pid: PID, content: String) {}
 
-    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stderr_print(&mut self, pid: PID, content: String) {}
+
+    fn stdin_scan(
         &mut self,
         tid: TID,
     ) -> Option<String> {
         None
     }
-    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stdin_request(
         &mut self,
         tid: TID,
     ) {
     }
 
-    fn stdasm_print(&mut self, content: String) {
-        println!("{}", content);
-    }
+    fn stdasm_print(&mut self, pid: PID, content: String) {}
 }
+
 
 impl Engine for ThreadTestEngine {
     type Function = DefaultExternFunctionThreadTestEngine;
@@ -693,25 +694,26 @@ impl ExternPathFinder for ThreadTestEngine {
 #[derive(Debug, Clone)]
 pub struct ExternFuncTestEngine {}
 
-impl ExternIO for ExternFuncTestEngine {
-    fn stdout_print(&mut self, content: String) {}
-    fn stdout_println(&mut self, content: String) {}
 
-    fn stderr_print(&mut self, content: String) {}
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID,TID> for ExternFuncTestEngine {
+    fn stdout_print(&mut self, pid: PID, content: String) {}
+    fn stdout_println(&mut self, pid: PID, content: String) {}
 
-    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stderr_print(&mut self, pid: PID, content: String) {}
+
+    fn stdin_scan(
         &mut self,
         tid: TID,
     ) -> Option<String> {
         None
     }
-    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stdin_request(
         &mut self,
         tid: TID,
     ) {
     }
 
-    fn stdasm_print(&mut self, content: String) {}
+    fn stdasm_print(&mut self, pid: PID, content: String) {}
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -724,10 +726,10 @@ impl<E: Engine> AsmName<E> for ExternFuncTest {
         &self,
         stdio: &mut crate::vm::stdio::StdIO,
         program: &crate::vm::program::Program<E>,
-        engine: &mut E,
+        engine: &mut E, pid : E::PID
     ) {
         match self {
-            ExternFuncTest::TEST_ADDER => stdio.push_asm_lib(engine, "test_adder"),
+            ExternFuncTest::TEST_ADDER => stdio.push_asm_lib(engine, pid, "test_adder"),
         }
     }
 }
@@ -875,27 +877,26 @@ impl ExternPathFinder for ExternFuncTestEngine {
 #[derive(Debug, Clone)]
 pub struct ExternEventTestEngine {}
 
-impl ExternIO for ExternEventTestEngine {
-    fn stdout_print(&mut self, content: String) {}
-    fn stdout_println(&mut self, content: String) {}
 
-    fn stderr_print(&mut self, content: String) {}
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID,TID> for ExternEventTestEngine {
+    fn stdout_print(&mut self, pid: PID, content: String) {}
+    fn stdout_println(&mut self, pid: PID, content: String) {}
 
-    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stderr_print(&mut self, pid: PID, content: String) {}
+
+    fn stdin_scan(
         &mut self,
         tid: TID,
     ) -> Option<String> {
         None
     }
-    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stdin_request(
         &mut self,
         tid: TID,
     ) {
     }
 
-    fn stdasm_print(&mut self, content: String) {
-        println!("{}", content);
-    }
+    fn stdasm_print(&mut self, pid: PID, content: String) {}
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -911,18 +912,18 @@ impl<E: Engine> AsmName<E> for ExternFuncEventTest {
         &self,
         stdio: &mut crate::vm::stdio::StdIO,
         program: &crate::vm::program::Program<E>,
-        engine: &mut E,
+        engine: &mut E, pid : E::PID
     ) {
         match self {
-            ExternFuncEventTest::TEST_EVENT => stdio.push_extern_lib(engine, "test_event"),
+            ExternFuncEventTest::TEST_EVENT => stdio.push_extern_lib(engine,pid, "test_event"),
             ExternFuncEventTest::TEST_EVENT_WITH_ARG => {
-                stdio.push_extern_lib(engine, "test_event_with_arg")
+                stdio.push_extern_lib(engine, pid,"test_event_with_arg")
             }
             ExternFuncEventTest::TEST_EVENT_WITH_RETURN => {
-                stdio.push_extern_lib(engine, "test_event_with_return")
+                stdio.push_extern_lib(engine, pid, "test_event_with_return")
             }
             ExternFuncEventTest::TEST_EVENT_REPETABLE => {
-                stdio.push_extern_lib(engine, "test_event_repetable")
+                stdio.push_extern_lib(engine, pid, "test_event_repetable")
             }
         }
     }

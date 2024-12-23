@@ -328,7 +328,7 @@ impl<P: SchedulingPolicy> Scheduler<P> {
         }) = current_event
         {
             if self.saved_cursor.is_none() && EventState::Running == *event_state {
-                stdio.push_asm_info(engine, "START EVENT");
+                stdio.push_asm_info(engine, E::PID::default(), "START EVENT");
                 self.in_event = true;
                 let _ = self.saved_cursor.insert(self.cursor.clone());
 
@@ -355,7 +355,7 @@ impl<P: SchedulingPolicy> Scheduler<P> {
         if self.policy.accept::<E>(acceptance_weight,energy, pid.clone(), engine) {
             let _ = self.policy.defer(acceptance_weight,energy, pid.clone(), engine)?;
 
-            instruction.name(stdio, program, engine);
+            instruction.name(stdio, program, engine, pid);
             self.return_signal = false;
             match instruction.execute(
                 program,
@@ -401,7 +401,7 @@ impl<P: SchedulingPolicy> Scheduler<P> {
                     )?;
                     *state = EventState::Completed;
                 }
-                stdio.push_asm_info(engine, "END EVENT");
+                stdio.push_asm_info(engine, E::PID::default(), "END EVENT");
             }
             self.cursor.update(program, state);
 

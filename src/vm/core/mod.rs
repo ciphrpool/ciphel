@@ -231,21 +231,21 @@ impl GenerateCode for Core {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for CoreAsm {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            CoreAsm::Vec(value) => value.name(stdio, program, engine),
-            CoreAsm::Map(value) => value.name(stdio, program, engine),
-            CoreAsm::String(value) => value.name(stdio, program, engine),
-            CoreAsm::Alloc(value) => value.name(stdio, program, engine),
-            CoreAsm::Thread(value) => value.name(stdio, program, engine),
-            CoreAsm::IO(value) => value.name(stdio, program, engine),
-            CoreAsm::Math(value) => value.name(stdio, program, engine),
-            CoreAsm::Format(value) => value.name(stdio, program, engine),
-            CoreAsm::Iter(value) => value.name(stdio, program, engine),
-            CoreAsm::AssertBool => stdio.push_asm_lib(engine, "assert_true"),
-            CoreAsm::AssertErr => stdio.push_asm_lib(engine, "assert_ok"),
-            CoreAsm::Error => stdio.push_asm_lib(engine, "error"),
-            CoreAsm::Ok => stdio.push_asm_lib(engine, "ok"),
+            CoreAsm::Vec(value) => value.name(stdio, program, engine, pid),
+            CoreAsm::Map(value) => value.name(stdio, program, engine, pid),
+            CoreAsm::String(value) => value.name(stdio, program, engine, pid),
+            CoreAsm::Alloc(value) => value.name(stdio, program, engine, pid),
+            CoreAsm::Thread(value) => value.name(stdio, program, engine, pid),
+            CoreAsm::IO(value) => value.name(stdio, program, engine, pid),
+            CoreAsm::Math(value) => value.name(stdio, program, engine, pid),
+            CoreAsm::Format(value) => value.name(stdio, program, engine, pid),
+            CoreAsm::Iter(value) => value.name(stdio, program, engine, pid),
+            CoreAsm::AssertBool => stdio.push_asm_lib(engine, pid, "assert_true"),
+            CoreAsm::AssertErr => stdio.push_asm_lib(engine, pid, "assert_ok"),
+            CoreAsm::Error => stdio.push_asm_lib(engine, pid, "error"),
+            CoreAsm::Ok => stdio.push_asm_lib(engine, pid, "ok"),
         }
     }
 }

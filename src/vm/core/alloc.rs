@@ -47,13 +47,13 @@ pub enum AllocAsm {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for AllocAsm {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            AllocAsm::Len => stdio.push_asm_lib(engine, "len"),
-            AllocAsm::Cap => stdio.push_asm_lib(engine, "cap"),
-            AllocAsm::Free => stdio.push_asm_lib(engine, "free"),
-            AllocAsm::Alloc => stdio.push_asm_lib(engine, "malloc"),
-            AllocAsm::MemCopy => stdio.push_asm_lib(engine, "memcpy"),
+            AllocAsm::Len => stdio.push_asm_lib(engine, pid, "len"),
+            AllocAsm::Cap => stdio.push_asm_lib(engine, pid, "cap"),
+            AllocAsm::Free => stdio.push_asm_lib(engine, pid, "free"),
+            AllocAsm::Alloc => stdio.push_asm_lib(engine, pid, "malloc"),
+            AllocAsm::MemCopy => stdio.push_asm_lib(engine, pid, "memcpy"),
         }
     }
 }

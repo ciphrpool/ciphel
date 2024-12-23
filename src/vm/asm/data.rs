@@ -23,10 +23,10 @@ pub enum Data {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Data {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
             Data::Serialized { data } => {
-                stdio.push_asm(engine, &format!("dmp 0x{}", HexSlice(data.as_ref())))
+                stdio.push_asm(engine, pid, &format!("dmp 0x{}", HexSlice(data.as_ref())))
             }
         }
     }

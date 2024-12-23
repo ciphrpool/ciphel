@@ -38,11 +38,11 @@ pub enum IterAsm {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for IterAsm {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            IterAsm::MapItems { .. } => stdio.push_asm_lib(engine, "items"),
-            IterAsm::MapValues { .. } => stdio.push_asm_lib(engine, "values"),
-            IterAsm::MapKeys { .. } => stdio.push_asm_lib(engine, "keys"),
+            IterAsm::MapItems { .. } => stdio.push_asm_lib(engine, pid, "items"),
+            IterAsm::MapValues { .. } => stdio.push_asm_lib(engine, pid, "values"),
+            IterAsm::MapKeys { .. } => stdio.push_asm_lib(engine, pid, "keys"),
         }
     }
 }

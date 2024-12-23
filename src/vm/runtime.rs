@@ -374,7 +374,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
     ) -> Result<(), RuntimeError> {
-        stdio.push_asm_info(engine, "START MAF");
+        stdio.push_asm_info(engine, E::PID::default(), "START MAF");
 
         let mut signal_handler = SignalHandler::default();
         let snapshot = self.snapshot();
@@ -453,7 +453,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
 
         let _ = signal_handler.commit(self)?;
 
-        stdio.push_asm_info(engine, "END MAF");
+        stdio.push_asm_info(engine, E::PID::default(), "END MAF");
         Ok(())
     }
 }

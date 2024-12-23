@@ -248,30 +248,30 @@ impl<E: crate::vm::external::Engine> Executable<E> for Asm {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Asm {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            Asm::Core(value) => value.name(stdio, program, engine),
-            Asm::Return(value) => value.name(stdio, program, engine),
-            Asm::CloseFrame(value) => value.name(stdio, program, engine),
-            Asm::Alloc(value) => value.name(stdio, program, engine),
-            Asm::Realloc(value) => value.name(stdio, program, engine),
-            Asm::Free(value) => value.name(stdio, program, engine),
-            Asm::Mem(value) => value.name(stdio, program, engine),
-            Asm::Operation(value) => value.name(stdio, program, engine),
-            Asm::Data(value) => value.name(stdio, program, engine),
-            Asm::Access(value) => value.name(stdio, program, engine),
-            // Asm::AccessIdx(value) => value.name(stdio, program, engine),
-            Asm::Offset(value) => value.name(stdio, program, engine),
-            Asm::OffsetIdx(value) => value.name(stdio, program, engine),
-            Asm::OffsetSP(value) => value.name(stdio, program, engine),
-            Asm::Locate(value) => value.name(stdio, program, engine),
-            Asm::If(value) => value.name(stdio, program, engine),
-            Asm::Label(value) => value.name(stdio, program, engine),
-            Asm::Call(value) => value.name(stdio, program, engine),
-            Asm::Goto(value) => value.name(stdio, program, engine),
-            // Asm::Switch(value) => value.name(stdio, program, engine),
-            Asm::Try(value) => value.name(stdio, program, engine),
-            Asm::Pop(n) => stdio.push_asm(engine, &format!("pop {n}")),
+            Asm::Core(value) => value.name(stdio, program, engine, pid),
+            Asm::Return(value) => value.name(stdio, program, engine, pid),
+            Asm::CloseFrame(value) => value.name(stdio, program, engine, pid),
+            Asm::Alloc(value) => value.name(stdio, program, engine, pid),
+            Asm::Realloc(value) => value.name(stdio, program, engine, pid),
+            Asm::Free(value) => value.name(stdio, program, engine, pid),
+            Asm::Mem(value) => value.name(stdio, program, engine, pid),
+            Asm::Operation(value) => value.name(stdio, program, engine, pid),
+            Asm::Data(value) => value.name(stdio, program, engine, pid),
+            Asm::Access(value) => value.name(stdio, program, engine, pid),
+            // Asm::AccessIdx(value) => value.name(stdio, program, engine, pid),
+            Asm::Offset(value) => value.name(stdio, program, engine, pid),
+            Asm::OffsetIdx(value) => value.name(stdio, program, engine, pid),
+            Asm::OffsetSP(value) => value.name(stdio, program, engine, pid),
+            Asm::Locate(value) => value.name(stdio, program, engine, pid),
+            Asm::If(value) => value.name(stdio, program, engine, pid),
+            Asm::Label(value) => value.name(stdio, program, engine, pid),
+            Asm::Call(value) => value.name(stdio, program, engine, pid),
+            Asm::Goto(value) => value.name(stdio, program, engine, pid),
+            // Asm::Switch(value) => value.name(stdio, program, engine, pid),
+            Asm::Try(value) => value.name(stdio, program, engine, pid),
+            Asm::Pop(n) => stdio.push_asm(engine, pid, &format!("pop {n}")),
         }
     }
 }

@@ -359,15 +359,15 @@ pub enum MapAsm {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for MapAsm {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            MapAsm::Map { .. } => stdio.push_asm_lib(engine, "map"),
-            MapAsm::MapWithCapacity { .. } => stdio.push_asm_lib(engine, "map"),
-            MapAsm::Insert { .. } => stdio.push_asm_lib(engine, "insert"),
-            MapAsm::DelKey { .. } => stdio.push_asm_lib(engine, "del_key"),
-            MapAsm::Get { .. } => stdio.push_asm_lib(engine, "get"),
-            MapAsm::Clear { .. } => stdio.push_asm_lib(engine, "clear_map"),
-            MapAsm::MapFree { .. } => stdio.push_asm_lib(engine, "free_map"),
+            MapAsm::Map { .. } => stdio.push_asm_lib(engine, pid, "map"),
+            MapAsm::MapWithCapacity { .. } => stdio.push_asm_lib(engine, pid, "map"),
+            MapAsm::Insert { .. } => stdio.push_asm_lib(engine, pid, "insert"),
+            MapAsm::DelKey { .. } => stdio.push_asm_lib(engine, pid, "del_key"),
+            MapAsm::Get { .. } => stdio.push_asm_lib(engine, pid, "get"),
+            MapAsm::Clear { .. } => stdio.push_asm_lib(engine, pid, "clear_map"),
+            MapAsm::MapFree { .. } => stdio.push_asm_lib(engine, pid, "free_map"),
         }
     }
 }

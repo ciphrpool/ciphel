@@ -48,15 +48,16 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for ThreadAsm {
         stdio: &mut crate::vm::stdio::StdIO,
         program: &crate::vm::program::Program<E>,
         engine: &mut E,
+        pid : E::PID
     ) {
         match self {
-            ThreadAsm::Spawn => stdio.push_asm_lib(engine, "spawn"),
-            ThreadAsm::Close => stdio.push_asm_lib(engine, "close"),
-            ThreadAsm::Exit => stdio.push_asm_lib(engine, "exit"),
-            ThreadAsm::Wait => stdio.push_asm_lib(engine, "wait"),
-            ThreadAsm::Wake => stdio.push_asm_lib(engine, "wake"),
-            ThreadAsm::Sleep => stdio.push_asm_lib(engine, "sleep"),
-            ThreadAsm::Join => stdio.push_asm_lib(engine, "join"),
+            ThreadAsm::Spawn => stdio.push_asm_lib(engine, pid, "spawn"),
+            ThreadAsm::Close => stdio.push_asm_lib(engine, pid, "close"),
+            ThreadAsm::Exit => stdio.push_asm_lib(engine, pid, "exit"),
+            ThreadAsm::Wait => stdio.push_asm_lib(engine, pid, "wait"),
+            ThreadAsm::Wake => stdio.push_asm_lib(engine, pid, "wake"),
+            ThreadAsm::Sleep => stdio.push_asm_lib(engine, pid, "sleep"),
+            ThreadAsm::Join => stdio.push_asm_lib(engine, pid, "join"),
         }
     }
 }

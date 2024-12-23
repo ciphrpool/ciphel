@@ -16,19 +16,19 @@ pub enum Mem {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Mem {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            Mem::Dup(n) => stdio.push_asm(engine, &format!("dup {n}")),
+            Mem::Dup(n) => stdio.push_asm(engine, pid, &format!("dup {n}")),
             Mem::Label(label) => {
                 let label = program
                     .get_label_name(label)
                     .unwrap_or("".to_string().into())
                     .to_string();
-                stdio.push_asm(engine, &format!("dmp_label {label}"))
+                stdio.push_asm(engine, pid, &format!("dmp_label {label}"))
             }
-            Mem::Take { size } => stdio.push_asm(engine, &format!("take {size}")),
+            Mem::Take { size } => stdio.push_asm(engine, pid, &format!("take {size}")),
             Mem::Store { size, address } => {
-                stdio.push_asm(engine, &format!("store {} {}", address.name(), size))
+                stdio.push_asm(engine, pid, &format!("store {} {}", address.name(), size))
             }
         }
     }

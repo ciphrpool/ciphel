@@ -160,13 +160,13 @@ pub enum StringAsm {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for StringAsm {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            StringAsm::String {} => stdio.push_asm_lib(engine, "string"),
-            StringAsm::Append {} => stdio.push_asm_lib(engine, "append"),
-            StringAsm::CharAtString => stdio.push_asm_lib(engine, "char_at"),
-            StringAsm::CharAtStrslice => stdio.push_asm_lib(engine, "char_at"),
-            StringAsm::ToConstStr => stdio.push_asm_lib(engine, "to_const_str"),
+            StringAsm::String {} => stdio.push_asm_lib(engine, pid, "string"),
+            StringAsm::Append {} => stdio.push_asm_lib(engine, pid, "append"),
+            StringAsm::CharAtString => stdio.push_asm_lib(engine, pid, "char_at"),
+            StringAsm::CharAtStrslice => stdio.push_asm_lib(engine, pid, "char_at"),
+            StringAsm::ToConstStr => stdio.push_asm_lib(engine, pid, "to_const_str"),
         }
     }
 }

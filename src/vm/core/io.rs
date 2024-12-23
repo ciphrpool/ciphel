@@ -42,16 +42,16 @@ pub enum IOAsm {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for IOAsm {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            IOAsm::PrintStr => stdio.push_asm_lib(engine, "print"),
-            IOAsm::PrintString => stdio.push_asm_lib(engine, "print"),
-            IOAsm::PrintlnStr => stdio.push_asm_lib(engine, "println"),
-            IOAsm::PrintlnString => stdio.push_asm_lib(engine, "println"),
-            IOAsm::Flushln => stdio.push_asm_lib(engine, "flushln"),
-            IOAsm::Flush => stdio.push_asm_lib(engine, "flush"),
-            IOAsm::Scan => stdio.push_asm_lib(engine, "scan"),
-            IOAsm::RequestScan => stdio.push_asm_lib(engine, "rscan"),
+            IOAsm::PrintStr => stdio.push_asm_lib(engine, pid, "print"),
+            IOAsm::PrintString => stdio.push_asm_lib(engine, pid, "print"),
+            IOAsm::PrintlnStr => stdio.push_asm_lib(engine, pid, "println"),
+            IOAsm::PrintlnString => stdio.push_asm_lib(engine, pid, "println"),
+            IOAsm::Flushln => stdio.push_asm_lib(engine, pid, "flushln"),
+            IOAsm::Flush => stdio.push_asm_lib(engine, pid, "flush"),
+            IOAsm::Scan => stdio.push_asm_lib(engine, pid, "scan"),
+            IOAsm::RequestScan => stdio.push_asm_lib(engine, pid, "rscan"),
         }
     }
 }
@@ -191,7 +191,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
                 let address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let words = OpPrimitive::get_string_from(address, stack, heap)?;
                 stdio.stdout.push(&words);
-                stdio.stdout.flush(engine);
+                stdio.stdout.flush(engine, context.pid);
 
                 scheduler.next();
                 Ok(())
@@ -200,7 +200,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
                 let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let words = OpPrimitive::get_string_from(address.add(POINTER_SIZE), stack, heap)?;
                 stdio.stdout.push(&words);
-                stdio.stdout.flush(engine);
+                stdio.stdout.flush(engine, context.pid);
 
                 scheduler.next();
                 Ok(())
@@ -209,7 +209,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
                 let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let words = OpPrimitive::get_string_from(address, stack, heap)?;
                 stdio.stdout.push(&words);
-                stdio.stdout.flushln(engine);
+                stdio.stdout.flushln(engine, context.pid);
 
                 scheduler.next();
                 Ok(())
@@ -218,18 +218,18 @@ impl<E: crate::vm::external::Engine> Executable<E> for IOAsm {
                 let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
                 let words = OpPrimitive::get_string_from(address.add(POINTER_SIZE), stack, heap)?;
                 stdio.stdout.push(&words);
-                stdio.stdout.flushln(engine);
+                stdio.stdout.flushln(engine, context.pid);
 
                 scheduler.next();
                 Ok(())
             }
             IOAsm::Flush => {
-                stdio.stdout.flush(engine);
+                stdio.stdout.flush(engine, context.pid);
                 scheduler.next();
                 Ok(())
             }
             IOAsm::Flushln => {
-                stdio.stdout.flushln(engine);
+                stdio.stdout.flushln(engine, context.pid);
                 scheduler.next();
                 Ok(())
             }

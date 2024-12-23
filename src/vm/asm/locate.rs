@@ -15,8 +15,8 @@ pub struct Locate {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Locate {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
-        stdio.push_asm(engine, &format!("addr {}", self.address.name()));
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
+        stdio.push_asm(engine, pid, &format!("addr {}", self.address.name()));
     }
 }
 impl crate::vm::AsmWeight for Locate {}
@@ -47,8 +47,8 @@ pub struct LocateOffsetFromStackPointer {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for LocateOffsetFromStackPointer {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
-        stdio.push_asm(engine, &format!("addr SP[-{}]", self.offset));
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
+        stdio.push_asm(engine, pid, &format!("addr SP[-{}]", self.offset));
     }
 }
 impl crate::vm::AsmWeight for LocateOffsetFromStackPointer {}
@@ -83,8 +83,8 @@ pub struct LocateOffset {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for LocateOffset {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
-        stdio.push_asm(engine, &format!("offset {}", self.offset));
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
+        stdio.push_asm(engine, pid, &format!("offset {}", self.offset));
     }
 }
 impl crate::vm::AsmWeight for LocateOffset {}
@@ -121,13 +121,13 @@ pub struct LocateIndex {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for LocateIndex {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self.base_address {
             Some(addr) => stdio.push_asm(
-                engine,
+                engine, pid,
                 &format!("addr_at_idx {},{}", addr.name(), self.size),
             ),
-            None => stdio.push_asm(engine, &format!("addr_at_idx _,{}", self.size)),
+            None => stdio.push_asm(engine, pid, &format!("addr_at_idx _,{}", self.size)),
         }
     }
 }

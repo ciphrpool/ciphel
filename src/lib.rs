@@ -56,6 +56,18 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Default for Ciphel<E, 
 }
 
 impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Ciphel<E, P> {
+
+    pub fn compile_module(module: &str) -> Result<(), CompilationError<E::PID, E::TID>> {
+        let mut module = parse_module(module.into(), 0)?;
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        match module
+            .resolve::<E>(&mut scope_manager, None, &(), &mut ()) {
+            Ok(_) => {},
+            Err(err) => return Err(CompilationError::SemanticError(0, err)),
+        }
+        Ok(())
+    }
+
     pub fn import(
         &mut self,
         pid: E::PID,

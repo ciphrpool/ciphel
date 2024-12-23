@@ -32,10 +32,10 @@ impl<E: Engine> AsmWeight for Instruction<E> {
 }
 
 impl<E: Engine> AsmName<E> for Instruction<E> {
-    fn name(&self, stdio: &mut super::stdio::StdIO, program: &self::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut super::stdio::StdIO, program: &self::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            Instruction::Extern(value) => value.name(stdio, program, engine),
-            Instruction::Asm(value) => value.name(stdio, program, engine),
+            Instruction::Extern(value) => value.name(stdio, program, engine, pid),
+            Instruction::Asm(value) => value.name(stdio, program, engine, pid),
         }
     }
 }

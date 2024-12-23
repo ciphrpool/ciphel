@@ -234,15 +234,15 @@ pub enum VectorAsm {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for VectorAsm {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            VectorAsm::Vec { item_size } => stdio.push_asm_lib(engine, "vec"),
-            VectorAsm::VecWithCapacity { item_size } => stdio.push_asm_lib(engine, "vec"),
-            VectorAsm::Push { item_size } => stdio.push_asm_lib(engine, "push"),
-            VectorAsm::Pop { item_size } => stdio.push_asm_lib(engine, "pop"),
-            VectorAsm::Extend { item_size, len } => stdio.push_asm_lib(engine, "extend"),
-            VectorAsm::Delete { item_size } => stdio.push_asm_lib(engine, "delete"),
-            VectorAsm::Clear { item_size } => stdio.push_asm_lib(engine, "clear_vec"),
+            VectorAsm::Vec { item_size } => stdio.push_asm_lib(engine, pid, "vec"),
+            VectorAsm::VecWithCapacity { item_size } => stdio.push_asm_lib(engine, pid, "vec"),
+            VectorAsm::Push { item_size } => stdio.push_asm_lib(engine, pid, "push"),
+            VectorAsm::Pop { item_size } => stdio.push_asm_lib(engine, pid, "pop"),
+            VectorAsm::Extend { item_size, len } => stdio.push_asm_lib(engine, pid, "extend"),
+            VectorAsm::Delete { item_size } => stdio.push_asm_lib(engine, pid, "delete"),
+            VectorAsm::Clear { item_size } => stdio.push_asm_lib(engine, pid, "clear_vec"),
         }
     }
 }

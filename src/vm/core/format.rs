@@ -673,47 +673,47 @@ pub mod type_printer {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for FormatAsm {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            FormatAsm::U128TOA => stdio.push_asm_lib(engine, "u128toa"),
-            FormatAsm::ATOU128 => stdio.push_asm_lib(engine, "atou128"),
-            FormatAsm::U64TOA => stdio.push_asm_lib(engine, "u64toa"),
-            FormatAsm::U64TOH => stdio.push_asm_lib(engine, "u64toh"),
-            FormatAsm::ATOU64 => stdio.push_asm_lib(engine, "atou64"),
-            FormatAsm::U32TOA => stdio.push_asm_lib(engine, "u32toa"),
-            FormatAsm::ATOU32 => stdio.push_asm_lib(engine, "atou32"),
-            FormatAsm::U16TOA => stdio.push_asm_lib(engine, "u16toa"),
-            FormatAsm::ATOU16 => stdio.push_asm_lib(engine, "atou16"),
-            FormatAsm::U8TOA => stdio.push_asm_lib(engine, "u8toa"),
-            FormatAsm::ATOU8 => stdio.push_asm_lib(engine, "atou8"),
-            FormatAsm::I128TOA => stdio.push_asm_lib(engine, "i128toa"),
-            FormatAsm::ATOI128 => stdio.push_asm_lib(engine, "atoi128"),
-            FormatAsm::I64TOA => stdio.push_asm_lib(engine, "i64toa"),
-            FormatAsm::ATOI64 => stdio.push_asm_lib(engine, "atoi64"),
-            FormatAsm::I32TOA => stdio.push_asm_lib(engine, "i32toa"),
-            FormatAsm::ATOI32 => stdio.push_asm_lib(engine, "atoi32"),
-            FormatAsm::I16TOA => stdio.push_asm_lib(engine, "i16toa"),
-            FormatAsm::ATOI16 => stdio.push_asm_lib(engine, "atoi16"),
-            FormatAsm::I8TOA => stdio.push_asm_lib(engine, "i8toa"),
-            FormatAsm::ATOI8 => stdio.push_asm_lib(engine, "atoi8"),
-            FormatAsm::FTOA => stdio.push_asm_lib(engine, "ftoa"),
-            FormatAsm::ATOF => stdio.push_asm_lib(engine, "atof"),
-            FormatAsm::BTOA => stdio.push_asm_lib(engine, "btoa"),
-            FormatAsm::ATOB => stdio.push_asm_lib(engine, "atob"),
-            FormatAsm::CTOA => stdio.push_asm_lib(engine, "ctoa"),
-            FormatAsm::ATOC => stdio.push_asm_lib(engine, "atoc"),
-            FormatAsm::STOA => stdio.push_asm_lib(engine, "stoa"),
-            FormatAsm::ETOA => stdio.push_asm_lib(engine, "etoa"),
-            FormatAsm::PrintfStart => stdio.push_asm_lib(engine, "printfstart"),
-            FormatAsm::FormatStart => stdio.push_asm_lib(engine, "formatstart"),
-            FormatAsm::PushStr(_) => stdio.push_asm_lib(engine, "pushstr"),
-            FormatAsm::PushStrBefore(_) => stdio.push_asm_lib(engine, "pushstr_before"),
-            FormatAsm::Push => stdio.push_asm_lib(engine, "push"),
-            FormatAsm::InsertBefore(size) => stdio.push_asm_lib(engine, &format!("insert -{size}")),
-            FormatAsm::Merge(count) => stdio.push_asm_lib(engine, &format!("merge {count}")),
-            FormatAsm::Wrap { left, right } => stdio.push_asm_lib(engine, "wrap"),
-            FormatAsm::PrintfEnd => stdio.push_asm_lib(engine, "printfend"),
-            FormatAsm::FormatEnd => stdio.push_asm_lib(engine, "formatend"),
+            FormatAsm::U128TOA => stdio.push_asm_lib(engine, pid, "u128toa"),
+            FormatAsm::ATOU128 => stdio.push_asm_lib(engine, pid, "atou128"),
+            FormatAsm::U64TOA => stdio.push_asm_lib(engine, pid, "u64toa"),
+            FormatAsm::U64TOH => stdio.push_asm_lib(engine, pid, "u64toh"),
+            FormatAsm::ATOU64 => stdio.push_asm_lib(engine, pid, "atou64"),
+            FormatAsm::U32TOA => stdio.push_asm_lib(engine, pid, "u32toa"),
+            FormatAsm::ATOU32 => stdio.push_asm_lib(engine, pid, "atou32"),
+            FormatAsm::U16TOA => stdio.push_asm_lib(engine, pid, "u16toa"),
+            FormatAsm::ATOU16 => stdio.push_asm_lib(engine, pid, "atou16"),
+            FormatAsm::U8TOA => stdio.push_asm_lib(engine, pid, "u8toa"),
+            FormatAsm::ATOU8 => stdio.push_asm_lib(engine, pid, "atou8"),
+            FormatAsm::I128TOA => stdio.push_asm_lib(engine, pid, "i128toa"),
+            FormatAsm::ATOI128 => stdio.push_asm_lib(engine, pid, "atoi128"),
+            FormatAsm::I64TOA => stdio.push_asm_lib(engine, pid, "i64toa"),
+            FormatAsm::ATOI64 => stdio.push_asm_lib(engine, pid, "atoi64"),
+            FormatAsm::I32TOA => stdio.push_asm_lib(engine, pid, "i32toa"),
+            FormatAsm::ATOI32 => stdio.push_asm_lib(engine, pid, "atoi32"),
+            FormatAsm::I16TOA => stdio.push_asm_lib(engine, pid, "i16toa"),
+            FormatAsm::ATOI16 => stdio.push_asm_lib(engine, pid, "atoi16"),
+            FormatAsm::I8TOA => stdio.push_asm_lib(engine, pid, "i8toa"),
+            FormatAsm::ATOI8 => stdio.push_asm_lib(engine, pid, "atoi8"),
+            FormatAsm::FTOA => stdio.push_asm_lib(engine, pid, "ftoa"),
+            FormatAsm::ATOF => stdio.push_asm_lib(engine, pid, "atof"),
+            FormatAsm::BTOA => stdio.push_asm_lib(engine, pid, "btoa"),
+            FormatAsm::ATOB => stdio.push_asm_lib(engine, pid, "atob"),
+            FormatAsm::CTOA => stdio.push_asm_lib(engine, pid, "ctoa"),
+            FormatAsm::ATOC => stdio.push_asm_lib(engine, pid, "atoc"),
+            FormatAsm::STOA => stdio.push_asm_lib(engine, pid, "stoa"),
+            FormatAsm::ETOA => stdio.push_asm_lib(engine, pid, "etoa"),
+            FormatAsm::PrintfStart => stdio.push_asm_lib(engine, pid, "printfstart"),
+            FormatAsm::FormatStart => stdio.push_asm_lib(engine, pid, "formatstart"),
+            FormatAsm::PushStr(_) => stdio.push_asm_lib(engine, pid, "pushstr"),
+            FormatAsm::PushStrBefore(_) => stdio.push_asm_lib(engine, pid, "pushstr_before"),
+            FormatAsm::Push => stdio.push_asm_lib(engine, pid, "push"),
+            FormatAsm::InsertBefore(size) => stdio.push_asm_lib(engine, pid, &format!("insert -{size}")),
+            FormatAsm::Merge(count) => stdio.push_asm_lib(engine, pid, &format!("merge {count}")),
+            FormatAsm::Wrap { left, right } => stdio.push_asm_lib(engine, pid, "wrap"),
+            FormatAsm::PrintfEnd => stdio.push_asm_lib(engine, pid, "printfend"),
+            FormatAsm::FormatEnd => stdio.push_asm_lib(engine, pid, "formatend"),
         }
     }
 }
@@ -1031,7 +1031,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for FormatAsm {
                 let size = OpPrimitive::pop_num::<u64>(stack)?;
                 let data = stack.pop(size as usize)?.to_vec();
                 stdio.stdout.push(&String::from_utf8_lossy(&data));
-                stdio.stdout.flushln(engine);
+                stdio.stdout.flushln(engine, context.pid);
             }
             FormatAsm::FormatEnd => {
                 let size = OpPrimitive::pop_num::<u64>(stack)?;

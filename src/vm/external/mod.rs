@@ -91,19 +91,19 @@ pub trait ExternFunction<E: Engine>:
 {
 }
 
-pub trait ExternIO {
-    fn stdout_print(&mut self, content: String);
-    fn stdout_println(&mut self, content: String);
-    fn stderr_print(&mut self, content: String);
-    fn stdin_scan<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+pub trait ExternIO<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> {
+    fn stdout_print(&mut self, pid: PID, content: String);
+    fn stdout_println(&mut self, pid: PID, content: String);
+    fn stderr_print(&mut self, pid: PID, content: String);
+    fn stdin_scan(
         &mut self,
         tid: TID,
     ) -> Option<String>;
-    fn stdin_request<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>>(
+    fn stdin_request(
         &mut self,
         tid: TID,
     );
-    fn stdasm_print(&mut self, content: String);
+    fn stdasm_print(&mut self, pid: PID, content: String);
 }
 
 pub trait ExternEnergyDispenser<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> {
@@ -123,7 +123,7 @@ pub trait ExternThreadHandler {
 }
 
 pub trait Engine:
-    ExternIO
+    ExternIO<Self::PID, Self::TID>
     + ExternPathFinder
     + ExternEnergyDispenser<Self::PID, Self::TID>
     + ExternThreadHandler

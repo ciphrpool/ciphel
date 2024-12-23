@@ -53,69 +53,69 @@ impl<E: crate::vm::external::Engine> Executable<E> for Operation {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Operation {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self.kind {
-            OperationKind::Align => stdio.push_asm(engine, "align"),
-            OperationKind::CastCharToUTF8 => stdio.push_asm(engine, "char_to_utf8"),
+            OperationKind::Align => stdio.push_asm(engine, pid, "align"),
+            OperationKind::CastCharToUTF8 => stdio.push_asm(engine, pid, "char_to_utf8"),
             OperationKind::Mult(Mult { left, right }) => {
-                stdio.push_asm(engine, &format!("mult_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("mult_{}_{}", left.name(), right.name()))
             }
             OperationKind::Div(Division { left, right }) => {
-                stdio.push_asm(engine, &format!("div_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("div_{}_{}", left.name(), right.name()))
             }
             OperationKind::Mod(Mod { left, right }) => {
-                stdio.push_asm(engine, &format!("mod_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("mod_{}_{}", left.name(), right.name()))
             }
             OperationKind::Addition(Addition { left, right }) => {
-                stdio.push_asm(engine, &format!("add_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("add_{}_{}", left.name(), right.name()))
             }
             OperationKind::Substraction(Substraction { left, right }) => {
-                stdio.push_asm(engine, &format!("sub_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("sub_{}_{}", left.name(), right.name()))
             }
             OperationKind::ShiftLeft(ShiftLeft { left, right }) => {
-                stdio.push_asm(engine, &format!("shl_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("shl_{}_{}", left.name(), right.name()))
             }
             OperationKind::ShiftRight(ShiftRight { left, right }) => {
-                stdio.push_asm(engine, &format!("shr_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("shr_{}_{}", left.name(), right.name()))
             }
             OperationKind::BitwiseAnd(BitwiseAnd { left, right }) => {
-                stdio.push_asm(engine, &format!("band_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("band_{}_{}", left.name(), right.name()))
             }
             OperationKind::BitwiseXOR(BitwiseXOR { left, right }) => {
-                stdio.push_asm(engine, &format!("bxor_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("bxor_{}_{}", left.name(), right.name()))
             }
             OperationKind::BitwiseOR(BitwiseOR { left, right }) => {
-                stdio.push_asm(engine, &format!("bor_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("bor_{}_{}", left.name(), right.name()))
             }
             OperationKind::Cast(Cast { from, to }) => {
-                stdio.push_asm(engine, &format!("cast_{}_{}", from.name(), to.name()))
+                stdio.push_asm(engine, pid, &format!("cast_{}_{}", from.name(), to.name()))
             }
             OperationKind::Less(Less { left, right }) => {
-                stdio.push_asm(engine, &format!("le_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("le_{}_{}", left.name(), right.name()))
             }
             OperationKind::LessEqual(LessEqual { left, right }) => {
-                stdio.push_asm(engine, &format!("leq_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("leq_{}_{}", left.name(), right.name()))
             }
             OperationKind::Greater(Greater { left, right }) => {
-                stdio.push_asm(engine, &format!("ge_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("ge_{}_{}", left.name(), right.name()))
             }
             OperationKind::GreaterEqual(GreaterEqual { left, right }) => {
-                stdio.push_asm(engine, &format!("geq_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("geq_{}_{}", left.name(), right.name()))
             }
             OperationKind::Equal(Equal { left, right }) => {
-                stdio.push_asm(engine, &format!("eq {}B", left))
+                stdio.push_asm(engine, pid, &format!("eq {}B", left))
             }
             OperationKind::NotEqual(NotEqual { left, right }) => {
-                stdio.push_asm(engine, &format!("neq {}B", left))
+                stdio.push_asm(engine, pid, &format!("neq {}B", left))
             }
-            OperationKind::LogicalAnd(LogicalAnd()) => stdio.push_asm(engine, &format!("and")),
-            OperationKind::LogicalOr(LogicalOr()) => stdio.push_asm(engine, &format!("or")),
+            OperationKind::LogicalAnd(LogicalAnd()) => stdio.push_asm(engine, pid, &format!("and")),
+            OperationKind::LogicalOr(LogicalOr()) => stdio.push_asm(engine, pid, &format!("or")),
             OperationKind::Minus(Minus { data_type }) => {
-                stdio.push_asm(engine, &format!("neg_{}", data_type.name()))
+                stdio.push_asm(engine, pid, &format!("neg_{}", data_type.name()))
             }
-            OperationKind::Not(Not()) => stdio.push_asm(engine, "not"),
-            OperationKind::StrEqual(_) => stdio.push_asm(engine, &format!("str_eq")),
-            OperationKind::StrNotEqual(_) => stdio.push_asm(engine, &format!("str_eq")),
+            OperationKind::Not(Not()) => stdio.push_asm(engine, pid, "not"),
+            OperationKind::StrEqual(_) => stdio.push_asm(engine, pid, &format!("str_eq")),
+            OperationKind::StrNotEqual(_) => stdio.push_asm(engine, pid, &format!("str_eq")),
         }
     }
 }
