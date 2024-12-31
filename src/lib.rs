@@ -122,7 +122,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Ciphel<E, P> {
         Ok(())
     }
 
-    pub fn run(&mut self, engine: &mut E) -> Result<(), RuntimeError> {
+    pub fn run(&mut self, engine: &mut E) -> Result<(), (E::PID,RuntimeError)> {
         let _ = self.runtime.run(&mut self.heap, &mut self.stdio, engine)?;
         Ok(())
     }

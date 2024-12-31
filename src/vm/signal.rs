@@ -208,12 +208,12 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
     pub fn commit<P: SchedulingPolicy>(
         &mut self,
         runtime: &mut Runtime<E, P>,
-    ) -> Result<(), RuntimeError> {
+    ) -> Result<(), (E::PID, RuntimeError)> {
         for action in self.action_buffer.iter() {
             // apply action in the runtime
             match action {
                 SignalAction::Spawn(tid) => {
-                    let _ = runtime.spawn_with_id(tid.clone())?;
+                    let _ = runtime.spawn_with_id(tid.clone()).map_err(|e| (tid.pid(),e))?;
                 }
                 SignalAction::Exit(tid) => {
                     runtime.close(tid.clone());
@@ -222,22 +222,22 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
                     runtime.close(tid.clone());
                 }
                 SignalAction::Sleep { tid, time, .. } => {
-                    let _ = runtime.put_to_sleep_for(tid.clone(), *time)?;
+                    let _ = runtime.put_to_sleep_for(tid.clone(), *time).map_err(|e| (tid.pid(),e))?;
                 }
                 SignalAction::Join { caller, target } => {
-                    let _ = runtime.join(caller.clone(), target.clone())?;
+                    let _ = runtime.join(caller.clone(), target.clone()).map_err(|e| (caller.pid(),e))?;
                 }
                 SignalAction::Wait { caller } => {
-                    let _ = runtime.wait(caller.clone())?;
+                    let _ = runtime.wait(caller.clone()).map_err(|e| (caller.pid(),e))?;
                 }
                 SignalAction::Wake { caller, target } => {
-                    let _ = runtime.wake(caller.clone(), target.clone())?;
+                    let _ = runtime.wake(caller.clone(), target.clone()).map_err(|e| (caller.pid(),e))?;
                 }
                 SignalAction::WaitSTDIN(tid) => {
-                    let _ = runtime.wait_stdin(tid.clone())?;
+                    let _ = runtime.wait_stdin(tid.clone()).map_err(|e| (tid.pid(),e))?;
                 }
                 SignalAction::EventTrigger { tid, trigger } => {
-                    let _ = runtime.trigger(tid.clone(), *trigger)?;
+                    let _ = runtime.trigger(tid.clone(), *trigger).map_err(|e| (tid.pid(),e))?;
                 }
                 SignalAction::EventRegistration {
                     tid,
@@ -245,7 +245,7 @@ impl<E: crate::vm::external::Engine> SignalHandler<E> {
                     callback,
                     conf,
                 } => {
-                    let _ = runtime.register_event(tid.clone(), *trigger, *callback, *conf)?;
+                    let _ = runtime.register_event(tid.clone(), *trigger, *callback, *conf).map_err(|e| (tid.pid(),e))?;
                 }
             }
         }
