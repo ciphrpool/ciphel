@@ -560,7 +560,7 @@ pub mod type_printer {
                     }
                     StaticType::Unit => {
                         instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
-                            "unit".as_bytes().into(),
+                            "Unit".as_bytes().into(),
                         ))));
                         instructions.push(Asm::Data(Data::Serialized {
                             data: 0u64.to_le_bytes().into(),
@@ -568,7 +568,7 @@ pub mod type_printer {
                     }
                     StaticType::Any => {
                         instructions.push(Asm::Core(CoreAsm::Format(FormatAsm::PushStr(
-                            "any".as_bytes().into(),
+                            "Any".as_bytes().into(),
                         ))));
                         instructions.push(Asm::Data(Data::Serialized {
                             data: 0u64.to_le_bytes().into(),

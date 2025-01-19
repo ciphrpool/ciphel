@@ -49,7 +49,7 @@ impl PathFinder for VectorFn {
     where
         Self: Sized,
     {
-        if (path.len() == 1 && path[0] == lexem::VEC) || path.len() == 0 {
+        if (path.len() == 1 && path[0] == lexem::VECTOR) || path.len() == 0 {
             return match name {
                 lexem::VEC => Some(VectorFn::Vec {
                     with_capacity: false,

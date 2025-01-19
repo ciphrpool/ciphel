@@ -583,7 +583,7 @@ impl TryParse for Format {
                 preceded(
                     opt(pair(wst_closed(core::lexem::CORE), wst(lexem::SEP))),
                     preceded(
-                        opt(pair(wst_closed(core::lexem::IO), wst(lexem::SEP))),
+                        opt(pair(wst_closed(core::lexem::FORMAT), wst(lexem::SEP))),
                         wst_closed(core::lexem::FORMAT),
                     ),
                 ),

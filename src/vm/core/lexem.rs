@@ -9,6 +9,7 @@ pub const OK: &str = "Ok";
 pub const ASSERT: &str = "assert";
 
 // ALLOC
+pub const MEM: &str = "mem";
 pub const LEN: &str = "len";
 pub const CAP: &str = "cap";
 pub const FREE: &str = "free";
@@ -37,7 +38,7 @@ pub const FREE_MAP: &str = "free_map";
 pub const STRING: &str = "string";
 pub const APPEND: &str = "append";
 pub const CHARAT: &str = "char_at";
-pub const TO_CONST_STR: &str = "to_str";
+pub const TO_CONST_STR: &str = "to_const_str";
 pub const CLEAR_STRING: &str = "clear_string";
 
 // FORMAT
@@ -65,7 +66,6 @@ pub const PRINT: &str = "print";
 pub const PRINTLN: &str = "println";
 pub const PRINTF: &str = "printf";
 pub const SCAN: &str = "scan";
-pub const TOSTR: &str = "to_str";
 
 pub const ITER: &str = "iter";
 pub const ITEMS: &str = "items";

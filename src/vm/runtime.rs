@@ -221,12 +221,29 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
     }
 
     pub fn spawn_with_id(&mut self, tid: E::TID) -> Result<(), RuntimeError> {
-        let scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let program = crate::vm::program::Program::default();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let mut program = crate::vm::program::Program::default();
         let scheduler = Scheduler::default();
         let stack = Stack::default();
         let state = ThreadState::default();
 
+        // re-import all modules
+        if let Some(modules) = self.modules.get_mut(&tid.pid()) {
+            for module in modules.iter_mut() {
+                module
+                    .resolve::<E>(&mut scope_manager, None, &(), &mut ())
+                    .map_err(|err| RuntimeError::Default)?;
+                module
+                    .gencode::<E>(
+                        &mut scope_manager,
+                        None,
+                        &mut program,
+                        &crate::vm::CodeGenerationContext::default(),
+                    )
+                    .map_err(|err| RuntimeError::Default)?;
+                scope_manager.modules.push(module.clone());
+            }
+        }
         self.contexts.insert(
             tid.clone(),
             ThreadContext {
