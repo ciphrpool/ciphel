@@ -358,27 +358,29 @@ impl ScopeManager {
         let count = self
             .vars
             .values()
-            .filter(|v| v.name == name)
+            .filter(|v| (v.name == name) && (v.ctype != ctype))
             .map(|v| v.count)
             .max()
             .unwrap_or(0)
             + 1;
         let var_id = ScopeManager::hash_id(name, count, scope);
         let is_global = self.signal_variable_registation(var_id, ctype.size_of(), scope, false);
-        self.vars.insert(
-            var_id,
-            VariableInfo {
-                id: var_id,
-                name: name.to_string(),
-                count,
-                is_global,
-                marked_as_closed_var: ClosedMarker::Open,
-                ctype,
-                scope,
-                address: VariableAddress::default(),
-                state: scope.map_or(VariableState::Global, |_| VariableState::Local),
-            },
-        );
+        if !self.vars.contains_key(&var_id) {
+            self.vars.insert(
+                var_id,
+                VariableInfo {
+                    id: var_id,
+                    name: name.to_string(),
+                    count,
+                    is_global,
+                    marked_as_closed_var: ClosedMarker::Open,
+                    ctype,
+                    scope,
+                    address: VariableAddress::default(),
+                    state: scope.map_or(VariableState::Global, |_| VariableState::Local),
+                },
+            );
+        }
         if self.transaction_store.is_open {
             self.transaction_store.created_vars.insert(var_id);
         }
@@ -601,6 +603,7 @@ impl ScopeManager {
             ..
         }) = self.vars.get_mut(&id)
         else {
+            dbg!("Here");
             return Err(CodeGenerationError::Unlocatable);
         };
         *marked_as_closed_var = ClosedMarker::Close {

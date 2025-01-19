@@ -43,7 +43,11 @@ impl Module {
         if path[0] != self.name {
             return None;
         }
-        match self.functions.iter().find(|func| &func.name == name) {
+        match self
+            .functions
+            .iter()
+            .find(|func| &func.name == format!("${}", name).as_str())
+        {
             Some(func) => {
                 let Some((id, _, ctype)) = &func.id else {
                     return None;
@@ -150,6 +154,7 @@ impl Resolve for Module {
         }
 
         for func in self.functions.iter_mut() {
+            func.name = format!("${}", func.name);
             let _ = func.desugar::<E>(scope_manager, scope_id)?;
             let _ = func.resolve::<E>(scope_manager, scope_id, context, extra)?;
         }

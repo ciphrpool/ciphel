@@ -393,7 +393,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-    ) -> Result<(), (E::PID,RuntimeError)> {
+    ) -> Result<(), (E::PID, RuntimeError)> {
         stdio.push_asm_info(engine, E::PID::default(), "START MAF");
 
         let mut signal_handler = SignalHandler::default();
@@ -406,7 +406,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
 
         for (tid, Thread { scheduler, stack }) in self.threads.iter_mut() {
             let Some(ThreadContext { program, state, .. }) = self.contexts.get(tid) else {
-                return Err((tid.pid(),RuntimeError::ContextError));
+                return Err((tid.pid(), RuntimeError::ContextError));
             };
             scheduler.policy.init_maf::<E>(tid, state);
         }
@@ -416,7 +416,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
                 ref program, state, ..
             }) = self.contexts.get_mut(tid)
             else {
-                return Err((tid.pid(),RuntimeError::ContextError));
+                return Err((tid.pid(), RuntimeError::ContextError));
             };
             scheduler.cursor.update(program, state);
 
@@ -426,16 +426,18 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
                 pid: tid.pid(),
             };
 
-            self.event_queue.prepare(
-                tid.clone(),
-                state,
-                program,
-                stack,
-                heap,
-                stdio,
-                engine,
-                context,
-            ).map_err(|e| (tid.pid(),e))?;
+            self.event_queue
+                .prepare(
+                    tid.clone(),
+                    state,
+                    program,
+                    stack,
+                    heap,
+                    stdio,
+                    engine,
+                    context,
+                )
+                .map_err(|e| (tid.pid(), e))?;
 
             if ThreadState::RUNNING != *state {
                 continue;
@@ -444,18 +446,21 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
             scheduler.policy.init_watchdog();
 
             loop {
-                match scheduler.run(
-                    tid.clone(),
-                    state,
-                    program,
-                    stack,
-                    heap,
-                    stdio,
-                    engine,
-                    &mut signal_handler,
-                    self.event_queue.current_events.get_mut(tid),
-                    context,
-                ).map_err(|e| (tid.pid(),e))? {
+                match scheduler
+                    .run(
+                        tid.clone(),
+                        state,
+                        program,
+                        stack,
+                        heap,
+                        stdio,
+                        engine,
+                        &mut signal_handler,
+                        self.event_queue.current_events.get_mut(tid),
+                        context,
+                    )
+                    .map_err(|e| (tid.pid(), e))?
+                {
                     std::ops::ControlFlow::Continue(_) => match scheduler.policy.watchdog() {
                         std::ops::ControlFlow::Continue(_) => continue,
                         std::ops::ControlFlow::Break(_) => {

@@ -47,7 +47,13 @@ pub enum AllocAsm {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for AllocAsm {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
+    fn name(
+        &self,
+        stdio: &mut StdIO,
+        program: &crate::vm::program::Program<E>,
+        engine: &mut E,
+        pid: E::PID,
+    ) {
         match self {
             AllocAsm::Len => stdio.push_asm_lib(engine, pid, "len"),
             AllocAsm::Cap => stdio.push_asm_lib(engine, pid, "cap"),
@@ -584,5 +590,4 @@ mod tests {
             assert_fn,
         );
     }
-
 }

@@ -48,7 +48,7 @@ impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for ThreadAsm {
         stdio: &mut crate::vm::stdio::StdIO,
         program: &crate::vm::program::Program<E>,
         engine: &mut E,
-        pid : E::PID
+        pid: E::PID,
     ) {
         match self {
             ThreadAsm::Spawn => stdio.push_asm_lib(engine, pid, "spawn"),
@@ -489,7 +489,6 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
                 Ok(())
             }
             ThreadAsm::Sleep => {
-                // request sleep of an other another thread
                 fn sleep_callback<E: crate::vm::external::Engine>(
                     response: crate::vm::signal::SignalResult<E>,
                     stack: &mut crate::vm::allocator::stack::Stack,
@@ -513,6 +512,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ThreadAsm {
                     sleep_callback::<E>,
                 )?;
                 scheduler.next();
+                scheduler.signal_sleep();
                 Ok(())
             }
             ThreadAsm::Join => {
@@ -809,15 +809,15 @@ mod tests {
             let _ = runtime
                 .run(&mut heap, &mut stdio, &mut engine)
                 .expect("Execution should have succeeded");
-            if ThreadState::SLEEPING(i)
-                != *runtime
+            assert_eq!(
+                ThreadState::SLEEPING(i),
+                *runtime
                     .snapshot()
                     .states
                     .get(&tid_1)
-                    .expect("Thread should exist")
-            {
-                panic!("Thread should have been sleeping {}", i);
-            }
+                    .expect("Thread should exist"),
+                "Thread should have been sleeping"
+            );
         }
         let _ = runtime
             .run(&mut heap, &mut stdio, &mut engine)

@@ -42,7 +42,13 @@ pub enum IOAsm {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for IOAsm {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
+    fn name(
+        &self,
+        stdio: &mut StdIO,
+        program: &crate::vm::program::Program<E>,
+        engine: &mut E,
+        pid: E::PID,
+    ) {
         match self {
             IOAsm::PrintStr => stdio.push_asm_lib(engine, pid, "print"),
             IOAsm::PrintString => stdio.push_asm_lib(engine, pid, "print"),
@@ -539,7 +545,7 @@ mod tests {
             &mut engine,
             nil,
         );
-        assert_eq!(engine.out, "unit = unit\n");
+        assert_eq!(engine.out, "unit = Unit\n");
 
         test_statements(
             r##"

@@ -61,8 +61,20 @@ pub trait SchedulingPolicy: Default {
     fn weight_to_energy(&self, weight: Weight) -> usize;
     fn weight_of(&self, weight: Weight) -> usize;
 
-    fn accept<E: crate::vm::external::Engine>(&self, weight: usize, energy: usize, pid: E::PID,  engine: &E) -> bool;
-    fn defer<E: crate::vm::external::Engine>(&mut self,weight: usize, energy: usize, pid: E::PID, engine: &mut E) -> Result<(), RuntimeError> ;
+    fn accept<E: crate::vm::external::Engine>(
+        &self,
+        weight: usize,
+        energy: usize,
+        pid: E::PID,
+        engine: &E,
+    ) -> bool;
+    fn defer<E: crate::vm::external::Engine>(
+        &mut self,
+        weight: usize,
+        energy: usize,
+        pid: E::PID,
+        engine: &mut E,
+    ) -> Result<(), RuntimeError>;
 
     fn init_maf<E: crate::vm::external::Engine>(
         &mut self,
@@ -106,6 +118,7 @@ impl ProgramCursor {
         state: &mut ThreadState<E::PID, E::TID>,
     ) {
         let cursor = self.get();
+        // dbg!(&state);
         if program.instructions.get(cursor).is_none() {
             *self = ProgramCursor::Idle(cursor);
             *state = ThreadState::IDLE;
@@ -116,6 +129,24 @@ impl ProgramCursor {
             }
         } else if ThreadState::IDLE == *state {
             *state = ThreadState::RUNNING;
+        }
+        // dbg!(&state);
+    }
+
+    pub fn update_sleeping<E: crate::vm::external::Engine>(
+        &mut self,
+        program: &Program<E>,
+        state: &mut ThreadState<E::PID, E::TID>,
+    ) {
+        let cursor = self.get();
+        if program.instructions.get(cursor).is_none() {
+            *self = ProgramCursor::Idle(cursor);
+            // differebce with the update function :
+            // if we are here the thread is sleeping but there no new instructions
+            // however new one can arrive before the end of the sleep
+            // so the state cannot be modified during that time
+        } else if let ProgramCursor::Idle(cursor) = self {
+            *self = ProgramCursor::Running(*cursor);
         }
     }
 }
@@ -248,6 +279,7 @@ pub struct Scheduler<P: SchedulingPolicy> {
     pub policy: P,
     in_event: bool,
     return_signal: bool,
+    sleeping_signal: bool,
 }
 
 impl<P: SchedulingPolicy> Default for Scheduler<P> {
@@ -259,6 +291,7 @@ impl<P: SchedulingPolicy> Default for Scheduler<P> {
             policy: P::default(),
             in_event: false,
             return_signal: false,
+            sleeping_signal: false,
         }
     }
 }
@@ -275,6 +308,9 @@ impl<P: SchedulingPolicy> Scheduler<P> {
             ProgramCursor::Idle(_) => self.cursor = ProgramCursor::Running(to),
             ProgramCursor::Running(_) => self.cursor = ProgramCursor::Running(to),
         }
+    }
+    pub fn signal_sleep(&mut self) {
+        self.sleeping_signal = true;
     }
     pub fn signal_return(&mut self) {
         if self.in_event {
@@ -352,11 +388,17 @@ impl<P: SchedulingPolicy> Scheduler<P> {
         let weight = instruction.weight();
         let acceptance_weight = self.policy.weight_of(weight);
         let energy = self.policy.weight_to_energy(weight);
-        if self.policy.accept::<E>(acceptance_weight,energy, pid.clone(), engine) {
-            let _ = self.policy.defer(acceptance_weight,energy, pid.clone(), engine)?;
+        if self
+            .policy
+            .accept::<E>(acceptance_weight, energy, pid.clone(), engine)
+        {
+            let _ = self
+                .policy
+                .defer(acceptance_weight, energy, pid.clone(), engine)?;
 
             instruction.name(stdio, program, engine, pid);
             self.return_signal = false;
+            self.sleeping_signal = false;
             match instruction.execute(
                 program,
                 self,
@@ -403,9 +445,15 @@ impl<P: SchedulingPolicy> Scheduler<P> {
                 }
                 stdio.push_asm_info(engine, E::PID::default(), "END EVENT");
             }
-            self.cursor.update(program, state);
 
-            Ok(ControlFlow::Continue(()))
+            if self.sleeping_signal {
+                self.cursor.update_sleeping(program, state);
+                self.sleeping_signal = false;
+                Ok(ControlFlow::Break(()))
+            } else {
+                self.cursor.update(program, state);
+                Ok(ControlFlow::Continue(()))
+            }
         } else {
             Ok(ControlFlow::Break(()))
         }
@@ -425,7 +473,13 @@ impl SchedulingPolicy for ToCompletion {
         1
     }
 
-    fn accept<E: crate::vm::external::Engine>(&self, weight: usize, energy: usize, pid: E::PID,  engine: &E) -> bool {
+    fn accept<E: crate::vm::external::Engine>(
+        &self,
+        weight: usize,
+        energy: usize,
+        pid: E::PID,
+        engine: &E,
+    ) -> bool {
         true
     }
 
@@ -435,7 +489,7 @@ impl SchedulingPolicy for ToCompletion {
         energy: usize,
         pid: E::PID,
         engine: &mut E,
-    )  -> Result<(), RuntimeError> {
+    ) -> Result<(), RuntimeError> {
         Ok(())
     }
 
@@ -461,7 +515,7 @@ impl SchedulingPolicy for ToCompletion {
         state: &super::runtime::ThreadState<E::PID, E::TID>,
     ) {
     }
-    
+
     fn weight_of(&self, weight: Weight) -> usize {
         1
     }
@@ -510,10 +564,16 @@ impl SchedulingPolicy for QueuePolicy {
             Weight::MEDIUM => 2,
             Weight::HIGH => 4,
             Weight::EXTREME => 8,
-            Weight::END => 16
+            Weight::END => 16,
         }
     }
-    fn accept<E: crate::vm::external::Engine>(&self, weight: usize, energy: usize, pid: E::PID, engine: &E) -> bool {
+    fn accept<E: crate::vm::external::Engine>(
+        &self,
+        weight: usize,
+        energy: usize,
+        pid: E::PID,
+        engine: &E,
+    ) -> bool {
         self.balance.checked_sub(energy).is_some()
     }
 
@@ -523,7 +583,7 @@ impl SchedulingPolicy for QueuePolicy {
         energy: usize,
         pid: E::PID,
         engine: &mut E,
-    )  -> Result<(), RuntimeError> {
+    ) -> Result<(), RuntimeError> {
         self.balance = self.balance.checked_sub(weight).unwrap_or(0);
         Ok(())
     }
