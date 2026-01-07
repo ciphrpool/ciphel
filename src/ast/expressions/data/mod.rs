@@ -176,7 +176,8 @@ pub struct Union {
 pub struct Enum {
     pub path: Path,
     pub typename: ID,
-    pub value: ID,
+    pub name: ID,
+    pub value: Option<u64>,
     pub metadata: Metadata,
 }
 

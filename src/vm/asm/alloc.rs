@@ -29,15 +29,15 @@ pub enum Alloc {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Alloc {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            Alloc::Heap { size } => stdio.push_asm(engine, &format!("halloc {size}")),
-            Alloc::Stack { size } => stdio.push_asm(engine, &format!("salloc {size}")),
+            Alloc::Heap { size } => stdio.push_asm(engine, pid, &format!("halloc {size}")),
+            Alloc::Stack { size } => stdio.push_asm(engine, pid, &format!("salloc {size}")),
             Alloc::Global { data, .. } => {
-                stdio.push_asm(engine, &format!("galloc 0x{}", HexSlice(data.as_ref())))
+                stdio.push_asm(engine, pid, &format!("galloc 0x{}", HexSlice(data.as_ref())))
             }
             Alloc::GlobalFromStack { address, size } => {
-                stdio.push_asm(engine, &format!("galloc {}", size))
+                stdio.push_asm(engine, pid, &format!("galloc {}", size))
             }
         }
     }
@@ -88,7 +88,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Alloc {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self {
             Alloc::Heap { size } => {
@@ -130,10 +130,10 @@ pub struct Realloc {
     pub size: Option<usize>,
 }
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Realloc {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self.size {
-            Some(n) => stdio.push_asm(engine, &format!("realloc {n}")),
-            None => stdio.push_asm(engine, "realloc"),
+            Some(n) => stdio.push_asm(engine, pid, &format!("realloc {n}")),
+            None => stdio.push_asm(engine, pid, "realloc"),
         }
     }
 }
@@ -156,7 +156,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Realloc {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let size = match self.size {
             Some(size) => size,
@@ -179,8 +179,8 @@ impl<E: crate::vm::external::Engine> Executable<E> for Realloc {
 #[derive(Debug, Clone)]
 pub struct Free();
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Free {
-    fn name(&self, stdio: &mut StdIO, _program: &crate::vm::program::Program<E>, engine: &mut E) {
-        stdio.push_asm(engine, "free");
+    fn name(&self, stdio: &mut StdIO, _program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
+        stdio.push_asm(engine, pid, "free");
     }
 }
 impl crate::vm::AsmWeight for Free {}
@@ -195,7 +195,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Free {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
         heap.free(address)?;
@@ -211,14 +211,14 @@ pub enum Access {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Access {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
             Access::Static { address, size } => {
-                stdio.push_asm(engine, &format!("load {} {size}", address.name()))
+                stdio.push_asm(engine, pid, &format!("load {} {size}", address.name()))
             }
             Access::Runtime { size } => match size {
-                Some(n) => stdio.push_asm(engine, &format!("load {n}")),
-                None => stdio.push_asm(engine, "load"),
+                Some(n) => stdio.push_asm(engine, pid, &format!("load {n}")),
+                None => stdio.push_asm(engine, pid, "load"),
             },
         }
     }
@@ -242,7 +242,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Access {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let (address, size) = match self {
             Access::Static { address, size } => (*address, *size),

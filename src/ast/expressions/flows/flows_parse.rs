@@ -9,7 +9,7 @@ use crate::{
     ast::{
         expressions::{
             data::{Primitive, StrSlice},
-            Expression,
+            CompletePath, Expression,
         },
         statements::block::{BlockCommonApi, ExprBlock},
         types::Type,
@@ -96,20 +96,37 @@ impl TryParse for UnionPattern {
         squash(
             map(
                 pair(
-                    separated_pair(parse_id, wst(lexem::SEP), parse_id),
+                    CompletePath::parse_segment,
                     delimited(
                         wst(lexem::BRA_O),
                         separated_list1(wst(lexem::COMA), parse_id),
                         wst(lexem::BRA_C),
                     ),
                 ),
-                |((typename, variant), vars_names)| UnionPattern {
-                    typename,
-                    variant,
-                    vars_names,
-                    vars_id: None,
-                    variant_value: None,
-                    variant_padding: None,
+                |(CompletePath { mut path, name }, vars_names)| {
+                    let typename = match &mut path {
+                        crate::ast::expressions::Path::Segment(vec) => match vec.pop() {
+                            Some(typename) => {
+                                if vec.len() == 0 {
+                                    path = crate::ast::expressions::Path::Empty;
+                                    typename
+                                } else {
+                                    typename
+                                }
+                            }
+                            None => "".to_string(), // unreachable
+                        },
+                        crate::ast::expressions::Path::Empty => "".to_string(), // unreachable
+                    };
+                    UnionPattern {
+                        path,
+                        variant: name,
+                        typename,
+                        vars_names,
+                        vars_id: None,
+                        variant_value: None,
+                        variant_padding: None,
+                    }
                 },
             ),
             "Expected a valid pattern",
@@ -163,10 +180,9 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
                     wst_closed(lexem::CASE),
                     separated_list1(
                         wst(lexem::BAR),
-                        map(
-                            separated_pair(parse_id, wst(lexem::SEP), parse_id),
-                            |(t, n)| (t, n, None),
-                        ),
+                        map(crate::ast::expressions::data::Enum::parse, |enum_variant| {
+                            (enum_variant, None)
+                        }),
                     ),
                 ),
                 wst(lexem::BIGARROW),

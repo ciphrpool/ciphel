@@ -194,7 +194,7 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         let block_label = Label::gen();
         let mut else_label = Label::gen();
 
-        for (i, (_, _, value)) in self.patterns.iter().enumerate() {
+        for (i, (_, value)) in self.patterns.iter().enumerate() {
             instructions.push_label_by_id(else_label, format!("case_{}", i));
             instructions.push(Asm::Mem(Mem::Dup(POINTER_SIZE)));
 

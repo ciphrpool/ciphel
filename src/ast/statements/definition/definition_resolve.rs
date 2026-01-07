@@ -446,7 +446,7 @@ mod tests {
                 id: "Geo".to_string(),
                 values: {
                     let mut res = Vec::new();
-                    res.push("Point".to_string());
+                    res.push(("Point".to_string(), 0));
                     res
                 },
             }),

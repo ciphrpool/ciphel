@@ -16,33 +16,44 @@ impl Default for StdIO {
 }
 
 impl StdIO {
-    pub fn push_asm_info<E: crate::vm::external::Engine>(&mut self, engine: &mut E, content: &str) {
-        engine.stdasm_print(format!("INFO :: {content}\n"));
+    pub fn push_asm_info<E: crate::vm::external::Engine>(&mut self, engine: &mut E, pid: E::PID, content: &str) {
+        engine.stdasm_print(pid, format!("INFO :: {content}"));
     }
-    pub fn push_asm<E: crate::vm::external::Engine>(&mut self, engine: &mut E, content: &str) {
+    pub fn push_asm<E: crate::vm::external::Engine>(&mut self, engine: &mut E, pid: E::PID, content: &str) {
         // self.asm_out.push('\t');
         // self.asm_out.push_str(content);
         // self.asm_out.push('\n');
-        engine.stdasm_print(format!("\t{content}"));
+        engine.stdasm_print(pid, format!("\t{content}"));
     }
-    pub fn push_asm_lib<E: crate::vm::external::Engine>(&mut self, engine: &mut E, content: &str) {
+    pub fn push_asm_lib<E: crate::vm::external::Engine>(&mut self, engine: &mut E, pid: E::PID, content: &str) {
         // self.asm_out.push_str("\tsyscall ");
         // self.asm_out.push_str(content);
         // self.asm_out.push('\n');
-        engine.stdasm_print(format!("\tsyscall {content}"));
+        engine.stdasm_print(pid, format!("\tsyscall {content}"));
     }
+    pub fn push_extern_lib<E: crate::vm::external::Engine>(
+        &mut self,
+        engine: &mut E, pid: E::PID,
+        content: &str,
+    ) {
+        // self.asm_out.push_str("\tsyscall ");
+        // self.asm_out.push_str(content);
+        // self.asm_out.push('\n');
+        engine.stdasm_print(pid, format!("\textern {content}"));
+    }
+
     pub fn push_asm_label<E: crate::vm::external::Engine>(
         &mut self,
-        engine: &mut E,
+        engine: &mut E, pid: E::PID,
         content: &str,
     ) {
         // self.asm_out.push_str(content);
         // self.asm_out.push_str(" :\n");
-        engine.stdasm_print(format!("{content} :"));
+        engine.stdasm_print(pid, format!("{content} :"));
     }
 
-    pub fn print_stderr<E: crate::vm::external::Engine>(&mut self, engine: &mut E, content: &str) {
-        engine.stderr_print(format!("Error : {content}"));
+    pub fn print_stderr<E: crate::vm::external::Engine>(&mut self, engine: &mut E, pid: E::PID, content: &str) {
+        engine.stderr_print(pid, format!("Error : {content}"));
     }
 }
 
@@ -166,14 +177,14 @@ impl StdOut {
         std::mem::replace(&mut self.data, String::new())
     }
 
-    pub fn flush<E: crate::vm::external::Engine>(&mut self, engine: &mut E) {
+    pub fn flush<E: crate::vm::external::Engine>(&mut self, engine: &mut E, pid : E::PID) {
         let content = self.take();
-        engine.stdout_print(content.into());
+        engine.stdout_print(pid, content.into());
     }
 
-    pub fn flushln<E: crate::vm::external::Engine>(&mut self, engine: &mut E) {
+    pub fn flushln<E: crate::vm::external::Engine>(&mut self, engine: &mut E, pid : E::PID) {
         let content = self.take();
-        engine.stdout_println(content.into());
+        engine.stdout_println(pid, content.into());
     }
 }
 

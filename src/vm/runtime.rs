@@ -1,17 +1,29 @@
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, VecDeque},
+    marker::PhantomData,
+};
 
 use thiserror::Error;
-
-use crate::{semantic::scope::scope::ScopeManager, vm::signal::SignalHandler};
 
 use super::{
     allocator::{
         heap::HeapError,
         stack::{Stack, StackError},
+        MemoryAddress,
     },
-    external::ExternThreadIdentifier,
+    external::{ExternProcessIdentifier, ExternThreadIdentifier},
     program::Program,
-    scheduler::{Scheduler, SchedulingPolicy},
+    scheduler::{
+        Event, EventCallback, EventConf, EventExclusivity, EventKind, EventQueue, EventState,
+        Scheduler, SchedulingPolicy,
+    },
+    GenerateCode,
+};
+use crate::vm::external::ExternEventManager;
+use crate::{
+    ast::modules::Module,
+    semantic::{scope::scope::ScopeManager, Resolve},
+    vm::signal::SignalHandler,
 };
 
 #[derive(Debug, Clone, Error)]
@@ -45,6 +57,9 @@ pub enum RuntimeError {
     #[error("NotEnoughEnergy")]
     NotEnoughEnergy,
 
+    #[error("Context Error")]
+    ContextError,
+
     #[error("Default")]
     Default,
 }
@@ -52,7 +67,7 @@ pub enum RuntimeError {
 pub struct ThreadContext<E: crate::vm::external::Engine> {
     pub scope_manager: ScopeManager,
     pub program: Program<E>,
-    pub state: ThreadState<E::TID>,
+    pub state: ThreadState<E::PID, E::TID>,
 }
 
 pub struct Thread<P: SchedulingPolicy> {
@@ -61,26 +76,31 @@ pub struct Thread<P: SchedulingPolicy> {
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub enum ThreadState<TID: ExternThreadIdentifier> {
+pub enum ThreadState<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> {
     IDLE,
     RUNNING,
     SLEEPING(usize),
-    JOINING { target: TID },
+    JOINING {
+        target: TID,
+        _phantom: PhantomData<PID>,
+    },
     WAITING,
     WAITING_STDIN,
 }
 
-impl<TID: ExternThreadIdentifier> Default for ThreadState<TID> {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> Default
+    for ThreadState<PID, TID>
+{
     fn default() -> Self {
         Self::RUNNING
     }
 }
 
-impl<TID: ExternThreadIdentifier> ThreadState<TID> {
-    pub fn init_maf<E: crate::vm::external::Engine<TID = TID>>(
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ThreadState<PID, TID> {
+    pub fn init_maf<E: crate::vm::external::Engine<TID = TID, PID = PID>>(
         &mut self,
         tid: E::TID,
-        snapshot: &RuntimeSnapshot<E::TID>,
+        snapshot: &RuntimeSnapshot<E::PID, E::TID>,
         stdio: &mut super::stdio::StdIO,
         engine: &mut E,
     ) {
@@ -92,7 +112,7 @@ impl<TID: ExternThreadIdentifier> ThreadState<TID> {
                 Some(time) => *self = ThreadState::SLEEPING(time),
                 None => *self = ThreadState::IDLE, // should never happens
             },
-            ThreadState::JOINING { ref target } => {
+            ThreadState::JOINING { ref target, .. } => {
                 //if let Some(ThreadState::)
                 match snapshot.states.get(target) {
                     Some(ThreadState::IDLE) | None => {
@@ -113,11 +133,13 @@ impl<TID: ExternThreadIdentifier> ThreadState<TID> {
 }
 
 #[derive(Debug)]
-pub struct RuntimeSnapshot<TID: ExternThreadIdentifier> {
-    pub states: HashMap<TID, ThreadState<TID>>,
+pub struct RuntimeSnapshot<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> {
+    pub states: HashMap<TID, ThreadState<PID, TID>>,
 }
 
-impl<TID: ExternThreadIdentifier> Default for RuntimeSnapshot<TID> {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> Default
+    for RuntimeSnapshot<PID, TID>
+{
     fn default() -> Self {
         Self {
             states: HashMap::default(),
@@ -126,21 +148,25 @@ impl<TID: ExternThreadIdentifier> Default for RuntimeSnapshot<TID> {
 }
 
 pub struct Runtime<E: crate::vm::external::Engine, P: SchedulingPolicy> {
+    pub modules: HashMap<E::PID, Vec<Module>>,
     contexts: HashMap<E::TID, ThreadContext<E>>,
     threads: HashMap<E::TID, Thread<P>>,
+    pub(crate) event_queue: EventQueue<E>,
 }
 
 impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Default for Runtime<E, P> {
     fn default() -> Self {
         Self {
+            modules: HashMap::default(),
             contexts: HashMap::default(),
             threads: HashMap::default(),
+            event_queue: EventQueue::<E>::default(),
         }
     }
 }
 
 impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
-    pub fn snapshot(&self) -> RuntimeSnapshot<E::TID> {
+    pub fn snapshot(&self) -> RuntimeSnapshot<E::PID, E::TID> {
         let mut states = HashMap::with_capacity(self.contexts.len());
         for (tid, ThreadContext { state, .. }) in self.contexts.iter() {
             states.insert(tid.clone(), state.clone());
@@ -154,13 +180,33 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         }
     }
 
-    pub fn spawn(&mut self, engine: &mut E) -> Result<E::TID, RuntimeError> {
-        let scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let program = crate::vm::program::Program::default();
+    pub fn spawn(&mut self, pid: E::PID, engine: &mut E) -> Result<E::TID, RuntimeError> {
+        let tid = engine.spawn(&pid)?;
+
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let mut program = crate::vm::program::Program::default();
+
+        // re-import all modules
+        if let Some(modules) = self.modules.get_mut(&pid) {
+            for module in modules.iter_mut() {
+                module
+                    .resolve::<E>(&mut scope_manager, None, &(), &mut ())
+                    .map_err(|err| RuntimeError::Default)?;
+                module
+                    .gencode::<E>(
+                        &mut scope_manager,
+                        None,
+                        &mut program,
+                        &crate::vm::CodeGenerationContext::default(),
+                    )
+                    .map_err(|err| RuntimeError::Default)?;
+                scope_manager.modules.push(module.clone());
+            }
+        }
+
         let scheduler = Scheduler::default();
         let stack = Stack::default();
 
-        let tid = engine.spawn()?;
         self.contexts.insert(
             tid.clone(),
             ThreadContext {
@@ -175,12 +221,29 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
     }
 
     pub fn spawn_with_id(&mut self, tid: E::TID) -> Result<(), RuntimeError> {
-        let scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let program = crate::vm::program::Program::default();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let mut program = crate::vm::program::Program::default();
         let scheduler = Scheduler::default();
         let stack = Stack::default();
         let state = ThreadState::default();
 
+        // re-import all modules
+        if let Some(modules) = self.modules.get_mut(&tid.pid()) {
+            for module in modules.iter_mut() {
+                module
+                    .resolve::<E>(&mut scope_manager, None, &(), &mut ())
+                    .map_err(|err| RuntimeError::Default)?;
+                module
+                    .gencode::<E>(
+                        &mut scope_manager,
+                        None,
+                        &mut program,
+                        &crate::vm::CodeGenerationContext::default(),
+                    )
+                    .map_err(|err| RuntimeError::Default)?;
+                scope_manager.modules.push(module.clone());
+            }
+        }
         self.contexts.insert(
             tid.clone(),
             ThreadContext {
@@ -194,10 +257,9 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         Ok(())
     }
 
-    pub fn close(&mut self, tid: E::TID) -> Result<(), RuntimeError> {
+    pub fn close(&mut self, tid: E::TID) {
         self.contexts.remove(&tid);
         self.threads.remove(&tid);
-        Ok(())
     }
 
     pub fn put_to_sleep_for(&mut self, tid: E::TID, time: usize) -> Result<(), RuntimeError> {
@@ -212,7 +274,10 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         let Some(ThreadContext { state, .. }) = self.contexts.get_mut(&caller) else {
             return Err(RuntimeError::Default);
         };
-        *state = ThreadState::JOINING { target };
+        *state = ThreadState::JOINING {
+            target,
+            _phantom: PhantomData::default(),
+        };
         Ok(())
     }
 
@@ -242,6 +307,73 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         Ok(())
     }
 
+    pub fn trigger(&mut self, caller: E::TID, signal: u64) -> Result<(), RuntimeError> {
+        let caller_pid = caller.pid();
+        let mut triggered = Vec::new();
+
+        for (e_tid, events) in self.event_queue.events.iter_mut() {
+            let mut i = 0;
+            while i < events.len() {
+                let should_trigger = {
+                    let event = &events[i];
+                    ((EventExclusivity::PerPID == event.conf.exclu && caller_pid == event.pid)
+                        || (EventExclusivity::PerTID == event.conf.exclu && event.tid != caller))
+                        && (event.callback.manager.event_trigger(signal, event.trigger))
+                        && (EventState::IDLE == event.state)
+                };
+
+                if should_trigger {
+                    if !self.threads.contains_key(&events[i].tid) {
+                        return Err(RuntimeError::Default);
+                    }
+                    let event = events.swap_remove(i);
+                    triggered.push((e_tid.clone(), event));
+                } else {
+                    i += 1;
+                }
+            }
+        }
+
+        // Move triggered events
+        for (tid, mut event) in triggered {
+            if self.event_queue.current_events.contains_key(&tid) {
+                event.state = EventState::Triggered;
+                self.event_queue
+                    .running_events
+                    .entry(tid)
+                    .or_insert_with(VecDeque::new)
+                    .push_back(event);
+            } else {
+                event.state = EventState::Running;
+                self.event_queue.current_events.insert(tid, event);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn register_event(
+        &mut self,
+        caller: E::TID,
+        trigger: u64,
+        callback: super::scheduler::EventCallback<E::FunctionContext, E::PID, E::TID, E::Function>,
+        conf: EventConf,
+    ) -> Result<(), RuntimeError> {
+        self.event_queue
+            .events
+            .entry(caller)
+            .or_insert_with(Vec::new)
+            .push(Event {
+                pid: caller.pid(),
+                tid: caller,
+                trigger,
+                callback,
+                conf,
+                state: EventState::default(),
+            });
+        Ok(())
+    }
+
     pub fn context_of(&mut self, tid: &E::TID) -> Result<&mut ThreadContext<E>, RuntimeError> {
         self.contexts.get_mut(tid).ok_or(RuntimeError::Default)
     }
@@ -261,9 +393,12 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-    ) -> Result<(), RuntimeError> {
+    ) -> Result<(), (E::PID, RuntimeError)> {
+        stdio.push_asm_info(engine, E::PID::default(), "START MAF");
+
         let mut signal_handler = SignalHandler::default();
         let snapshot = self.snapshot();
+
         for (tid, ThreadContext { state, .. }) in self.contexts.iter_mut() {
             state.init_maf(tid.clone(), &snapshot, stdio, engine);
         }
@@ -271,7 +406,7 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
 
         for (tid, Thread { scheduler, stack }) in self.threads.iter_mut() {
             let Some(ThreadContext { program, state, .. }) = self.contexts.get(tid) else {
-                return Err(RuntimeError::Default);
+                return Err((tid.pid(), RuntimeError::ContextError));
             };
             scheduler.policy.init_maf::<E>(tid, state);
         }
@@ -281,9 +416,28 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
                 ref program, state, ..
             }) = self.contexts.get_mut(tid)
             else {
-                return Err(RuntimeError::Default);
+                return Err((tid.pid(), RuntimeError::ContextError));
             };
             scheduler.cursor.update(program, state);
+
+            let context = &crate::vm::scheduler::ExecutionContext {
+                external: E::FunctionContext::default(),
+                tid: tid.clone(),
+                pid: tid.pid(),
+            };
+
+            self.event_queue
+                .prepare(
+                    tid.clone(),
+                    state,
+                    program,
+                    stack,
+                    heap,
+                    stdio,
+                    engine,
+                    context,
+                )
+                .map_err(|e| (tid.pid(), e))?;
 
             if ThreadState::RUNNING != *state {
                 continue;
@@ -292,16 +446,21 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
             scheduler.policy.init_watchdog();
 
             loop {
-                match scheduler.run(
-                    tid.clone(),
-                    state,
-                    program,
-                    stack,
-                    heap,
-                    stdio,
-                    engine,
-                    &mut signal_handler,
-                )? {
+                match scheduler
+                    .run(
+                        tid.clone(),
+                        state,
+                        program,
+                        stack,
+                        heap,
+                        stdio,
+                        engine,
+                        &mut signal_handler,
+                        self.event_queue.current_events.get_mut(tid),
+                        context,
+                    )
+                    .map_err(|e| (tid.pid(), e))?
+                {
                     std::ops::ControlFlow::Continue(_) => match scheduler.policy.watchdog() {
                         std::ops::ControlFlow::Continue(_) => continue,
                         std::ops::ControlFlow::Break(_) => {
@@ -318,6 +477,8 @@ impl<E: crate::vm::external::Engine, P: SchedulingPolicy> Runtime<E, P> {
         }
 
         let _ = signal_handler.commit(self)?;
+
+        stdio.push_asm_info(engine, E::PID::default(), "END MAF");
         Ok(())
     }
 }

@@ -35,7 +35,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Operation {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let _ = self.kind.execute(
             program,
@@ -53,69 +53,69 @@ impl<E: crate::vm::external::Engine> Executable<E> for Operation {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for Operation {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self.kind {
-            OperationKind::Align => stdio.push_asm(engine, "align"),
-            OperationKind::CastCharToUTF8 => stdio.push_asm(engine, "char_to_utf8"),
+            OperationKind::Align => stdio.push_asm(engine, pid, "align"),
+            OperationKind::CastCharToUTF8 => stdio.push_asm(engine, pid, "char_to_utf8"),
             OperationKind::Mult(Mult { left, right }) => {
-                stdio.push_asm(engine, &format!("mult_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("mult_{}_{}", left.name(), right.name()))
             }
             OperationKind::Div(Division { left, right }) => {
-                stdio.push_asm(engine, &format!("div_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("div_{}_{}", left.name(), right.name()))
             }
             OperationKind::Mod(Mod { left, right }) => {
-                stdio.push_asm(engine, &format!("mod_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("mod_{}_{}", left.name(), right.name()))
             }
             OperationKind::Addition(Addition { left, right }) => {
-                stdio.push_asm(engine, &format!("add_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("add_{}_{}", left.name(), right.name()))
             }
             OperationKind::Substraction(Substraction { left, right }) => {
-                stdio.push_asm(engine, &format!("sub_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("sub_{}_{}", left.name(), right.name()))
             }
             OperationKind::ShiftLeft(ShiftLeft { left, right }) => {
-                stdio.push_asm(engine, &format!("shl_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("shl_{}_{}", left.name(), right.name()))
             }
             OperationKind::ShiftRight(ShiftRight { left, right }) => {
-                stdio.push_asm(engine, &format!("shr_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("shr_{}_{}", left.name(), right.name()))
             }
             OperationKind::BitwiseAnd(BitwiseAnd { left, right }) => {
-                stdio.push_asm(engine, &format!("band_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("band_{}_{}", left.name(), right.name()))
             }
             OperationKind::BitwiseXOR(BitwiseXOR { left, right }) => {
-                stdio.push_asm(engine, &format!("bxor_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("bxor_{}_{}", left.name(), right.name()))
             }
             OperationKind::BitwiseOR(BitwiseOR { left, right }) => {
-                stdio.push_asm(engine, &format!("bor_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("bor_{}_{}", left.name(), right.name()))
             }
             OperationKind::Cast(Cast { from, to }) => {
-                stdio.push_asm(engine, &format!("cast_{}_{}", from.name(), to.name()))
+                stdio.push_asm(engine, pid, &format!("cast_{}_{}", from.name(), to.name()))
             }
             OperationKind::Less(Less { left, right }) => {
-                stdio.push_asm(engine, &format!("le_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("le_{}_{}", left.name(), right.name()))
             }
             OperationKind::LessEqual(LessEqual { left, right }) => {
-                stdio.push_asm(engine, &format!("leq_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("leq_{}_{}", left.name(), right.name()))
             }
             OperationKind::Greater(Greater { left, right }) => {
-                stdio.push_asm(engine, &format!("ge_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("ge_{}_{}", left.name(), right.name()))
             }
             OperationKind::GreaterEqual(GreaterEqual { left, right }) => {
-                stdio.push_asm(engine, &format!("geq_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, pid, &format!("geq_{}_{}", left.name(), right.name()))
             }
             OperationKind::Equal(Equal { left, right }) => {
-                stdio.push_asm(engine, &format!("eq {}B", left))
+                stdio.push_asm(engine, pid, &format!("eq {}B", left))
             }
             OperationKind::NotEqual(NotEqual { left, right }) => {
-                stdio.push_asm(engine, &format!("neq {}B", left))
+                stdio.push_asm(engine, pid, &format!("neq {}B", left))
             }
-            OperationKind::LogicalAnd(LogicalAnd()) => stdio.push_asm(engine, &format!("and")),
-            OperationKind::LogicalOr(LogicalOr()) => stdio.push_asm(engine, &format!("or")),
+            OperationKind::LogicalAnd(LogicalAnd()) => stdio.push_asm(engine, pid, &format!("and")),
+            OperationKind::LogicalOr(LogicalOr()) => stdio.push_asm(engine, pid, &format!("or")),
             OperationKind::Minus(Minus { data_type }) => {
-                stdio.push_asm(engine, &format!("neg_{}", data_type.name()))
+                stdio.push_asm(engine, pid, &format!("neg_{}", data_type.name()))
             }
-            OperationKind::Not(Not()) => stdio.push_asm(engine, "not"),
-            OperationKind::StrEqual(_) => stdio.push_asm(engine, &format!("str_eq")),
-            OperationKind::StrNotEqual(_) => stdio.push_asm(engine, &format!("str_eq")),
+            OperationKind::Not(Not()) => stdio.push_asm(engine, pid, "not"),
+            OperationKind::StrEqual(_) => stdio.push_asm(engine, pid, &format!("str_eq")),
+            OperationKind::StrNotEqual(_) => stdio.push_asm(engine, pid, &format!("str_eq")),
         }
     }
 }
@@ -423,7 +423,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for OperationKind {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match self {
             OperationKind::Mult(value) => value.execute(
@@ -698,7 +698,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Mult {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -719,7 +719,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Division {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -740,7 +740,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Mod {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -773,7 +773,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Addition {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -794,7 +794,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Substraction {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -826,7 +826,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ShiftLeft {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -847,7 +847,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for ShiftRight {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -874,7 +874,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for BitwiseAnd {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -901,7 +901,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for BitwiseXOR {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -928,7 +928,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for BitwiseOR {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -970,7 +970,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Less {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -1008,7 +1008,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for LessEqual {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -1046,7 +1046,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Greater {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -1084,7 +1084,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for GreaterEqual {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
@@ -1139,7 +1139,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Equal {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let right_data = stack.pop(self.right)?.to_owned();
 
@@ -1160,7 +1160,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for StrEqual {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let right_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
         let left_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
@@ -1183,7 +1183,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for NotEqual {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let right_data = stack.pop(self.right)?.to_owned();
 
@@ -1204,7 +1204,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for StrNotEqual {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let left_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
         let right_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
@@ -1229,7 +1229,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for LogicalAnd {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let right_data = OpPrimitive::pop_bool(stack)?;
         let left_data = OpPrimitive::pop_bool(stack)?;
@@ -1251,7 +1251,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for LogicalOr {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let right_data = OpPrimitive::pop_bool(stack)?;
         let left_data = OpPrimitive::pop_bool(stack)?;
@@ -1275,7 +1275,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Minus {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match &self.data_type {
             OpPrimitive::Number(number) => match number {
@@ -1344,7 +1344,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Not {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         let data = OpPrimitive::pop_bool(stack)?;
         let data = [(!data) as u8];
@@ -1386,7 +1386,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Cast {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match (self.from, self.to) {
             (OpPrimitive::Number(number), OpPrimitive::Number(to)) => match number {

@@ -32,10 +32,10 @@ impl<E: Engine> AsmWeight for Instruction<E> {
 }
 
 impl<E: Engine> AsmName<E> for Instruction<E> {
-    fn name(&self, stdio: &mut super::stdio::StdIO, program: &self::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut super::stdio::StdIO, program: &self::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            Instruction::Extern(value) => value.name(stdio, program, engine),
-            Instruction::Asm(value) => value.name(stdio, program, engine),
+            Instruction::Extern(value) => value.name(stdio, program, engine, pid),
+            Instruction::Asm(value) => value.name(stdio, program, engine, pid),
         }
     }
 }
@@ -50,7 +50,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for Instruction<E> {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), super::runtime::RuntimeError> {
         match self {
             Instruction::Extern(value) => value.execute(

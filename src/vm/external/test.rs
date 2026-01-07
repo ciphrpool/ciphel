@@ -1,18 +1,26 @@
 use crate::{
+    p_num,
     vm::{
-        asm::operation::PopNum, scheduler::Executable, AsmName, AsmWeight,
+        allocator::MemoryAddress,
+        asm::operation::{GetNumFrom, OpPrimitive, PopNum},
+        scheduler::Executable,
+        AsmName, AsmWeight,
     },
 };
 
 use super::{
-    Engine, ExternEnergyDispenser, ExternExecutionContext, ExternFunction, ExternIO,
-    ExternPathFinder, ExternResolve, ExternThreadHandler, ExternThreadIdentifier,
+    Engine, ExternEnergyDispenser, ExternEventManager, ExternExecutionContext, ExternFunction,
+    ExternIO, ExternPathFinder, ExternProcessIdentifier, ExternResolve, ExternThreadHandler,
+    ExternThreadIdentifier,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct DefaultThreadID(pub u64);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+pub struct DefaultProcessID(pub u64);
+
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub struct DefaultExecutionContext {}
 
 impl Default for DefaultExecutionContext {
@@ -27,36 +35,52 @@ impl Default for DefaultThreadID {
     }
 }
 
-impl ExternThreadIdentifier for DefaultThreadID {
+impl Default for DefaultProcessID {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
+impl ExternProcessIdentifier for DefaultProcessID {}
+
+impl ExternThreadIdentifier<DefaultProcessID> for DefaultThreadID {
     fn to_u64(&self) -> u64 {
         self.0
     }
 
-    fn from_u64(tid: u64) -> Self {
-        Self(tid)
+    fn from_u64(tid: u64) -> Option<Self> {
+        Some(Self(tid))
     }
-    // fn gen<E: ExternThreadHandler>(engine: &mut E) -> Self {
-    //     DefaultThreadID(2)
-    // }
+
+    fn pid(&self) -> DefaultProcessID {
+        DefaultProcessID::default()
+    }
 }
 impl ExternExecutionContext for DefaultExecutionContext {}
 
-pub struct DefaultExternFunction;
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct DefaultExternFunctionNoopEngine;
 
-impl<E: Engine> AsmName<E> for DefaultExternFunction {
+impl<E: Engine> AsmName<E> for DefaultExternFunctionNoopEngine {
     fn name(
         &self,
         stdio: &mut crate::vm::stdio::StdIO,
         program: &crate::vm::program::Program<E>,
         engine: &mut E,
+        pid: E::PID,
     ) {
         unimplemented!()
     }
 }
 
-impl AsmWeight for DefaultExternFunction {}
+impl AsmWeight for DefaultExternFunctionNoopEngine {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for DefaultExternFunctionNoopEngine
+{
+    type E = NoopEngine;
+}
 
-impl<E: Engine> Executable<E> for DefaultExternFunction {
+impl<E: Engine> Executable<E> for DefaultExternFunctionNoopEngine {
     fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
         &self,
         program: &crate::vm::program::Program<E>,
@@ -66,13 +90,13 @@ impl<E: Engine> Executable<E> for DefaultExternFunction {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
 
-impl ExternResolve for DefaultExternFunction {
+impl ExternResolve for DefaultExternFunctionNoopEngine {
     fn resolve<E: crate::vm::external::Engine>(
         &mut self,
         scope: &mut crate::semantic::scope::scope::ScopeManager,
@@ -82,48 +106,61 @@ impl ExternResolve for DefaultExternFunction {
         unimplemented!()
     }
 }
-impl<E: Engine> ExternFunction<E> for DefaultExternFunction {}
+impl ExternFunction<NoopEngine> for DefaultExternFunctionNoopEngine {}
 
 #[derive(Debug, Clone)]
 pub struct NoopEngine {}
 
-impl ExternIO for NoopEngine {
-    fn stdout_print(&mut self, content: String) {}
-    fn stdout_println(&mut self, content: String) {}
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID, TID>
+    for NoopEngine
+{
+    fn stdout_print(&mut self, pid: PID, content: String) {}
+    fn stdout_println(&mut self, pid: PID, content: String) {}
 
-    fn stderr_print(&mut self, content: String) {}
+    fn stderr_print(&mut self, pid: PID, content: String) {}
 
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
+    fn stdin_scan(&mut self, tid: TID) -> Option<String> {
         None
     }
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
+    fn stdin_request(&mut self, tid: TID) {}
 
-    fn stdasm_print(&mut self, content: String) {}
+    fn stdasm_print(&mut self, pid: PID, content: String) {}
 }
 
 impl Engine for NoopEngine {
-    type Function = DefaultExternFunction;
+    type Function = DefaultExternFunctionNoopEngine;
     type FunctionContext = DefaultExecutionContext;
 }
 
 impl ExternThreadHandler for NoopEngine {
     type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
 
-impl ExternEnergyDispenser for NoopEngine {
-    fn get_energy(&self) -> usize {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for NoopEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
         unimplemented!()
     }
 
-    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
@@ -137,53 +174,114 @@ impl ExternPathFinder for NoopEngine {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct DefaultExternFunctionStdoutTestEngine;
+
+impl<E: Engine> AsmName<E> for DefaultExternFunctionStdoutTestEngine {
+    fn name(
+        &self,
+        stdio: &mut crate::vm::stdio::StdIO,
+        program: &crate::vm::program::Program<E>,
+        engine: &mut E,
+        pid: E::PID,
+    ) {
+        unimplemented!()
+    }
+}
+
+impl AsmWeight for DefaultExternFunctionStdoutTestEngine {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for DefaultExternFunctionStdoutTestEngine
+{
+    type E = StdoutTestEngine;
+}
+
+impl<E: Engine> Executable<E> for DefaultExternFunctionStdoutTestEngine {
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
+        &self,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
+    }
+}
+
+impl ExternResolve for DefaultExternFunctionStdoutTestEngine {
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<crate::semantic::EType, crate::semantic::SemanticError> {
+        unimplemented!()
+    }
+}
+impl ExternFunction<StdoutTestEngine> for DefaultExternFunctionStdoutTestEngine {}
+
 #[derive(Debug, Clone)]
 pub struct StdoutTestEngine {
     pub out: String,
 }
-
-impl ExternIO for StdoutTestEngine {
-    fn stdout_print(&mut self, content: String) {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID, TID>
+    for StdoutTestEngine
+{
+    fn stdout_print(&mut self, pid: PID, content: String) {
         self.out = content;
     }
-    fn stdout_println(&mut self, content: String) {
+    fn stdout_println(&mut self, pid: PID, content: String) {
         self.out = format!("{}\n", content);
     }
-    fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
+    fn stderr_print(&mut self, pid: PID, content: String) {}
+
+    fn stdin_scan(&mut self, tid: TID) -> Option<String> {
         None
     }
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
+    fn stdin_request(&mut self, tid: TID) {}
 
-    fn stdasm_print(&mut self, content: String) {
-        // println!("{}", content);
-    }
+    fn stdasm_print(&mut self, pid: PID, content: String) {}
 }
 
 impl Engine for StdoutTestEngine {
-    type Function = DefaultExternFunction;
+    type Function = DefaultExternFunctionStdoutTestEngine;
     type FunctionContext = DefaultExecutionContext;
 }
 
-impl ExternEnergyDispenser for StdoutTestEngine {
-    fn get_energy(&self) -> usize {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for StdoutTestEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
         unimplemented!()
     }
 
-    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
 
 impl ExternThreadHandler for StdoutTestEngine {
     type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
@@ -196,58 +294,123 @@ impl ExternPathFinder for StdoutTestEngine {
         unimplemented!()
     }
 }
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct DefaultExternFunctionStdinTestEngine;
+
+impl<E: Engine> AsmName<E> for DefaultExternFunctionStdinTestEngine {
+    fn name(
+        &self,
+        stdio: &mut crate::vm::stdio::StdIO,
+        program: &crate::vm::program::Program<E>,
+        engine: &mut E,
+        pid: E::PID,
+    ) {
+        unimplemented!()
+    }
+}
+
+impl AsmWeight for DefaultExternFunctionStdinTestEngine {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for DefaultExternFunctionStdinTestEngine
+{
+    type E = StdinTestEngine;
+}
+
+impl<E: Engine> Executable<E> for DefaultExternFunctionStdinTestEngine {
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
+        &self,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
+    }
+}
+
+impl ExternResolve for DefaultExternFunctionStdinTestEngine {
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<crate::semantic::EType, crate::semantic::SemanticError> {
+        unimplemented!()
+    }
+}
+impl ExternFunction<StdinTestEngine> for DefaultExternFunctionStdinTestEngine {}
+
 #[derive(Debug, Clone)]
 pub struct StdinTestEngine {
     pub out: String,
     pub in_buf: String,
 }
 
-impl ExternIO for StdinTestEngine {
-    fn stdout_print(&mut self, content: String) {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID, TID>
+    for StdinTestEngine
+{
+    fn stdout_print(&mut self, pid: PID, content: String) {
         self.out = content;
     }
-    fn stdout_println(&mut self, content: String) {
+    fn stdout_println(&mut self, pid: PID, content: String) {
         self.out = format!("{}\n", content);
     }
-    fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
+    fn stderr_print(&mut self, pid: PID, content: String) {}
+
+    fn stdin_scan(&mut self, tid: TID) -> Option<String> {
         if self.in_buf.is_empty() {
             None
         } else {
             Some(self.in_buf.clone())
         }
     }
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
+    fn stdin_request(&mut self, tid: TID) {}
 
-    fn stdasm_print(&mut self, content: String) {
-        println!("{}", content);
+    fn stdasm_print(&mut self, pid: PID, content: String) {
+        // println!("{}", content);
     }
 }
 
 impl Engine for StdinTestEngine {
-    type Function = DefaultExternFunction;
+    type Function = DefaultExternFunctionStdinTestEngine;
     type FunctionContext = DefaultExecutionContext;
 }
 
-impl ExternEnergyDispenser for StdinTestEngine {
-    fn get_energy(&self) -> usize {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for StdinTestEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
         unimplemented!()
     }
 
-    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
 
 impl ExternThreadHandler for StdinTestEngine {
     type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(0))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
@@ -264,51 +427,114 @@ impl ExternPathFinder for StdinTestEngine {
 #[derive(Debug, Clone)]
 pub struct DbgEngine {}
 
-impl ExternIO for DbgEngine {
-    fn stdout_print(&mut self, content: String) {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID, TID>
+    for DbgEngine
+{
+    fn stdout_print(&mut self, pid: PID, content: String) {
         print!("{}", content);
     }
-    fn stdout_println(&mut self, content: String) {
+    fn stdout_println(&mut self, pid: PID, content: String) {
         println!("{}", content);
     }
 
-    fn stderr_print(&mut self, content: String) {
+    fn stderr_print(&mut self, pid: PID, content: String) {
         eprintln!("{}", content);
     }
 
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
+    fn stdin_scan(&mut self, tid: TID) -> Option<String> {
         Some("Hello World".to_string())
     }
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
+    fn stdin_request(&mut self, tid: TID) {}
 
-    fn stdasm_print(&mut self, content: String) {
+    fn stdasm_print(&mut self, pid: PID, content: String) {
         println!("{}", content);
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct DefaultExternFunctionDbgEngine;
+
+impl<E: Engine> AsmName<E> for DefaultExternFunctionDbgEngine {
+    fn name(
+        &self,
+        stdio: &mut crate::vm::stdio::StdIO,
+        program: &crate::vm::program::Program<E>,
+        engine: &mut E,
+        pid: E::PID,
+    ) {
+        unimplemented!()
+    }
+}
+
+impl AsmWeight for DefaultExternFunctionDbgEngine {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for DefaultExternFunctionDbgEngine
+{
+    type E = DbgEngine;
+}
+
+impl<E: Engine> Executable<E> for DefaultExternFunctionDbgEngine {
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
+        &self,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
+    }
+}
+
+impl ExternResolve for DefaultExternFunctionDbgEngine {
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<crate::semantic::EType, crate::semantic::SemanticError> {
+        unimplemented!()
+    }
+}
+impl ExternFunction<DbgEngine> for DefaultExternFunctionDbgEngine {}
+
 impl Engine for DbgEngine {
-    type Function = DefaultExternFunction;
+    type Function = DefaultExternFunctionDbgEngine;
     type FunctionContext = DefaultExecutionContext;
 }
 
-impl ExternEnergyDispenser for DbgEngine {
-    fn get_energy(&self) -> usize {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for DbgEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
         unimplemented!()
     }
 
-    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
 
 impl ExternThreadHandler for DbgEngine {
     type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
@@ -322,51 +548,114 @@ impl ExternPathFinder for DbgEngine {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct DefaultExternFunctionThreadTestEngine;
+
+impl<E: Engine> AsmName<E> for DefaultExternFunctionThreadTestEngine {
+    fn name(
+        &self,
+        stdio: &mut crate::vm::stdio::StdIO,
+        program: &crate::vm::program::Program<E>,
+        engine: &mut E,
+        pid: E::PID,
+    ) {
+        unimplemented!()
+    }
+}
+
+impl AsmWeight for DefaultExternFunctionThreadTestEngine {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for DefaultExternFunctionThreadTestEngine
+{
+    type E = ThreadTestEngine;
+}
+
+impl<E: Engine> Executable<E> for DefaultExternFunctionThreadTestEngine {
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
+        &self,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
+    }
+}
+
+impl ExternResolve for DefaultExternFunctionThreadTestEngine {
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<crate::semantic::EType, crate::semantic::SemanticError> {
+        unimplemented!()
+    }
+}
+impl ExternFunction<ThreadTestEngine> for DefaultExternFunctionThreadTestEngine {}
+
 #[derive(Debug, Clone)]
 pub struct ThreadTestEngine {
     pub id_auto_increment: u64,
 }
 
-impl ExternIO for ThreadTestEngine {
-    fn stdout_print(&mut self, content: String) {}
-    fn stdout_println(&mut self, content: String) {}
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID, TID>
+    for ThreadTestEngine
+{
+    fn stdout_print(&mut self, pid: PID, content: String) {}
+    fn stdout_println(&mut self, pid: PID, content: String) {}
 
-    fn stderr_print(&mut self, content: String) {}
+    fn stderr_print(&mut self, pid: PID, content: String) {}
 
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
+    fn stdin_scan(&mut self, tid: TID) -> Option<String> {
         None
     }
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
+    fn stdin_request(&mut self, tid: TID) {}
 
-    fn stdasm_print(&mut self, content: String) {
-        println!("{}", content);
+    fn stdasm_print(&mut self, pid: PID, content: String) {
+        // println!("{}", content);
     }
 }
 
 impl Engine for ThreadTestEngine {
-    type Function = DefaultExternFunction;
+    type Function = DefaultExternFunctionThreadTestEngine;
     type FunctionContext = DefaultExecutionContext;
 }
 
-impl ExternEnergyDispenser for ThreadTestEngine {
-    fn get_energy(&self) -> usize {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for ThreadTestEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
         unimplemented!()
     }
 
-    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
 
 impl ExternThreadHandler for ThreadTestEngine {
     type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         self.id_auto_increment += 1;
         Ok(DefaultThreadID(self.id_auto_increment))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         Ok(())
     }
 }
@@ -383,20 +672,23 @@ impl ExternPathFinder for ThreadTestEngine {
 #[derive(Debug, Clone)]
 pub struct ExternFuncTestEngine {}
 
-impl ExternIO for ExternFuncTestEngine {
-    fn stdout_print(&mut self, content: String) {}
-    fn stdout_println(&mut self, content: String) {}
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID, TID>
+    for ExternFuncTestEngine
+{
+    fn stdout_print(&mut self, pid: PID, content: String) {}
+    fn stdout_println(&mut self, pid: PID, content: String) {}
 
-    fn stderr_print(&mut self, content: String) {}
+    fn stderr_print(&mut self, pid: PID, content: String) {}
 
-    fn stdin_scan<TID: ExternThreadIdentifier>(&mut self, tid: TID) -> Option<String> {
+    fn stdin_scan(&mut self, tid: TID) -> Option<String> {
         None
     }
-    fn stdin_request<TID: ExternThreadIdentifier>(&mut self, tid: TID) {}
+    fn stdin_request(&mut self, tid: TID) {}
 
-    fn stdasm_print(&mut self, content: String) {}
+    fn stdasm_print(&mut self, pid: PID, content: String) {}
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ExternFuncTest {
     TEST_ADDER,
 }
@@ -407,14 +699,20 @@ impl<E: Engine> AsmName<E> for ExternFuncTest {
         stdio: &mut crate::vm::stdio::StdIO,
         program: &crate::vm::program::Program<E>,
         engine: &mut E,
+        pid: E::PID,
     ) {
         match self {
-            ExternFuncTest::TEST_ADDER => stdio.push_asm_lib(engine, "test_adder"),
+            ExternFuncTest::TEST_ADDER => stdio.push_asm_lib(engine, pid, "test_adder"),
         }
     }
 }
 
 impl AsmWeight for ExternFuncTest {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for ExternFuncTest
+{
+    type E = ExternFuncTestEngine;
+}
 
 impl<E: Engine> Executable<E> for ExternFuncTest {
     fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
@@ -426,7 +724,7 @@ impl<E: Engine> Executable<E> for ExternFuncTest {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), crate::vm::runtime::RuntimeError> {
         match self {
             ExternFuncTest::TEST_ADDER => {
@@ -495,7 +793,8 @@ impl ExternResolve for ExternFuncTest {
         }
     }
 }
-impl<E: Engine> ExternFunction<E> for ExternFuncTest {}
+
+impl ExternFunction<ExternFuncTestEngine> for ExternFuncTest {}
 
 impl Engine for ExternFuncTestEngine {
     type Function = ExternFuncTest;
@@ -504,22 +803,33 @@ impl Engine for ExternFuncTestEngine {
 
 impl ExternThreadHandler for ExternFuncTestEngine {
     type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
 
-    fn spawn(&mut self) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
         Ok(DefaultThreadID(1))
     }
 
-    fn close(&mut self, tid: &Self::TID) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
 
-impl ExternEnergyDispenser for ExternFuncTestEngine {
-    fn get_energy(&self) -> usize {
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for ExternFuncTestEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
         unimplemented!()
     }
 
-    fn consume_energy(&mut self, energy: usize) -> Result<(), crate::vm::runtime::RuntimeError> {
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
         unimplemented!()
     }
 }
@@ -537,98 +847,454 @@ impl ExternPathFinder for ExternFuncTestEngine {
     }
 }
 
-// #[derive(Debug, Clone)]
-// pub struct TestDynamicEngine {
-//     pub dynamic_fn_provider: TestDynamicFnProvider,
-//     pub out: String,
-// }
+#[derive(Debug, Clone)]
+pub struct ExternEventTestEngine {}
 
-// #[derive(Debug, Clone)]
-// pub struct TestDynamicFnProvider {}
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternIO<PID, TID>
+    for ExternEventTestEngine
+{
+    fn stdout_print(&mut self, pid: PID, content: String) {}
+    fn stdout_println(&mut self, pid: PID, content: String) {}
 
-// impl DynamicFnProvider for TestDynamicFnProvider {
-//     type DynamicFunctions = TestDynamicFn;
-//     fn get_dynamic_fn(prefix: &Option<ID>, id: &str) -> Option<Self::DynamicFunctions> {
-//         if "dynamic_fn" == id {
-//             return Some(TestDynamicFn {});
-//         } else {
-//             return None;
-//         }
-//     }
-// }
-// pub struct TestDynamicFn {}
+    fn stderr_print(&mut self, pid: PID, content: String) {}
 
-// impl DynamicFnResolver for TestDynamicFn {
-//     fn resolve<E: crate::vm::external::Engine>(
-//         &mut self,
-//         scope: &mut semantic::scope::scope::ScopeManager,
-//         scope_id: Option<u128>,
-//         params: &mut Vec<crate::ast::expressions::Expression>,
-//     ) -> Result<EType, SemanticError> {
-//         Ok(e_static!(StaticType::Unit))
-//     }
-// }
+    fn stdin_scan(&mut self, tid: TID) -> Option<String> {
+        None
+    }
+    fn stdin_request(&mut self, tid: TID) {}
 
-// impl<E: crate::vm::external::Engine> Executable<E> for TestDynamicFn {
-//     fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
-//         &self,
-//         program: &crate::vm::program::Program<E>,
-//         scheduler: &mut crate::vm::scheduler::Scheduler<P>,
-//         stack: &mut crate::vm::allocator::stack::Stack,
-//         heap: &mut crate::vm::allocator::heap::Heap,
-//         stdio: &mut crate::vm::stdio::StdIO,
-//         engine: &mut E,
-//         context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
-//     ) -> Result<(), RuntimeError> {
-//         stdio.stdout.push("\"Hello World from Dynamic function\"");
-//         stdio.stdout.flush(engine);
-//         scheduler.next();
-//         Ok(())
-//     }
-// }
+    fn stdasm_print(&mut self, pid: PID, content: String) {}
+}
 
-// impl ExternIO for TestDynamicEngine {
-//     fn stdout_print(&mut self, content: String) {
-//         self.out = content;
-//     }
-//     fn stdout_println(&mut self, content: String) {
-//         self.out = format!("{}\n", content);
-//     }
-//     fn stderr_print(&mut self, content: String) {}
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum ExternFuncEventTest {
+    TEST_EVENT,
+    TEST_EVENT_WITH_ARG,
+    TEST_EVENT_WITH_RETURN,
+    TEST_EVENT_REPETABLE,
+}
 
-//     fn stdin_scan(&mut self) -> Option<String> {
-//         None
-//     }
-//     fn stdin_request(&mut self) {}
+impl<E: Engine> AsmName<E> for ExternFuncEventTest {
+    fn name(
+        &self,
+        stdio: &mut crate::vm::stdio::StdIO,
+        program: &crate::vm::program::Program<E>,
+        engine: &mut E,
+        pid: E::PID,
+    ) {
+        match self {
+            ExternFuncEventTest::TEST_EVENT => stdio.push_extern_lib(engine, pid, "test_event"),
+            ExternFuncEventTest::TEST_EVENT_WITH_ARG => {
+                stdio.push_extern_lib(engine, pid, "test_event_with_arg")
+            }
+            ExternFuncEventTest::TEST_EVENT_WITH_RETURN => {
+                stdio.push_extern_lib(engine, pid, "test_event_with_return")
+            }
+            ExternFuncEventTest::TEST_EVENT_REPETABLE => {
+                stdio.push_extern_lib(engine, pid, "test_event_repetable")
+            }
+        }
+    }
+}
 
-//     fn stdasm_print(&mut self, content: String) {}
+impl ExternEventManager<DefaultExecutionContext, DefaultProcessID, DefaultThreadID>
+    for ExternFuncEventTest
+{
+    type E = ExternEventTestEngine;
 
-//     fn execute_dynamic_fn(
-//         fn_id: String,
-//         program: &mut crate::vm::program::Program,
-//         stack: &mut Stack,
-//         heap: &mut Heap,
-//         stdio: &mut StdIO,
-//         engine: &mut Self,
-//         tid: usize,
-//     ) -> Result<(), RuntimeError> {
-//         if let Some(dynamic_fn) = TestDynamicFnProvider::get_dynamic_fn(&None, &fn_id) {
-//             dynamic_fn.execute(program, scheduler, signal_handler, stack, heap, stdio, engine, context)?;
-//         }
-//         Ok(())
-//     }
-//     fn is_dynamic_fn(preffixe: &Option<ID>, id: &ID) -> Option<impl DynamicFnResolver> {
-//         TestDynamicFnProvider::get_dynamic_fn(preffixe, id.to_string().as_str())
-//     }
-//     fn name_of_dynamic_fn(
-//         fn_id: String,
-//         stdio: &mut StdIO,
-//         program: &mut crate::vm::program::Program,
-//         engine: &mut Self,
-//     ) {
-//         stdio.push_asm_lib(engine, &fn_id);
-//     }
-//     fn weight_of_dynamic_fn(fn_id: String) -> Weight {
-//         Weight::LOW
-//     }
-// }
+    fn event_cleanup(
+        &self,
+        callback_address: MemoryAddress,
+        event_state: crate::vm::scheduler::EventState,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut Self::E,
+        context: &crate::vm::scheduler::ExecutionContext<
+            DefaultExecutionContext,
+            DefaultProcessID,
+            DefaultThreadID,
+        >,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        match self {
+            ExternFuncEventTest::TEST_EVENT
+            | ExternFuncEventTest::TEST_EVENT_WITH_ARG
+            | ExternFuncEventTest::TEST_EVENT_WITH_RETURN => {
+                let _ = heap.free(callback_address)?;
+            }
+            ExternFuncEventTest::TEST_EVENT_REPETABLE => {}
+        }
+        Ok(())
+    }
+
+    fn event_conclusion(
+        &self,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut Self::E,
+        context: &crate::vm::scheduler::ExecutionContext<
+            DefaultExecutionContext,
+            DefaultProcessID,
+            DefaultThreadID,
+        >,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        match self {
+            ExternFuncEventTest::TEST_EVENT => {}
+            ExternFuncEventTest::TEST_EVENT_WITH_ARG => {}
+            ExternFuncEventTest::TEST_EVENT_WITH_RETURN => {
+                let res = crate::vm::asm::operation::OpPrimitive::pop_num::<u64>(stack)?;
+                assert_eq!(res, 420);
+            }
+            ExternFuncEventTest::TEST_EVENT_REPETABLE => {}
+        }
+        Ok(())
+    }
+
+    fn event_setup(
+        &self,
+        callback_address: MemoryAddress,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut Self::E,
+        context: &crate::vm::scheduler::ExecutionContext<
+            DefaultExecutionContext,
+            DefaultProcessID,
+            DefaultThreadID,
+        >,
+    ) -> Result<super::EventSetupResult, crate::vm::runtime::RuntimeError> {
+        let function_offset =
+            OpPrimitive::get_num_from::<u64>(callback_address, stack, heap)? as usize;
+        let callback: u64 = (callback_address).into(stack);
+
+        stack.push_with(&(69u64).to_le_bytes())?;
+        match self {
+            ExternFuncEventTest::TEST_EVENT => Ok(super::EventSetupResult {
+                parameters_size: 0,
+                function_offset,
+                callback,
+            }),
+            ExternFuncEventTest::TEST_EVENT_WITH_ARG => Ok(super::EventSetupResult {
+                parameters_size: 8,
+                function_offset,
+                callback,
+            }),
+            ExternFuncEventTest::TEST_EVENT_WITH_RETURN => Ok(super::EventSetupResult {
+                parameters_size: 0,
+                function_offset,
+                callback,
+            }),
+            ExternFuncEventTest::TEST_EVENT_REPETABLE => Ok(super::EventSetupResult {
+                parameters_size: 0,
+                function_offset,
+                callback,
+            }),
+        }
+    }
+
+    fn event_trigger(&self, signal: u64, trigger: u64) -> bool {
+        signal & trigger != 0
+    }
+}
+
+impl AsmWeight for ExternFuncEventTest {
+    fn weight(&self) -> crate::vm::Weight {
+        crate::vm::Weight::END
+    }
+}
+
+impl<
+        E: Engine<
+            FunctionContext = DefaultExecutionContext,
+            PID = DefaultProcessID,
+            TID = DefaultThreadID,
+            Function = ExternFuncEventTest,
+        >,
+    > Executable<E> for ExternFuncEventTest
+{
+    fn execute<P: crate::vm::scheduler::SchedulingPolicy>(
+        &self,
+        program: &crate::vm::program::Program<E>,
+        scheduler: &mut crate::vm::scheduler::Scheduler<P>,
+        signal_handler: &mut crate::vm::signal::SignalHandler<E>,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+        stdio: &mut crate::vm::stdio::StdIO,
+        engine: &mut E,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        match self {
+            ExternFuncEventTest::TEST_EVENT
+            | ExternFuncEventTest::TEST_EVENT_WITH_ARG
+            | ExternFuncEventTest::TEST_EVENT_WITH_RETURN => {
+                let callback: MemoryAddress =
+                    crate::vm::asm::operation::OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+
+                fn signal_callback<E: crate::vm::external::Engine>(
+                    response: crate::vm::signal::SignalResult<E>,
+                    stack: &mut crate::vm::allocator::stack::Stack,
+                ) -> Result<(), crate::vm::runtime::RuntimeError> {
+                    Ok(())
+                }
+                let _ = signal_handler.notify(
+                    crate::vm::signal::Signal::EventRegistration {
+                        tid: context.tid.clone(),
+                        trigger: 1,
+                        callback: crate::vm::scheduler::EventCallback {
+                            callback,
+                            manager: *self,
+                            _phantom: std::marker::PhantomData::default(),
+                        },
+                        conf: crate::vm::scheduler::EventConf {
+                            kind: crate::vm::scheduler::EventKind::Once,
+                            exclu: crate::vm::scheduler::EventExclusivity::PerPID,
+                        },
+                    },
+                    stack,
+                    engine,
+                    context.tid.clone(),
+                    signal_callback::<E>,
+                )?;
+                scheduler.next();
+                Ok(())
+            }
+            ExternFuncEventTest::TEST_EVENT_REPETABLE => {
+                let callback: MemoryAddress =
+                    crate::vm::asm::operation::OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+
+                fn signal_callback<E: crate::vm::external::Engine>(
+                    response: crate::vm::signal::SignalResult<E>,
+                    stack: &mut crate::vm::allocator::stack::Stack,
+                ) -> Result<(), crate::vm::runtime::RuntimeError> {
+                    Ok(())
+                }
+                let _ = signal_handler.notify(
+                    crate::vm::signal::Signal::EventRegistration {
+                        tid: context.tid.clone(),
+                        trigger: 1,
+                        callback: crate::vm::scheduler::EventCallback {
+                            callback,
+                            manager: *self,
+                            _phantom: std::marker::PhantomData::default(),
+                        },
+                        conf: crate::vm::scheduler::EventConf {
+                            kind: crate::vm::scheduler::EventKind::Repetable,
+                            exclu: crate::vm::scheduler::EventExclusivity::PerPID,
+                        },
+                    },
+                    stack,
+                    engine,
+                    context.tid.clone(),
+                    signal_callback::<E>,
+                )?;
+                scheduler.next();
+                Ok(())
+            }
+        }
+    }
+}
+
+impl ExternResolve for ExternFuncEventTest {
+    fn resolve<E: crate::vm::external::Engine>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<crate::semantic::EType, crate::semantic::SemanticError> {
+        match self {
+            ExternFuncEventTest::TEST_EVENT | ExternFuncEventTest::TEST_EVENT_REPETABLE => {
+                if params.len() != 1 {
+                    return Err(crate::semantic::SemanticError::IncorrectArguments);
+                }
+                let callback = &mut params[0];
+
+                let _ = crate::semantic::Resolve::resolve::<E>(
+                    callback,
+                    scope_manager,
+                    scope_id,
+                    &Some(crate::semantic::EType::Static(
+                        crate::semantic::scope::static_types::StaticType::Closure(
+                            crate::semantic::scope::static_types::ClosureType {
+                                params: Vec::default(),
+                                ret: crate::semantic::EType::Static(
+                                    crate::semantic::scope::static_types::StaticType::Unit,
+                                )
+                                .into(),
+                            },
+                        ),
+                    )),
+                    &mut None,
+                )?;
+
+                let callback_type =
+                    crate::semantic::TypeOf::type_of(callback, &scope_manager, scope_id)?;
+
+                match callback_type {
+                    crate::semantic::EType::Static(
+                        crate::semantic::scope::static_types::StaticType::Closure(
+                            crate::semantic::scope::static_types::ClosureType { params, ret },
+                        ),
+                    ) => {
+                        if params.len() != 0
+                            || crate::semantic::EType::Static(
+                                crate::semantic::scope::static_types::StaticType::Unit,
+                            ) != *ret
+                        {
+                            return Err(crate::semantic::SemanticError::IncorrectArguments);
+                        }
+                    }
+                    _ => return Err(crate::semantic::SemanticError::IncorrectArguments),
+                }
+
+                Ok(crate::semantic::EType::Static(
+                    crate::semantic::scope::static_types::StaticType::Unit,
+                ))
+            }
+            ExternFuncEventTest::TEST_EVENT_WITH_ARG => {
+                if params.len() != 1 {
+                    return Err(crate::semantic::SemanticError::IncorrectArguments);
+                }
+                let callback = &mut params[0];
+
+                let _ = crate::semantic::Resolve::resolve::<E>(
+                    callback,
+                    scope_manager,
+                    scope_id,
+                    &Some(crate::semantic::EType::Static(
+                        crate::semantic::scope::static_types::StaticType::Closure(
+                            crate::semantic::scope::static_types::ClosureType {
+                                params: vec![p_num!(I64)],
+                                ret: crate::semantic::EType::Static(
+                                    crate::semantic::scope::static_types::StaticType::Unit,
+                                )
+                                .into(),
+                            },
+                        ),
+                    )),
+                    &mut None,
+                )?;
+
+                let callback_type =
+                    crate::semantic::TypeOf::type_of(callback, &scope_manager, scope_id)?;
+
+                match callback_type {
+                    crate::semantic::EType::Static(
+                        crate::semantic::scope::static_types::StaticType::Closure(
+                            crate::semantic::scope::static_types::ClosureType { params, ret },
+                        ),
+                    ) => {
+                        if params.len() != 1
+                            || crate::semantic::EType::Static(
+                                crate::semantic::scope::static_types::StaticType::Unit,
+                            ) != *ret
+                        {
+                            return Err(crate::semantic::SemanticError::IncorrectArguments);
+                        }
+                    }
+                    _ => return Err(crate::semantic::SemanticError::IncorrectArguments),
+                }
+
+                Ok(crate::semantic::EType::Static(
+                    crate::semantic::scope::static_types::StaticType::Unit,
+                ))
+            }
+            ExternFuncEventTest::TEST_EVENT_WITH_RETURN => {
+                if params.len() != 1 {
+                    return Err(crate::semantic::SemanticError::IncorrectArguments);
+                }
+                let callback = &mut params[0];
+
+                let _ = crate::semantic::Resolve::resolve::<E>(
+                    callback,
+                    scope_manager,
+                    scope_id,
+                    &Some(crate::semantic::EType::Static(
+                        crate::semantic::scope::static_types::StaticType::Closure(
+                            crate::semantic::scope::static_types::ClosureType {
+                                params: Vec::default(),
+                                ret: p_num!(I64).into(),
+                            },
+                        ),
+                    )),
+                    &mut None,
+                )?;
+
+                let callback_type =
+                    crate::semantic::TypeOf::type_of(callback, &scope_manager, scope_id)?;
+
+                match callback_type {
+                    crate::semantic::EType::Static(
+                        crate::semantic::scope::static_types::StaticType::Closure(
+                            crate::semantic::scope::static_types::ClosureType { params, ret },
+                        ),
+                    ) => {
+                        if params.len() != 0 || p_num!(I64) != *ret {
+                            return Err(crate::semantic::SemanticError::IncorrectArguments);
+                        }
+                    }
+                    _ => return Err(crate::semantic::SemanticError::IncorrectArguments),
+                }
+
+                Ok(crate::semantic::EType::Static(
+                    crate::semantic::scope::static_types::StaticType::Unit,
+                ))
+            }
+        }
+    }
+}
+
+impl ExternFunction<ExternEventTestEngine> for ExternFuncEventTest {}
+
+impl Engine for ExternEventTestEngine {
+    type Function = ExternFuncEventTest;
+    type FunctionContext = DefaultExecutionContext;
+}
+
+impl ExternThreadHandler for ExternEventTestEngine {
+    type TID = DefaultThreadID;
+    type PID = DefaultProcessID;
+
+    fn spawn(&mut self, pid: &Self::PID) -> Result<Self::TID, crate::vm::runtime::RuntimeError> {
+        Ok(DefaultThreadID(1))
+    }
+
+    fn close(
+        &mut self,
+        pid: &Self::PID,
+        tid: &Self::TID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
+    }
+}
+
+impl<PID: ExternProcessIdentifier, TID: ExternThreadIdentifier<PID>> ExternEnergyDispenser<PID, TID>
+    for ExternEventTestEngine
+{
+    fn get_energy(&self, pid: PID) -> usize {
+        unimplemented!()
+    }
+
+    fn consume_energy(
+        &mut self,
+        energy: usize,
+        pid: PID,
+    ) -> Result<(), crate::vm::runtime::RuntimeError> {
+        unimplemented!()
+    }
+}
+
+impl ExternPathFinder for ExternEventTestEngine {
+    fn find(path: &[String], name: &str) -> Option<<Self as Engine>::Function>
+    where
+        Self: super::Engine,
+    {
+        match name {
+            "test_event" => Some(ExternFuncEventTest::TEST_EVENT),
+            "test_event_with_arg" => Some(ExternFuncEventTest::TEST_EVENT_WITH_ARG),
+            "test_event_with_return" => Some(ExternFuncEventTest::TEST_EVENT_WITH_RETURN),
+            "test_event_repetable" => Some(ExternFuncEventTest::TEST_EVENT_REPETABLE),
+            _ => None,
+        }
+    }
+}

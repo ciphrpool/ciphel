@@ -49,7 +49,7 @@ impl PathFinder for VectorFn {
     where
         Self: Sized,
     {
-        if (path.len() == 1 && path[0] == lexem::VEC) || path.len() == 0 {
+        if (path.len() == 1 && path[0] == lexem::VECTOR) || path.len() == 0 {
             return match name {
                 lexem::VEC => Some(VectorFn::Vec {
                     with_capacity: false,
@@ -234,15 +234,15 @@ pub enum VectorAsm {
 }
 
 impl<E: crate::vm::external::Engine> crate::vm::AsmName<E> for VectorAsm {
-    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E) {
+    fn name(&self, stdio: &mut StdIO, program: &crate::vm::program::Program<E>, engine: &mut E, pid : E::PID) {
         match self {
-            VectorAsm::Vec { item_size } => stdio.push_asm_lib(engine, "vec"),
-            VectorAsm::VecWithCapacity { item_size } => stdio.push_asm_lib(engine, "vec"),
-            VectorAsm::Push { item_size } => stdio.push_asm_lib(engine, "push"),
-            VectorAsm::Pop { item_size } => stdio.push_asm_lib(engine, "pop"),
-            VectorAsm::Extend { item_size, len } => stdio.push_asm_lib(engine, "extend"),
-            VectorAsm::Delete { item_size } => stdio.push_asm_lib(engine, "delete"),
-            VectorAsm::Clear { item_size } => stdio.push_asm_lib(engine, "clear_vec"),
+            VectorAsm::Vec { item_size } => stdio.push_asm_lib(engine, pid, "vec"),
+            VectorAsm::VecWithCapacity { item_size } => stdio.push_asm_lib(engine, pid, "vec"),
+            VectorAsm::Push { item_size } => stdio.push_asm_lib(engine, pid, "push"),
+            VectorAsm::Pop { item_size } => stdio.push_asm_lib(engine, pid, "pop"),
+            VectorAsm::Extend { item_size, len } => stdio.push_asm_lib(engine, pid, "extend"),
+            VectorAsm::Delete { item_size } => stdio.push_asm_lib(engine, pid, "delete"),
+            VectorAsm::Clear { item_size } => stdio.push_asm_lib(engine, pid, "clear_vec"),
         }
     }
 }
@@ -324,7 +324,7 @@ impl<E: crate::vm::external::Engine> Executable<E> for VectorAsm {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut E,
-        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::TID>,
+        context: &crate::vm::scheduler::ExecutionContext<E::FunctionContext, E::PID, E::TID>,
     ) -> Result<(), RuntimeError> {
         match *self {
             VectorAsm::Vec { item_size } => {

@@ -18,7 +18,7 @@ use crate::{
 
 use super::{
     data::{Primitive, StrSlice},
-    Expression,
+    Expression, Path,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,6 +47,7 @@ pub struct MatchExpr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionPattern {
+    pub path: Path,
     pub typename: ID,
     pub variant: ID,
     pub vars_names: Vec<ID>,
@@ -75,7 +76,7 @@ pub struct StringCase<
 pub struct EnumCase<
     B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + PartialEq,
 > {
-    pub patterns: Vec<(String, String, Option<u64>)>,
+    pub patterns: Vec<(super::data::Enum, Option<u64>)>,
     pub block: B,
 }
 
